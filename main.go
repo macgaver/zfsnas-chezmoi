@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -79,8 +80,11 @@ func main() {
 		log.Printf("TLS certificate written to %s", certsDir)
 	}
 
-	// ===== Disk I/O poller (2-second samples for charts) =====
+	// ===== Disk I/O poller (5-second samples for live charts) =====
 	system.StartDiskIOPoller()
+
+	// ===== Metrics collector (5-minute samples for 24h RRD charts) =====
+	system.StartMetricsCollector(absConfig)
 
 	// ===== Daily SMART refresh goroutine =====
 	handlers.StartDailySmartRefresh()
@@ -132,12 +136,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load users: %v", err)
 	}
+	ip := localIP()
 	if len(users) == 0 {
 		log.Println("No users found — first-run setup required.")
-		log.Printf("Open https://localhost:%d/setup in your browser.", appCfg.Port)
+		log.Printf("Open https://%s:%d/setup in your browser.", ip, appCfg.Port)
 	} else {
 		log.Printf("Loaded %d user(s).", len(users))
-		log.Printf("Open https://localhost:%d in your browser.", appCfg.Port)
+		log.Printf("Open https://%s:%d in your browser.", ip, appCfg.Port)
 	}
 
 	// ===== HTTP Server =====
@@ -167,4 +172,16 @@ func main() {
 	defer cancel()
 	srv.Shutdown(ctx)
 	log.Println("Server stopped.")
+}
+
+// localIP returns the primary non-loopback IPv4 address of the host.
+// Falls back to "localhost" if none can be determined.
+func localIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "localhost"
+	}
+	defer conn.Close()
+	addr := conn.LocalAddr().(*net.UDPAddr)
+	return addr.IP.String()
 }

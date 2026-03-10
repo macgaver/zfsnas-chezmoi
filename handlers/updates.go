@@ -11,14 +11,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// HandleCheckUpdates runs `apt-get update` then returns the list of upgradable packages.
+// HandleCheckUpdates runs `apt-get update` then returns the list of packages
+// that would be upgraded by `apt-get upgrade` (excludes kept-back packages).
 func HandleCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	// Refresh package index.
 	exec.Command("sudo", "apt-get", "update", "-qq").Run()
 
-	out, err := exec.Command("apt", "list", "--upgradable", "--quiet").Output()
+	// Use --simulate to find what apt-get upgrade would actually install.
+	// Kept-back packages (those requiring full-upgrade) are excluded.
+	out, err := exec.Command("apt-get", "--simulate", "upgrade").Output()
 	if err != nil {
-		jsonErr(w, http.StatusInternalServerError, "apt list failed: "+err.Error())
+		jsonErr(w, http.StatusInternalServerError, "apt-get simulate failed: "+err.Error())
 		return
 	}
 
@@ -26,19 +29,23 @@ func HandleCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
 		line := scanner.Text()
-		// Skip the "Listing..." header line.
-		if strings.HasPrefix(line, "Listing") || line == "" {
+		// Only "Inst" lines represent packages that will be installed/upgraded.
+		// Format: Inst pkg-name [old-ver] (new-ver suite)
+		if !strings.HasPrefix(line, "Inst ") {
 			continue
 		}
-		// Format: name/suite,suite version arch [upgradable from: old]
 		parts := strings.Fields(line)
-		name := parts[0]
-		if idx := strings.Index(name, "/"); idx >= 0 {
-			name = name[:idx]
+		if len(parts) < 2 {
+			continue
 		}
+		name := parts[1]
+		// Extract new version from parentheses, e.g. "(1.2.3 suite)"
 		version := ""
-		if len(parts) >= 2 {
-			version = parts[1]
+		for _, p := range parts[2:] {
+			if strings.HasPrefix(p, "(") {
+				version = strings.TrimPrefix(p, "(")
+				break
+			}
 		}
 		pkgs = append(pkgs, map[string]string{"name": name, "version": version})
 	}

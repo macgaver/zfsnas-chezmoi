@@ -38,6 +38,7 @@ const (
 	ActionCreatePool   = "create_pool"
 	ActionImportPool   = "import_pool"
 	ActionCreateDataset = "create_dataset"
+	ActionUpdateDataset = "update_dataset"
 	ActionDeleteDataset = "delete_dataset"
 	ActionCreateShare  = "create_share"
 	ActionDeleteShare  = "delete_share"

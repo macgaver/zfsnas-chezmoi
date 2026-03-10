@@ -16,10 +16,11 @@ const (
 
 // AppConfig holds top-level application settings.
 type AppConfig struct {
-	Port             int       `json:"port"`
-	StorageUnit      string    `json:"storage_unit,omitempty"` // "gb" (1000-based) or "gib" (1024-based)
-	SMARTLastRefresh time.Time `json:"smart_last_refresh,omitempty"`
-	WeeklyScrub      bool      `json:"weekly_scrub,omitempty"` // auto-scrub every Sunday at 02:00
+	Port              int       `json:"port"`
+	StorageUnit       string    `json:"storage_unit,omitempty"`       // "gb" (1000-based) or "gib" (1024-based)
+	SMARTLastRefresh  time.Time `json:"smart_last_refresh,omitempty"`
+	WeeklyScrub       bool      `json:"weekly_scrub,omitempty"`       // auto-scrub every Sunday at 02:00
+	LiveUpdateEnabled bool      `json:"live_update_enabled,omitempty"` // enable in-place binary self-update
 }
 
 // User represents a portal or SMB-only user.

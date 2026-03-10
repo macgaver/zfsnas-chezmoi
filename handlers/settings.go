@@ -11,8 +11,9 @@ import (
 func HandleGetSettings(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		jsonOK(w, map[string]interface{}{
-			"port":         appCfg.Port,
-			"storage_unit": appCfg.StorageUnit,
+			"port":                appCfg.Port,
+			"storage_unit":        appCfg.StorageUnit,
+			"live_update_enabled": appCfg.LiveUpdateEnabled,
 		})
 	}
 }
@@ -21,8 +22,9 @@ func HandleGetSettings(appCfg *config.AppConfig) http.HandlerFunc {
 func HandleUpdateSettings(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Port        *int    `json:"port"`
-			StorageUnit *string `json:"storage_unit"`
+			Port              *int    `json:"port"`
+			StorageUnit       *string `json:"storage_unit"`
+			LiveUpdateEnabled *bool   `json:"live_update_enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -44,6 +46,10 @@ func HandleUpdateSettings(appCfg *config.AppConfig) http.HandlerFunc {
 				return
 			}
 			appCfg.StorageUnit = *req.StorageUnit
+			changed = true
+		}
+		if req.LiveUpdateEnabled != nil {
+			appCfg.LiveUpdateEnabled = *req.LiveUpdateEnabled
 			changed = true
 		}
 

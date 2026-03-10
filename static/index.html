@@ -130,6 +130,45 @@
       border: 1px solid rgba(255,69,58,0.25);
       color: var(--accent-danger);
     }
+
+    /* ── Info tooltip ── */
+    .info-tip {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #3a3a3c;
+      color: #6e6e73;
+      font-size: 9px; font-weight: 700; font-style: italic;
+      font-family: Georgia, serif;
+      line-height: 1; cursor: help;
+      position: relative; flex-shrink: 0; vertical-align: middle;
+      user-select: none;
+    }
+    .info-tip::before { content: 'i'; }
+    .info-tip::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%; transform: translateX(-50%);
+      min-width: 220px; max-width: 300px;
+      background: #1c1c1e;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px; font-weight: 400; font-style: normal;
+      line-height: 1.55; white-space: pre-wrap;
+      color: #ffffff;
+      text-transform: none; letter-spacing: 0;
+      pointer-events: none;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      opacity: 0; transition: opacity .15s;
+    }
+    .info-tip:hover::after { opacity: 1; }
+    /* when near right edge, open left */
+    .info-tip.tip-left::after { left: auto; right: 0; transform: none; }
+    /* when near bottom, open downward */
+    .info-tip.tip-down::after { bottom: auto; top: calc(100% + 8px); }
   </style>
 </head>
 <body>
@@ -138,9 +177,20 @@
   <!-- ===== SIDEBAR ===== -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <img src="/static/logo.svg" alt="ZFS NAS" style="height:64px;width:204px;object-fit:contain;">
+      <a href="https://github.com/macgaver/zfsnas-chezmoi" target="_blank" rel="noopener" style="display:inline-block;line-height:0;">
+        <img src="/static/logo.svg" alt="ZFS NAS" style="height:64px;width:204px;object-fit:contain;">
+      </a>
       <div style="margin-top:6px;font-size:12px;color:var(--text-3);" id="current-user-info"></div>
+      <a id="app-version" href="https://github.com/macgaver/zfsnas-chezmoi/releases" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:6px;font-size:11px;font-family:'SF Mono',monospace;color:var(--text-3);border:1px solid var(--border);padding:2px 8px;border-radius:10px;text-decoration:none;letter-spacing:.02em;">v…</a>
+      <div id="sidebar-update-badge" onclick="showPage('updates')" class="hidden"
+           style="margin-top:5px;font-size:11px;font-weight:600;color:#ffd60a;cursor:pointer;padding:2px 8px;border-radius:10px;border:1px solid rgba(255,214,10,0.35);background:rgba(255,214,10,0.08);letter-spacing:.02em;">
+        ⬆ new version available
+      </div>
     </div>
+
+    <div class="sidebar-section">Overview</div>
+    <button class="nav-item" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">📈</span> Performance</button>
 
     <div class="sidebar-section">Storage</div>
     <button class="nav-item" onclick="showPage('disks')"     id="nav-disks">    <span class="nav-icon">💿</span> Physical Disks</button>
@@ -155,7 +205,7 @@
     <div class="sidebar-section">System</div>
     <button class="nav-item" onclick="showPage('users')"     id="nav-users">    <span class="nav-icon">👤</span> Users</button>
     <button class="nav-item" onclick="showPage('prereqs')"   id="nav-prereqs">  <span class="nav-icon">🔧</span> Prerequisites</button>
-    <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span> OS Updates</button>
+    <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span> Updates</button>
     <button class="nav-item" onclick="toggleTermPanel()"     id="nav-terminal"> <span class="nav-icon">⌨</span> Terminal</button>
     <button class="nav-item" onclick="showPage('settings')"  id="nav-settings"> <span class="nav-icon">⚙</span> Settings</button>
 
@@ -163,7 +213,8 @@
     <button class="nav-item" onclick="showPage('activity')"  id="nav-activity"> <span class="nav-icon">📋</span> Activity Log</button>
 
     <div style="flex:1"></div>
-    <div style="padding:16px 20px;border-top:1px solid var(--border);">
+    <div style="padding:12px 20px 4px;border-top:1px solid var(--border);">
+      <button class="btn btn-ghost btn-sm w-full" onclick="openAbout()" style="margin-bottom:6px;">About / Support</button>
       <button class="btn btn-ghost btn-sm w-full" onclick="logout()">Sign Out</button>
     </div>
   </nav>
@@ -226,6 +277,64 @@
           </div>
         </div>
         <div id="prereq-banner" class="hidden" style="margin-top:20px;"></div>
+
+        <!-- 24h RRD Charts -->
+        <div id="dash-collecting" class="hidden" style="margin-top:24px;padding:24px;text-align:center;color:var(--text-3);background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);">
+          <div style="font-size:28px;margin-bottom:8px;">📊</div>
+          <div style="font-weight:600;margin-bottom:6px;">Collecting metrics…</div>
+          <div id="dash-collect-progress" style="font-size:13px;">Charts will fill in over 24 hours.</div>
+        </div>
+        <div id="dash-charts" class="hidden">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px;">
+            <div class="card-sm">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">CPU Usage (24h)</div>
+                <i class="info-tip tip-left" data-tip="% of total CPU time used across all cores.&#10;Source: /proc/stat (user + system + nice + irq…).&#10;Two readings 500 ms apart every 5 min; iowait excluded."></i>
+              </div>
+              <div style="position:relative;height:140px;"><canvas id="dash-chart-cpu"></canvas></div>
+            </div>
+            <div class="card-sm">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Memory Usage (24h)</div>
+                <i class="info-tip tip-left" data-tip="Stacked RAM usage from /proc/meminfo, sampled every 5 min.&#10;&#10;App (blue): memory held by processes&#10;  = MemTotal − MemFree − Buffers − Cached&#10;&#10;Cache (purple): Linux page cache + buffers&#10;  — re-usable; reclaimed on demand."></i>
+              </div>
+              <div style="position:relative;height:140px;"><canvas id="dash-chart-mem"></canvas></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+            <div class="card-sm">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Network I/O (24h)</div>
+                <i class="info-tip tip-left" data-tip="Combined throughput of all non-loopback network interfaces.&#10;Source: /proc/net/dev, sampled every 5 min.&#10;&#10;RX (green): bytes received → KB/s&#10;TX (orange): bytes sent → KB/s"></i>
+              </div>
+              <div style="display:flex;gap:12px;margin-bottom:6px;">
+                <span style="font-size:11px;color:#32d74b;">▬ RX</span>
+                <span style="font-size:11px;color:#ff9f0a;">▬ TX</span>
+              </div>
+              <div style="position:relative;height:120px;"><canvas id="dash-chart-net"></canvas></div>
+            </div>
+            <div class="card-sm">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Disk I/O (24h)</div>
+                <i class="info-tip tip-left" data-tip="Aggregate read/write throughput of ZFS pool member disks.&#10;Source: /proc/diskstats, sampled every 5 min.&#10;&#10;Read (cyan): sectors read × 512 B ÷ elapsed → KB/s&#10;Write (yellow): sectors written × 512 B ÷ elapsed → KB/s"></i>
+              </div>
+              <div style="display:flex;gap:12px;margin-bottom:6px;">
+                <span style="font-size:11px;color:#64d2ff;">▬ Read</span>
+                <span style="font-size:11px;color:#ffd60a;">▬ Write</span>
+              </div>
+              <div style="position:relative;height:120px;"><canvas id="dash-chart-disk"></canvas></div>
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <div class="card-sm">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Disk Busy % (24h)</div>
+                <i class="info-tip tip-left" data-tip="Average % of time pool disks had I/O in flight (utilisation).&#10;Source: /proc/diskstats io_ticks field, sampled every 5 min.&#10;&#10;100% means a disk was fully saturated for the entire 5-min interval. Averaged across all pool member disks."></i>
+              </div>
+              <div style="position:relative;height:90px;"><canvas id="dash-chart-busy"></canvas></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- PREREQUISITES -->
@@ -366,12 +475,60 @@
       </div>
       <div class="page hidden" id="page-updates">
         <div class="page-header">
-          <h2>OS Updates</h2>
-          <button class="btn btn-ghost btn-sm" onclick="checkUpdates()" id="btn-check-updates">↻ Check for Updates</button>
+          <h2>Updates</h2>
         </div>
 
-        <!-- Status card -->
+        <!-- Binary / Portal Update card -->
         <div class="card" style="max-width:720px;margin-bottom:20px;">
+          <h3 style="margin-bottom:4px;">Portal Update</h3>
+          <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Keep the portal binary up to date from GitHub Releases.</p>
+
+          <!-- Version comparison row -->
+          <div style="display:flex;align-items:center;gap:24px;padding:14px 18px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:16px;">
+            <div>
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:3px;">Current</div>
+              <div style="font-family:'SF Mono',monospace;font-weight:700;font-size:15px;" id="bup-current">—</div>
+            </div>
+            <div style="color:var(--text-3);font-size:18px;">→</div>
+            <div>
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:3px;">Latest</div>
+              <div style="font-family:'SF Mono',monospace;font-weight:700;font-size:15px;" id="bup-latest">—</div>
+            </div>
+            <div style="margin-left:auto;">
+              <button class="btn btn-ghost btn-sm" onclick="checkBinaryUpdate()" id="btn-check-binary-update">↻ Check</button>
+            </div>
+          </div>
+
+          <div id="bup-uptodate" class="hidden" style="color:var(--accent-3);font-size:13px;font-weight:600;margin-bottom:12px;">✔ Already up to date</div>
+
+          <!-- Enable toggle + Update Now button -->
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-2);">
+              <input type="checkbox" id="live-update-toggle" onchange="toggleLiveUpdate()"
+                style="width:15px;height:15px;accent-color:var(--accent-2);">
+              Enable live binary updates
+            </label>
+            <div id="btn-apply-binary-wrap" class="hidden">
+              <button class="btn btn-primary btn-sm" onclick="applyBinaryUpdate()">⬆ Update Now</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:8px;">Disabled by default. Replaces the running binary and restarts in-place via systemd.</div>
+
+          <div id="binary-update-log" class="hidden"
+            style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;
+                   font-family:'SF Mono',monospace;font-size:12px;line-height:1.6;max-height:240px;overflow-y:auto;
+                   white-space:pre-wrap;color:var(--accent-3);"></div>
+        </div>
+
+        <!-- OS Packages card -->
+        <div class="card" style="max-width:720px;margin-bottom:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div>
+              <h3 style="margin-bottom:2px;">OS Packages</h3>
+              <div style="font-size:13px;color:var(--text-3);">System packages via apt-get</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="checkUpdates()" id="btn-check-updates">↻ Check for Updates</button>
+          </div>
           <div id="updates-status" style="color:var(--text-3);font-size:14px;">Click "Check for Updates" to scan for available packages.</div>
           <div id="updates-pkg-list" style="margin-top:16px;display:none;">
             <div style="font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:10px;">Available upgrades:</div>
@@ -387,13 +544,13 @@
           </div>
         </div>
 
-        <!-- Live output log -->
+        <!-- OS update live output log -->
         <div id="updates-log-wrap" class="card" style="max-width:720px;display:none;">
           <div style="font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:10px;">Output</div>
           <div id="updates-log"
-            style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;
-                   font-family:monospace;font-size:12px;line-height:1.6;max-height:420px;overflow-y:auto;
-                   white-space:pre-wrap;color:var(--text-1);"></div>
+            style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;
+                   font-family:'SF Mono',monospace;font-size:12px;line-height:1.6;max-height:420px;overflow-y:auto;
+                   white-space:pre-wrap;color:var(--accent-3);"></div>
         </div>
       </div>
       <div class="page hidden" id="page-settings">
@@ -408,7 +565,7 @@
 
           <!-- Storage unit -->
           <div class="form-group">
-            <label>Storage Unit</label>
+            <label>Storage Unit <i class="info-tip tip-down" data-tip="Controls how storage sizes are displayed throughout the portal.&#10;&#10;Typical GB (SI): 1 TB = 1,000 GB — matches how drive manufacturers label capacity.&#10;&#10;GiB (binary): 1 TiB = 1,024 GiB — matches how operating systems report capacity."></i></label>
             <div style="display:flex;gap:8px;">
               <button type="button" onclick="selectStorageUnit('gb')" id="su-gb"
                 class="btn btn-primary" style="flex:1;flex-direction:column;height:auto;padding:12px 10px;">
@@ -484,7 +641,7 @@
           <div>
             <label class="al-event-row"><input type="checkbox" id="al-ev-pool">    <span>Pool health degraded (DEGRADED / FAULTED)</span></label>
             <label class="al-event-row"><input type="checkbox" id="al-ev-smart">   <span>SMART error detected on any disk</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-wearout"> <span>Disk wearout exceeds <input type="number" id="al-wearout-pct" value="80" min="1" max="100" onclick="event.stopPropagation()">%</span></label>
+            <label class="al-event-row"><input type="checkbox" id="al-ev-wearout"> <span>Disk wearout exceeds <input type="number" id="al-wearout-pct" value="80" min="1" max="100" onclick="event.stopPropagation()">% <i class="info-tip tip-left tip-down" data-tip="Sends an alert when any SSD/NVMe reports wearout above this threshold. Wearout % is derived from SMART attribute 177 (wear levelling count) or 231 (SSD life left). HDDs without an endurance rating are excluded."></i></span></label>
             <label class="al-event-row"><input type="checkbox" id="al-ev-login">   <span>Failed logins exceed <input type="number" id="al-login-count" value="5" min="1" max="1000" onclick="event.stopPropagation()"> attempts</span></label>
             <label class="al-event-row"><input type="checkbox" id="al-ev-updates"> <span>Ubuntu security updates available</span></label>
             <label class="al-event-row"><input type="checkbox" id="al-ev-scrub">   <span>Scrub completed with errors</span></label>
@@ -498,6 +655,7 @@
             <button class="btn btn-ghost"   onclick="testAlert()">Send Test Email</button>
           </div>
         </div>
+
       </div>
 
     </div><!-- /pages-container -->
@@ -609,7 +767,7 @@
       <div class="form-group"><label>Username</label><input type="text" id="new-username" required></div>
       <div class="form-group"><label>Email</label><input type="email" id="new-email"></div>
       <div class="form-group">
-        <label>Role</label>
+        <label>Role <i class="info-tip tip-down" data-tip="Admin: full access to all portal features including settings and user management.&#10;&#10;Read-Only: can view all pages but cannot make changes.&#10;&#10;SMB-Only: no portal login — this account is used only for SMB file share authentication (Samba). Set an SMB password separately after creation."></i></label>
         <select id="new-role">
           <option value="admin">Admin — full access</option>
           <option value="read-only">Read-Only — browse only</option>
@@ -668,7 +826,7 @@
         <input type="text" id="cds-name" placeholder="data" required>
       </div>
       <div class="form-group">
-        <label>Quota (0 = no limit)</label>
+        <label>Quota (0 = no limit) <i class="info-tip tip-down" data-tip="quota: caps the total space used by the dataset including snapshots and descendant datasets.&#10;&#10;refquota: caps only the dataset's own data — snapshots and children are not counted against the limit."></i></label>
         <div style="display:flex;gap:8px;">
           <input type="number" id="cds-quota-amount" min="0" value="0" style="flex:1;">
           <select id="cds-quota-unit" style="width:80px;"><option>MB</option><option selected>GB</option><option>TB</option></select>
@@ -676,7 +834,7 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Compression</label>
+        <label>Compression <i class="info-tip tip-down" data-tip="LZ4: fast, low-CPU, good ratio — recommended for general use.&#10;ZSTD: higher compression ratio at the cost of more CPU — ideal for cold data or backups.&#10;Off: disable compression.&#10;Inherit: use the pool-level setting."></i></label>
         <select id="cds-compression"><option value="inherit">Inherit from pool</option><option value="lz4">LZ4</option><option value="zstd">ZSTD</option><option value="off">Off</option></select>
       </div>
       <div class="flex gap-2" style="margin-top:8px;">
@@ -697,7 +855,7 @@
     <div id="eds-alert" class="alert alert-error hidden"></div>
     <form onsubmit="submitEditDataset(event)">
       <div class="form-group">
-        <label>Quota (0 = no limit)</label>
+        <label>Quota (0 = no limit) <i class="info-tip tip-down" data-tip="quota: caps the total space used by the dataset including snapshots and descendant datasets.&#10;&#10;refquota: caps only the dataset's own data — snapshots and children are not counted against the limit."></i></label>
         <div style="display:flex;gap:8px;">
           <input type="number" id="eds-quota-amount" min="0" value="0" style="flex:1;">
           <select id="eds-quota-unit" style="width:80px;"><option>MB</option><option selected>GB</option><option>TB</option></select>
@@ -705,7 +863,7 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Compression</label>
+        <label>Compression <i class="info-tip tip-down" data-tip="LZ4: fast, low-CPU, good ratio — recommended for general use.&#10;ZSTD: higher compression ratio at the cost of more CPU — ideal for cold data or backups.&#10;Off: disable compression.&#10;Inherit: use the pool-level setting."></i></label>
         <select id="eds-compression"><option value="inherit">Inherit</option><option value="lz4">LZ4</option><option value="zstd">ZSTD</option><option value="off">Off</option></select>
       </div>
       <div class="flex gap-2" style="margin-top:8px;">
@@ -744,7 +902,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Retention <span class="text-3 text-xs">(keep last N)</span></label>
+          <label>Retention <span class="text-3 text-xs">(keep last N)</span> <i class="info-tip tip-down" data-tip="Number of automatic snapshots to keep. When a new snapshot is created by the scheduler and the count exceeds this value, the oldest snapshot with the same label prefix is deleted automatically."></i></label>
           <input type="number" id="sched-retention" value="7" min="1" max="999">
         </div>
       </div>
@@ -836,15 +994,15 @@
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
           <input type="checkbox" id="share-browseable" checked style="width:15px;height:15px;accent-color:var(--accent-2);">
-          <span>Browseable</span>
+          <span>Browseable <i class="info-tip tip-down" data-tip="When enabled, this share appears in the Windows Network / SMB browse list. Disabling it hides the share from discovery (it can still be accessed by direct path)."></i></span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
           <input type="checkbox" id="share-readonly" style="width:15px;height:15px;accent-color:var(--accent-2);">
-          <span>Read-only</span>
+          <span>Read-only <i class="info-tip tip-down" data-tip="Prevents any writes to this share. All connected users can read files but cannot create, modify, or delete them. Useful for archive shares."></i></span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
           <input type="checkbox" id="share-guestok" style="width:15px;height:15px;accent-color:var(--accent-2);">
-          <span>Guest OK</span>
+          <span>Guest OK <i class="info-tip tip-down" data-tip="Allows unauthenticated access to the share. Anyone on the network can connect without a username or password. Use with caution on untrusted networks."></i></span>
         </label>
       </div>
 
@@ -893,16 +1051,16 @@
         <label>Options</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-readonly" style="width:15px;height:15px;accent-color:var(--accent-2);"> Read-only
+            <input type="checkbox" id="nfs-readonly" style="width:15px;height:15px;accent-color:var(--accent-2);"> Read-only <i class="info-tip tip-down" data-tip="Exports the share in read-only mode. Clients can read files but cannot write, create, or delete anything."></i>
           </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-sync" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> sync
+            <input type="checkbox" id="nfs-sync" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> sync <i class="info-tip tip-down" data-tip="Replies to client write requests only after data has been committed to stable storage. Prevents data loss on server crash. Recommended — disable only when raw throughput matters more than safety."></i>
           </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-nosubtree" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> no_subtree_check
+            <input type="checkbox" id="nfs-nosubtree" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> no_subtree_check <i class="info-tip tip-down" data-tip="Disables subtree checking, which verifies that a requested file is within the exported directory. Recommended: subtree checks can cause issues with open files and rarely add security value on dedicated ZFS datasets."></i>
           </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-norootsquash" style="width:15px;height:15px;accent-color:var(--accent-2);"> no_root_squash
+            <input type="checkbox" id="nfs-norootsquash" style="width:15px;height:15px;accent-color:var(--accent-2);"> no_root_squash <i class="info-tip tip-down" data-tip="By default (root_squash), the NFS server maps remote root (UID 0) to the anonymous user for safety. Enabling no_root_squash lets a remote root user act as root on this server. Use only on trusted private networks."></i>
           </label>
         </div>
       </div>
@@ -952,6 +1110,65 @@
   </div>
 </div>
 
+<!-- About Modal -->
+<div class="modal-backdrop hidden" id="modal-about" onclick="if(event.target===this)closeAbout()">
+  <div class="modal" style="max-width:440px;text-align:center;">
+    <button class="modal-close" onclick="closeAbout()" style="position:absolute;top:16px;right:16px;">✕</button>
+
+    <!-- Logo -->
+    <div style="margin-bottom:20px;margin-top:8px;">
+      <img src="/static/logo.svg" alt="ZFS NAS" style="height:52px;object-fit:contain;opacity:.9;">
+    </div>
+
+    <!-- Tagline -->
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:20px;line-height:1.6;">
+      <strong style="color:var(--text-1);">ZFS NAS Chezmoi</strong> is a free, 100% open-source NAS management portal —
+      now and forever.<br>No subscriptions, no licensing, no hidden costs.
+    </p>
+
+    <!-- Versions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 10px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:4px;">Current</div>
+        <div style="font-family:'SF Mono',monospace;font-weight:700;font-size:15px;" id="about-current">v…</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 10px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:4px;">Latest</div>
+        <div style="font-family:'SF Mono',monospace;font-weight:700;font-size:15px;" id="about-latest">…</div>
+      </div>
+    </div>
+
+    <!-- Links -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:22px;">
+      <a href="https://github.com/macgaver/zfsnas-chezmoi" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 14px;background:var(--surface2);border-radius:var(--radius-sm);text-decoration:none;color:var(--text-2);font-size:13px;font-weight:500;border:1px solid var(--border);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;opacity:.8;"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.341-3.369-1.341-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+        GitHub Repository
+      </a>
+      <a href="https://github.com/macgaver/zfsnas-chezmoi/releases" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 14px;background:var(--surface2);border-radius:var(--radius-sm);text-decoration:none;color:var(--text-2);font-size:13px;font-weight:500;border:1px solid var(--border);">
+        <span style="font-size:15px;opacity:.8;">🏷</span>
+        Releases &amp; Changelog
+      </a>
+      <a href="https://github.com/macgaver/zfsnas-chezmoi/issues" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 14px;background:var(--surface2);border-radius:var(--radius-sm);text-decoration:none;color:var(--text-2);font-size:13px;font-weight:500;border:1px solid var(--border);">
+        <span style="font-size:15px;opacity:.8;">🐛</span>
+        Support &amp; Issues
+      </a>
+    </div>
+
+    <!-- Donation -->
+    <a href="https://ko-fi.com/macgaver" target="_blank" rel="noopener"
+       style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;background:rgba(255,94,91,0.1);border:1px solid rgba(255,94,91,0.3);border-radius:var(--radius-sm);text-decoration:none;margin-bottom:4px;">
+      <span style="font-size:22px;">☕</span>
+      <div style="text-align:left;">
+        <div style="font-size:13px;font-weight:700;color:#ff6b6b;">Buy me a coffee</div>
+        <div style="font-size:11px;color:var(--text-3);">Support the project on Ko-fi — every coffee helps!</div>
+      </div>
+    </a>
+  </div>
+</div>
+
 <script>
 // ===== Constants =====
 const COLORS = [
@@ -963,12 +1180,14 @@ const gradientFor = i => `linear-gradient(90deg,${COLORS[i%COLORS.length][0]},${
 const dotFor      = i => COLORS[i%COLORS.length][0];
 
 // ===== State =====
-let currentUser  = null;
-let abExpanded   = true;
-let abRefreshInt = null;
-let activeJobs   = {};  // id -> { label, startedAt }
-let prereqData   = null;
-let appSettings  = { port: 8443, storage_unit: 'gb' };
+let currentUser      = null;
+let abExpanded       = true;
+let abRefreshInt     = null;
+let activeJobs       = {};  // id -> { label, startedAt }
+let prereqData       = null;
+let appSettings      = { port: 8443, storage_unit: 'gb', live_update_enabled: false };
+let _dashRefreshTimer = null;
+let _dashCharts      = {};
 
 // ===== Init =====
 (async () => {
@@ -983,6 +1202,14 @@ let appSettings  = { port: 8443, storage_unit: 'gb' };
       document.getElementById('btn-create-user').style.display = 'none';
     }
   } catch { window.location.href = '/login'; return; }
+
+  // Fetch version badge + server IP, then check for updates (cached, once/day)
+  fetch('/api/version').then(r => r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    const el = document.getElementById('app-version');
+    if (el) { el.textContent = 'v' + d.version; el.href = d.releases_url; }
+    if (d.server_ip) window._serverIP = d.server_ip;
+  }).catch(() => {}).finally(() => { _sidebarVersionCheck(); });
 
   await loadSettings();
   showPage('dashboard');
@@ -1014,12 +1241,39 @@ function showPage(name) {
   if (name === 'nfs')       loadNFSShares();
   if (name === 'settings')  { loadSettings(); loadAlerts(); }
   if (name === 'updates')   initUpdatesPage();
+  if (name !== 'dashboard') { clearInterval(_dashRefreshTimer); _dashRefreshTimer = null; }
+  if (name === 'dashboard') loadDashboard();
 }
 
 // ===== Logout =====
 async function logout() {
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login';
+}
+
+// ===== About Modal =====
+function openAbout() {
+  // Populate current version
+  const curEl = document.getElementById('about-current');
+  const latEl = document.getElementById('about-latest');
+  if (curEl) {
+    const verEl = document.getElementById('app-version');
+    curEl.textContent = verEl ? verEl.textContent : 'v…';
+  }
+  // Populate latest version from cache
+  if (latEl) {
+    const cached = _loadVerCache();
+    if (cached && cached.data && cached.data.latest) {
+      latEl.textContent = 'v' + cached.data.latest;
+      latEl.style.color = cached.data.update_available ? '#ffd60a' : '';
+    } else {
+      latEl.textContent = '…';
+    }
+  }
+  document.getElementById('modal-about').classList.remove('hidden');
+}
+function closeAbout() {
+  document.getElementById('modal-about').classList.add('hidden');
 }
 
 // ===== Activity Bar =====
@@ -1081,6 +1335,7 @@ function renderActivityBar(entries) {
         <span class="ab-user">${esc(e.user)}</span>
         <span class="ab-action"> ${esc(e.action.replace(/_/g,' '))}</span>
         ${e.target ? `<span class="ab-target"> → ${esc(e.target)}</span>` : ''}
+        ${e.details ? `<span class="ab-target"> (${esc(e.details)})</span>` : ''}
       </span>
     </div>
   `).join('');
@@ -1283,7 +1538,7 @@ async function loadUsers() {
         <td class="text-2 text-sm">${formatDate(u.created_at)}</td>
         <td>${currentUser.role==='admin' ? `
           <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm" onclick="openSMBPasswordModal('${esc(u.username)}')" title="Set SMB password">SMB</button>
+            <button class="btn btn-ghost btn-sm" onclick="openSMBPasswordModal('${esc(u.username)}')" title="Set SMB password">Set SMB Password</button>
             ${u.id!==currentUser.user_id ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);" onclick="deleteUser('${u.id}','${esc(u.username)}')">Delete</button>` : ''}
           </div>` : ''}</td>
       </tr>
@@ -1408,6 +1663,8 @@ async function loadSettings() {
     const portEl = document.getElementById('settings-port');
     if (portEl) portEl.value = appSettings.port;
     selectStorageUnit(appSettings.storage_unit || 'gb', false);
+    const liveToggle = document.getElementById('live-update-toggle');
+    if (liveToggle) liveToggle.checked = !!appSettings.live_update_enabled;
   } catch {}
 }
 
@@ -1784,7 +2041,7 @@ function renderPoolExists(el, pool) {
 
     <div class="card" style="margin-top:20px;" id="scrub-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 style="margin:0;">Scrub</h3>
+        <h3 style="margin:0;">Scrub <i class="info-tip tip-down" style="margin-left:4px;" data-tip="A ZFS scrub reads every block on the pool and verifies checksums. It detects and (when redundancy allows) repairs silent data corruption. Scrubbing does not affect data availability and runs at low priority."></i></h3>
         <div style="display:flex;align-items:center;gap:8px;" id="scrub-actions">
           <span style="font-size:12px;color:var(--text-3);">Loading…</span>
         </div>
@@ -1794,7 +2051,7 @@ function renderPoolExists(el, pool) {
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
           <input type="checkbox" id="scrub-weekly-toggle" style="width:15px;height:15px;accent-color:var(--accent-2);"
             onchange="setScrubSchedule(this.checked)">
-          Auto-scrub weekly (Sunday 02:00)
+          Auto-scrub weekly (Sunday 02:00) <i class="info-tip tip-down" style="margin-left:4px;" data-tip="When enabled, a scrub is scheduled via cron every Sunday at 02:00 local time. A scrub typically takes minutes to hours depending on pool size, and runs at low I/O priority."></i>
         </label>
       </div>
     </div>`;
@@ -1829,7 +2086,7 @@ function renderPoolCreate(el) {
       </div>
 
       <div class="form-group">
-        <label>Block Size (ashift)</label>
+        <label>Block Size (ashift) <i class="info-tip tip-down" data-tip="ZFS block size as a power of 2. Must match or exceed the physical sector size of your drives.&#10;&#10;512 B (ashift=9): legacy HDDs only.&#10;4 KB (ashift=12): recommended for modern HDDs and most SSDs.&#10;8 KB (ashift=13): NVMe SSDs with 8 KB sectors.&#10;&#10;Setting too low causes write amplification — this cannot be changed after pool creation."></i></label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${[[9,'512 B','Legacy HDDs'],[12,'4 KB','Recommended'],[13,'8 KB','NVMe SSDs']].map(([v,l,hint],i) => `
             <button type="button" onclick="selectAshift(${v})" id="cp-ashift-${v}"
@@ -2356,13 +2613,20 @@ async function submitEditDataset(e) {
   const comp    = document.getElementById('eds-compression').value;
   const quotaBytes = amount > 0 ? Math.round(amount * {'MB':1024**2,'GB':1024**3,'TB':1024**4}[unit]) : 0;
 
+  const jobId = 'dataset-edit-' + name;
+  closeEditDataset();
+  addActiveJob(jobId, `Updating dataset ${name}…`);
+
   const resp = await fetch('/api/datasets/' + encodeURIComponent(name), {
     method: 'PUT', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({quota: quotaBytes, quota_type: qtype, compression: comp}),
   });
   const data = await resp.json();
-  if (!resp.ok) { alertEl.textContent = data.error || 'Failed.'; alertEl.classList.remove('hidden'); return; }
-  closeEditDataset();
+  removeActiveJob(jobId);
+  if (!resp.ok) {
+    alert('Failed to update dataset: ' + (data.error || 'unknown error'));
+    return;
+  }
   await refreshPoolBar();
   loadDatasets();
 }
@@ -2790,14 +3054,21 @@ function renderDisks(el, disks) {
 function diskTableHeader() {
   return `<thead><tr>
     <th>Device</th><th>Vendor / Model</th><th>Size</th>
-    <th>Type</th><th>Wearout</th><th>SMART</th>
+    <th>Type</th>
+    <th>Wearout <i class="info-tip tip-left tip-down" data-tip="Drive endurance consumed (% of rated P/E cycles or TBW used). From SMART attribute 177 (SSD wear levelling) or 231 (SSD life left). N/A for HDDs without an endurance rating."></i></th>
+    <th>Temp <i class="info-tip tip-left tip-down" data-tip="Current drive temperature from SMART data. Read from smartctl JSON (temperature.current field for ATA/NVMe, or attribute IDs 194/190 for older drives). Updated on each SMART refresh."></i></th>
+    <th>SMART <i class="info-tip tip-left tip-down" data-tip="Overall drive health from smartctl self-assessment. PASSED: drive reports no critical errors. FAILED: one or more SMART thresholds exceeded — consider replacing the drive. Unknown: SMART data not yet collected (click ↻ Refresh SMART)."></i></th>
   </tr></thead>`;
 }
 
 function diskTableHeaderWithPool() {
   return `<thead><tr>
     <th>Device</th><th>Vendor / Model</th><th>Size</th>
-    <th>Type</th><th>Wearout</th><th>SMART</th><th>Pool</th>
+    <th>Type</th>
+    <th>Wearout <i class="info-tip tip-left tip-down" data-tip="Drive endurance consumed (% of rated P/E cycles or TBW used). From SMART attribute 177 (SSD wear levelling) or 231 (SSD life left). N/A for HDDs without an endurance rating."></i></th>
+    <th>Temp <i class="info-tip tip-left tip-down" data-tip="Current drive temperature from SMART data. Read from smartctl JSON (temperature.current field for ATA/NVMe, or attribute IDs 194/190 for older drives). Updated on each SMART refresh."></i></th>
+    <th>SMART <i class="info-tip tip-left tip-down" data-tip="Overall drive health from smartctl self-assessment. PASSED: drive reports no critical errors. FAILED: one or more SMART thresholds exceeded — consider replacing the drive. Unknown: SMART data not yet collected (click ↻ Refresh SMART)."></i></th>
+    <th>Pool</th>
   </tr></thead>`;
 }
 
@@ -2813,6 +3084,7 @@ function diskRow(d, dimmed) {
     <td style="font-family:monospace;${tc}">${d.size_bytes ? fmtBytes(d.size_bytes) : esc(d.size)}</td>
     <td>${diskTypeBadge(d.disk_type, dimmed)}</td>
     <td>${wearoutBar(d, dimmed)}</td>
+    <td>${tempBadge(d)}</td>
     <td>${smartBadge(d)}</td>
   </tr>`;
 }
@@ -2827,6 +3099,7 @@ function diskRowWithPool(d, poolName) {
     <td style="font-family:monospace;">${d.size_bytes ? fmtBytes(d.size_bytes) : esc(d.size)}</td>
     <td>${diskTypeBadge(d.disk_type, false)}</td>
     <td>${wearoutBar(d, false)}</td>
+    <td>${tempBadge(d)}</td>
     <td>${smartBadge(d)}</td>
     <td><span style="font-family:monospace;font-size:12px;font-weight:600;color:var(--accent-2);">🗄 ${esc(poolName)}</span></td>
   </tr>`;
@@ -2860,6 +3133,15 @@ function smartBadge(d) {
     return `<span class="text-3" style="font-size:12px;">Not supported</span>`;
   }
   return `<span class="badge badge-${d.smart_ok?'ok':'error'}">${esc(d.smart_msg)}</span>`;
+}
+
+function tempBadge(d) {
+  if (d.temp_c === null || d.temp_c === undefined) {
+    return '<span style="font-size:12px;color:var(--text-3);">—</span>';
+  }
+  const t = d.temp_c;
+  const color = t <= 45 ? 'var(--text)' : t <= 59 ? 'var(--accent-warn)' : 'var(--accent-danger)';
+  return `<span style="font-size:12px;font-weight:600;color:${color};">${t} °C</span>`;
 }
 
 // ===== SMB Shares =====
@@ -2953,7 +3235,7 @@ function renderShares(el, shares) {
       </table>
     </div>
     <div class="text-3 text-sm" style="margin-top:12px;">
-      Connect from Windows: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;">\\\\&lt;server-ip&gt;\\&lt;share-name&gt;</code>
+      Connect from Windows: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;">\\\\${window._serverIP || '&lt;server-ip&gt;'}\\&lt;share-name&gt;</code>
     </div>`;
 }
 
@@ -3179,7 +3461,7 @@ function renderNFSShares(el, shares) {
       </table>
     </div>
     <div class="text-3 text-sm" style="margin-top:12px;">
-      Mount from Linux/macOS: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;">mount -t nfs &lt;server-ip&gt;:/path /mnt/point</code>
+      Mount from Linux/macOS: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;">mount -t nfs ${window._serverIP || '&lt;server-ip&gt;'}:/path /mnt/point</code>
     </div>`;
 }
 
@@ -3313,9 +3595,95 @@ function roleBadge(role) {
 
 // ===== OS Updates =====
 function initUpdatesPage() {
-  // Reset log but don't auto-check (apt-get update is slow).
+  // Reset OS log but don't auto-check (apt-get update is slow).
   document.getElementById('updates-log-wrap').style.display = 'none';
   document.getElementById('updates-log').textContent = '';
+  // Auto-check binary version (fast, just a GitHub API call).
+  _autoBinaryVersionCheck();
+  // Sync toggle state from appSettings.
+  const toggle = document.getElementById('live-update-toggle');
+  if (toggle) toggle.checked = !!appSettings.live_update_enabled;
+}
+
+// ── Version cache (localStorage, max once per day) ──────────────────────────
+const _VER_CACHE_KEY = 'zfsnas_ver_cache';
+
+function _loadVerCache() {
+  try { return JSON.parse(localStorage.getItem(_VER_CACHE_KEY) || 'null'); } catch { return null; }
+}
+function _saveVerCache(data) {
+  try { localStorage.setItem(_VER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch {}
+}
+
+// Called once after login — checks at most once per day, updates sidebar badge.
+async function _sidebarVersionCheck() {
+  const badge = document.getElementById('sidebar-update-badge');
+  const cached = _loadVerCache();
+  const ONE_DAY = 86400 * 1000;
+  let data = null;
+
+  if (cached && (Date.now() - cached.ts) < ONE_DAY) {
+    data = cached.data;
+  } else {
+    try {
+      const resp = await fetch('/api/binary-update/check');
+      if (resp.ok) {
+        data = await resp.json();
+        _saveVerCache(data);
+      }
+    } catch {}
+  }
+
+  if (data && data.update_available && badge) {
+    badge.classList.remove('hidden');
+  }
+}
+
+// Called when the Updates page opens — uses cache to populate fields instantly,
+// then only hits the network if the cache is older than 1 day.
+async function _autoBinaryVersionCheck() {
+  const currentEl  = document.getElementById('bup-current');
+  const latestEl   = document.getElementById('bup-latest');
+  const uptodateEl = document.getElementById('bup-uptodate');
+  const applyWrap  = document.getElementById('btn-apply-binary-wrap');
+  if (!currentEl) return;
+
+  const cached = _loadVerCache();
+  const ONE_DAY = 86400 * 1000;
+
+  function _applyVerData(data) {
+    currentEl.textContent = 'v' + data.current;
+    latestEl.textContent  = 'v' + data.latest;
+    if (data.update_available) {
+      latestEl.style.color = '#ffd60a';
+      if (appSettings.live_update_enabled) applyWrap.classList.remove('hidden');
+      const badge = document.getElementById('sidebar-update-badge');
+      if (badge) badge.classList.remove('hidden');
+    } else {
+      latestEl.style.color = '';
+      uptodateEl.classList.remove('hidden');
+      const badge = document.getElementById('sidebar-update-badge');
+      if (badge) badge.classList.add('hidden');
+    }
+  }
+
+  currentEl.textContent = 'v' + (appSettings.version || '…');
+  latestEl.textContent = '…';
+  uptodateEl.classList.add('hidden');
+  applyWrap.classList.add('hidden');
+
+  if (cached && (Date.now() - cached.ts) < ONE_DAY) {
+    _applyVerData(cached.data);
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/binary-update/check');
+    const data = await resp.json();
+    if (!resp.ok) { latestEl.textContent = data.error || 'unavailable'; return; }
+    _saveVerCache(data);
+    _applyVerData(data);
+  } catch { latestEl.textContent = 'unavailable'; }
 }
 
 async function checkUpdates() {
@@ -3692,6 +4060,283 @@ function startIOPoller() {
   if (_ioPollTimer) return;
   _fetchDiskIO(); // immediate first fetch
   _ioPollTimer = setInterval(_fetchDiskIO, 5000);
+}
+
+// ===== Dashboard 24h RRD Charts =====
+async function loadDashboard() {
+  if (_dashRefreshTimer) clearInterval(_dashRefreshTimer);
+  _loadDashStats();
+  await _fetchDashboardMetrics();
+  _dashRefreshTimer = setInterval(() => { _loadDashStats(); _fetchDashboardMetrics(); }, 5 * 60 * 1000);
+}
+
+async function _loadDashStats() {
+  try {
+    const [pr, dr, sr, ur] = await Promise.all([
+      fetch('/api/pool'), fetch('/api/datasets'),
+      fetch('/api/shares'), fetch('/api/users'),
+    ]);
+    const pool    = pr.ok ? await pr.json() : null;
+    const datasets = dr.ok ? await dr.json() : [];
+    const shares  = sr.ok ? await sr.json() : [];
+    const users   = ur.ok ? await ur.json() : [];
+
+    const poolEl = document.getElementById('dash-pool');
+    if (poolEl) {
+      if (pool && pool.name) {
+        const ok = pool.health === 'ONLINE';
+        const color = ok ? '#32d74b' : '#ff453a';
+        poolEl.innerHTML = `<span style="color:${color};font-weight:700;">${pool.health}</span>
+          <span style="font-size:12px;color:#8e8e93;margin-left:6px;">${pool.name}</span>`;
+      } else {
+        poolEl.innerHTML = '<span style="color:#8e8e93;">No pool</span>';
+      }
+    }
+    const dsEl = document.getElementById('dash-datasets');
+    if (dsEl) dsEl.textContent = Array.isArray(datasets) ? datasets.length : '—';
+    const shEl = document.getElementById('dash-shares');
+    if (shEl) shEl.textContent = Array.isArray(shares) ? shares.length : '—';
+    const usEl = document.getElementById('dash-users');
+    if (usEl) usEl.textContent = Array.isArray(users) ? users.length : '—';
+  } catch (_) {}
+}
+
+async function _fetchDashboardMetrics() {
+  try {
+    const resp = await fetch('/api/dashboard/metrics');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    _renderDashboardCharts(data);
+  } catch (_) {}
+}
+
+// Build a full 288-slot (24h) timeline ending now, mapping sample data into it.
+// Returns { labels: string[], dataArrays: (number|null)[][] } for N series.
+function _dashBuild24h(seriesArr) {
+  const SLOT = 5 * 60; // 5 minutes in seconds
+  const SLOTS = 288;
+  const now  = Math.floor(Date.now() / 1000);
+  // Align end to the nearest 5-min boundary
+  const endTS  = Math.floor(now / SLOT) * SLOT;
+  const startTS = endTS - (SLOTS - 1) * SLOT;
+
+  // Build per-series lookup: rounded-ts → value
+  const maps = seriesArr.map(series => {
+    const m = {};
+    for (const pt of series) {
+      m[Math.round(pt.ts / SLOT) * SLOT] = pt.v;
+    }
+    return m;
+  });
+
+  const labels = [];
+  const dataArrays = seriesArr.map(() => []);
+  for (let i = 0; i < SLOTS; i++) {
+    const ts = startTS + i * SLOT;
+    const d  = new Date(ts * 1000);
+    labels.push(d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0'));
+    const key = Math.round(ts / SLOT) * SLOT;
+    maps.forEach((m, idx) => dataArrays[idx].push(m[key] ?? null));
+  }
+  return { labels, dataArrays };
+}
+
+function _dashChartOpts(yLabel, yMax, stacked = false) {
+  const tickColor = '#8e8e93';
+  const gridColor = 'rgba(255,255,255,0.07)';
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1c1c1e',
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderWidth: 1,
+        titleColor: '#c7c7cc',
+        bodyColor: '#f5f5f7',
+        padding: 10,
+        callbacks: {
+          title: items => items[0]?.label ?? '',
+          label: ctx => '  ' + ctx.dataset.label + ':  ' + ctx.parsed.y.toFixed(1) + ' ' + yLabel,
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: tickColor, font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0 },
+        grid:  { color: gridColor },
+      },
+      y: {
+        stacked,
+        min: 0,
+        ...(yMax != null ? { max: yMax } : {}),
+        ticks: {
+          color: tickColor,
+          font: { size: 10 },
+          callback: val => yMax === 100 ? val + '%' : val,
+        },
+        grid: { color: gridColor },
+      },
+    },
+  };
+}
+
+function _makeDashChartStacked(canvasId, datasets, labels, yLabel, yMax) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  if (_dashCharts[canvasId]) { _dashCharts[canvasId].destroy(); }
+  const chart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: _dashChartOpts(yLabel, yMax, true),
+  });
+  _dashCharts[canvasId] = chart;
+  return chart;
+}
+
+function _makeDashChart(canvasId, datasets, labels, yLabel, yMax) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  if (_dashCharts[canvasId]) { _dashCharts[canvasId].destroy(); }
+  const chart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: _dashChartOpts(yLabel, yMax),
+  });
+  _dashCharts[canvasId] = chart;
+  return chart;
+}
+
+function _dashDS(label, color, values, fill) {
+  return {
+    label,
+    data: values,
+    borderColor: color,
+    backgroundColor: fill ? color + '33' : 'transparent',
+    borderWidth: 1.5,
+    pointRadius: 0,
+    fill,
+    tension: 0.3,
+    spanGaps: true,
+  };
+}
+
+function _renderDashboardCharts(data) {
+  const cpu   = data.cpu_pct         || [];
+  const mem   = data.mem_used_pct    || [];
+  const netRx = data.net_rx_kbps     || [];
+  const netTx = data.net_tx_kbps     || [];
+  const diskR = data.disk_read_kbps  || [];
+  const diskW = data.disk_write_kbps || [];
+  const diskB = data.disk_busy_pct   || [];
+
+  const memApp   = data.mem_app_pct   || [];
+  const memCache = data.mem_cache_pct || [];
+
+  const totalSamples = Math.max(cpu.length, memApp.length, netRx.length, diskR.length, diskB.length);
+  const collectEl = document.getElementById('dash-collecting');
+  const chartsEl  = document.getElementById('dash-charts');
+
+  // Show collecting overlay only when there are zero samples; hide once we have data.
+  if (totalSamples === 0) {
+    collectEl.classList.remove('hidden');
+    chartsEl.classList.add('hidden');
+    return;
+  }
+  collectEl.classList.add('hidden');
+  chartsEl.classList.remove('hidden');
+
+  const cpuD  = _dashBuild24h([cpu]);
+  const memD  = _dashBuild24h([memApp, memCache]);
+  const netD  = _dashBuild24h([netRx, netTx]);
+  const dskD  = _dashBuild24h([diskR, diskW]);
+  const busyD = _dashBuild24h([diskB]);
+
+  _makeDashChart('dash-chart-cpu',  [_dashDS('CPU %',       '#0a84ff', cpuD.dataArrays[0],  true)],  cpuD.labels,  '%',    100);
+  _makeDashChartStacked('dash-chart-mem', [
+    _dashDS('App %',   '#0a84ff', memD.dataArrays[0], true),
+    _dashDS('Cache %', '#bf5af2', memD.dataArrays[1], true),
+  ], memD.labels, '%', 100);
+  _makeDashChart('dash-chart-net',  [
+    _dashDS('RX KB/s',   '#32d74b', netD.dataArrays[0],  false),
+    _dashDS('TX KB/s',   '#ff9f0a', netD.dataArrays[1],  false),
+  ], netD.labels, 'KB/s', null);
+  _makeDashChart('dash-chart-disk', [
+    _dashDS('Read KB/s', '#64d2ff', dskD.dataArrays[0],  false),
+    _dashDS('Write KB/s','#ffd60a', dskD.dataArrays[1],  false),
+  ], dskD.labels, 'KB/s', null);
+  _makeDashChart('dash-chart-busy', [_dashDS('Busy %',      '#ff453a', busyD.dataArrays[0], true)],  busyD.labels, '%',    100);
+}
+
+// ===== Binary Self-Update =====
+async function toggleLiveUpdate() {
+  const enabled = document.getElementById('live-update-toggle').checked;
+  appSettings.live_update_enabled = enabled;
+  // Re-run version check so "Update Now" button visibility is refreshed.
+  await _autoBinaryVersionCheck();
+  await fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ live_update_enabled: enabled }),
+  });
+}
+
+async function checkBinaryUpdate() {
+  const currentEl  = document.getElementById('bup-current');
+  const latestEl   = document.getElementById('bup-latest');
+  const uptodateEl = document.getElementById('bup-uptodate');
+  const applyWrap  = document.getElementById('btn-apply-binary-wrap');
+  const checkBtn   = document.getElementById('btn-check-binary-update');
+  if (checkBtn) { checkBtn.disabled = true; checkBtn.textContent = '…'; }
+  uptodateEl.classList.add('hidden');
+  applyWrap.classList.add('hidden');
+  // Invalidate cache so this manual check always hits the network.
+  try { localStorage.removeItem(_VER_CACHE_KEY); } catch {}
+  try {
+    const resp = await fetch('/api/binary-update/check');
+    const data = await resp.json();
+    if (!resp.ok) { latestEl.textContent = data.error || 'unavailable'; return; }
+    _saveVerCache(data);
+    currentEl.textContent = 'v' + data.current;
+    latestEl.textContent  = 'v' + data.latest;
+    latestEl.style.color  = '';
+    if (data.update_available) {
+      latestEl.style.color = '#ffd60a';
+      if (appSettings.live_update_enabled) applyWrap.classList.remove('hidden');
+    } else {
+      uptodateEl.classList.remove('hidden');
+    }
+  } catch { latestEl.textContent = 'unavailable'; }
+  finally { if (checkBtn) { checkBtn.disabled = false; checkBtn.textContent = '↻ Check'; } }
+}
+
+function applyBinaryUpdate() {
+  const logEl    = document.getElementById('binary-update-log');
+  const latestEl = document.getElementById('bup-latest');
+  const applyWrap = document.getElementById('btn-apply-binary-wrap');
+  const checkBtn  = document.getElementById('btn-check-binary-update');
+  logEl.classList.remove('hidden');
+  logEl.textContent = '';
+  applyWrap.classList.add('hidden');
+  if (checkBtn) checkBtn.disabled = true;
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(proto + '//' + location.host + '/ws/binary-update-apply');
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.line) { logEl.textContent += msg.line + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+    if (msg.done) {
+      if (checkBtn) checkBtn.disabled = false;
+      if (!msg.success) logEl.textContent += 'Failed: ' + msg.message + '\n';
+    }
+  };
+  ws.onerror = () => {
+    logEl.textContent += '\nWebSocket connection error.';
+    if (checkBtn) checkBtn.disabled = false;
+  };
 }
 </script>
 </body>

@@ -121,7 +121,7 @@ func HandleUpdateDataset(w http.ResponseWriter, r *http.Request) {
 	audit.Log(audit.Entry{
 		User:   sess.Username,
 		Role:   sess.Role,
-		Action: audit.ActionCreateDataset,
+		Action: audit.ActionUpdateDataset,
 		Target: path,
 		Result: audit.ResultOK,
 	})

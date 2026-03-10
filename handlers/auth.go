@@ -142,14 +142,15 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ip := clientIP(r)
 	user := config.FindUserByUsername(users, strings.TrimSpace(req.Username))
 	if user == nil || user.Role == config.RoleSMBOnly {
 		alerts.RecordFailedLogin()
 		audit.Log(audit.Entry{
-			User:   req.Username,
-			Action: audit.ActionLoginFailed,
-			Result: audit.ResultError,
-			Details: "user not found or SMB-only account",
+			User:    req.Username,
+			Action:  audit.ActionLoginFailed,
+			Result:  audit.ResultError,
+			Details: "user not found or SMB-only account (from " + ip + ")",
 		})
 		jsonErr(w, http.StatusUnauthorized, "invalid username or password")
 		return
@@ -158,11 +159,11 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		alerts.RecordFailedLogin()
 		audit.Log(audit.Entry{
-			User:   req.Username,
-			Role:   user.Role,
-			Action: audit.ActionLoginFailed,
-			Result: audit.ResultError,
-			Details: "incorrect password",
+			User:    req.Username,
+			Role:    user.Role,
+			Action:  audit.ActionLoginFailed,
+			Result:  audit.ResultError,
+			Details: "incorrect password (from " + ip + ")",
 		})
 		jsonErr(w, http.StatusUnauthorized, "invalid username or password")
 		return
@@ -176,10 +177,11 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	alerts.ResetFailedLogins()
 	audit.Log(audit.Entry{
-		User:   user.Username,
-		Role:   user.Role,
-		Action: audit.ActionLogin,
-		Result: audit.ResultOK,
+		User:    user.Username,
+		Role:    user.Role,
+		Action:  audit.ActionLogin,
+		Result:  audit.ResultOK,
+		Details: "from " + ip,
 	})
 
 	SetSessionCookie(w, sess.Token)

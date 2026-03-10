@@ -23,6 +23,7 @@ type DiskInfo struct {
 	DiskType   string    `json:"disk_type"` // HDD, SSD, NVMe
 	Rotational bool      `json:"rotational"`
 	WearoutPct *int      `json:"wearout_pct"` // nil = N/A
+	TempC      *int      `json:"temp_c"`      // nil = not available
 	SmartOK    bool      `json:"smart_ok"`
 	SmartMsg   string    `json:"smart_msg"`
 	InUse      bool      `json:"in_use"`
@@ -119,10 +120,11 @@ func ListDisks(configDir string) ([]DiskInfo, error) {
 
 		if c, ok := cached[dev.Name]; ok {
 			info.WearoutPct = c.WearoutPct
-			info.SmartOK = c.SmartOK
-			info.SmartMsg = c.SmartMsg
-			info.Serial = c.Serial
-			info.UpdatedAt = c.UpdatedAt
+			info.TempC      = c.TempC
+			info.SmartOK    = c.SmartOK
+			info.SmartMsg   = c.SmartMsg
+			info.Serial     = c.Serial
+			info.UpdatedAt  = c.UpdatedAt
 		}
 
 		debugLog("  → adding disk %s (type=%s in_use=%v)", info.Device, info.DiskType, info.InUse)
@@ -209,7 +211,23 @@ func querySMARTATA(info *DiskInfo) {
 		info.SmartMsg = "Healthy"
 	}
 
+	// Temperature — prefer top-level field (smartctl 7+), fall back to attr table.
+	if s.Temperature.Current > 0 {
+		t := s.Temperature.Current
+		info.TempC = &t
+	}
+
 	for _, attr := range s.AtaSmartAttributes.Table {
+		// Temperature from attribute table (ID 194 or 190) if not already set.
+		if info.TempC == nil {
+			id := attr.ID
+			if id == 194 || id == 190 {
+				t := attr.Raw.Value
+				if t > 0 && t < 100 {
+					info.TempC = &t
+				}
+			}
+		}
 		name := strings.ToLower(attr.Name)
 		// Skip non-wear attributes that can match our ID checks (e.g. Life_Curve_Status, Temperature).
 		if strings.Contains(name, "life_curve") || strings.Contains(name, "curve_status") ||
@@ -259,6 +277,12 @@ func querySMARTNVMe(info *DiskInfo) {
 		info.SmartMsg = fmt.Sprintf("Critical warning: 0x%x", nlog.CriticalWarning)
 	} else {
 		info.SmartMsg = "Healthy"
+	}
+
+	// Temperature: nvme smart-log reports Kelvin; convert to Celsius.
+	if nlog.Temperature > 273 {
+		t := nlog.Temperature - 273
+		info.TempC = &t
 	}
 
 	// Use whichever field is non-zero (nvme-cli versions differ in field name).
@@ -315,11 +339,17 @@ type smartctlOutput struct {
 	SmartStatus struct {
 		Passed bool `json:"passed"`
 	} `json:"smart_status"`
+	Temperature struct {
+		Current int `json:"current"` // smartctl 7+ top-level temperature
+	} `json:"temperature"`
 	AtaSmartAttributes struct {
 		Table []struct {
 			ID    int    `json:"id"`
 			Name  string `json:"name"`
 			Value int    `json:"value"`
+			Raw   struct {
+				Value int `json:"value"`
+			} `json:"raw"`
 		} `json:"table"`
 	} `json:"ata_smart_attributes"`
 }
@@ -328,6 +358,7 @@ type nvmeSmartLog struct {
 	CriticalWarning int `json:"critical_warning"`
 	PercentageUsed  int `json:"percentage_used"` // nvme-cli 1.x field name
 	PercentUsed     int `json:"percent_used"`     // nvme-cli 2.x field name
+	Temperature     int `json:"temperature"`      // Kelvin (nvme smart-log)
 }
 
 // ---- Cache helpers ----

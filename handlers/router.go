@@ -201,6 +201,20 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/sysinfo/diskio",
 		RequireAuth(http.HandlerFunc(HandleGetDiskIO))).Methods("GET")
 
+	// --- Version ---
+	r.Handle("/api/version",
+		RequireAuth(http.HandlerFunc(HandleGetVersion))).Methods("GET")
+
+	// --- Dashboard metrics (RRD) ---
+	r.Handle("/api/dashboard/metrics",
+		RequireAuth(http.HandlerFunc(HandleGetDashboardMetrics))).Methods("GET")
+
+	// --- Binary self-update (admin only) ---
+	r.Handle("/api/binary-update/check",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleCheckBinaryUpdate(appCfg))))).Methods("GET")
+	r.Handle("/ws/binary-update-apply",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleBinaryUpdateApply(appCfg))))).Methods("GET")
+
 	// Catch-all for SPA deep links: serve index.html for any unknown GET that
 	// doesn't start with /api/ or /static/.
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
