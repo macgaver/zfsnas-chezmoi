@@ -83,7 +83,7 @@ The following system packages are **installed automatically** by the setup wizar
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/zfsnas-chezmoi.git
+git clone https://github.com/macgaver/zfsnas-chezmoi.git
 cd zfsnas-chezmoi
 
 # 2. Build the binary (all static assets are embedded at compile time)
