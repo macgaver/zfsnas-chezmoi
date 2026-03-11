@@ -146,7 +146,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px; /* 16px minimum prevents iOS auto-zoom on focus */
   padding: 11px 14px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -659,3 +659,37 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .mb-4 { margin-bottom: 16px; }
 .w-full { width: 100%; }
 .hidden { display: none !important; }
+
+/* ===== Responsive: slim icon-only sidebar on small screens ===== */
+@media (max-width: 600px) {
+  .sidebar {
+    width: 52px;
+    min-width: 52px;
+    padding: 8px 0;
+  }
+  .sidebar-header {
+    display: none;
+  }
+  .sidebar-section {
+    display: none;
+  }
+  .nav-label {
+    display: none;
+  }
+  .nav-item {
+    justify-content: center;
+    padding: 11px 0;
+    gap: 0;
+  }
+  .nav-icon {
+    width: auto;
+    font-size: 20px;
+    opacity: 0.85;
+  }
+  .nav-item.active .nav-icon {
+    opacity: 1;
+  }
+  .sidebar-footer {
+    display: none;
+  }
+}

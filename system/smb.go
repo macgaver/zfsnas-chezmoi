@@ -3,10 +3,12 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -26,6 +28,24 @@ type SMBShare struct {
 	ReadOnly   bool     `json:"read_only"`
 	ValidUsers []string `json:"valid_users"`
 	GuestOK    bool     `json:"guest_ok"`
+
+	// Time Machine
+	TimeMachine bool `json:"time_machine"`
+	TMQuotaGB   int  `json:"tm_quota_gb"` // 0 = unlimited
+
+	// Recycle Bin
+	RecycleBin         bool `json:"recycle_bin"`
+	RecycleRetainDays  int  `json:"recycle_retain_days"` // 0 = keep forever
+
+	// SMB2/3 Durable Handles (posix locking = no)
+	DurableHandles bool `json:"durable_handles"`
+
+	// Apple-style character encoding (vfs catia)
+	AppleEncoding bool `json:"apple_encoding"`
+
+	// Host access control
+	AllowedHosts string `json:"allowed_hosts"` // space-separated IPs/hostnames/subnets
+	HostsDeny    string `json:"hosts_deny"`
 }
 
 func smbSharesPath(configDir string) string {
@@ -83,6 +103,58 @@ func applySMBConf(shares []SMBShare) error {
 		sb.WriteString("   create mask = 0664\n")
 		sb.WriteString("   directory mask = 0775\n")
 		sb.WriteString("   force group = sambashare\n")
+
+		// SMB2/3 Durable Handles — requires posix locking = no
+		if s.DurableHandles {
+			sb.WriteString("   posix locking = no\n")
+		}
+
+		// Host access control
+		if s.AllowedHosts != "" {
+			sb.WriteString("   hosts allow = " + s.AllowedHosts + "\n")
+		}
+		if s.HostsDeny != "" {
+			sb.WriteString("   hosts deny = " + s.HostsDeny + "\n")
+		}
+
+		// VFS objects (combine as needed)
+		var vfsObjs []string
+		if s.AppleEncoding {
+			vfsObjs = append(vfsObjs, "catia")
+		}
+		if s.RecycleBin {
+			vfsObjs = append(vfsObjs, "recycle")
+		}
+		if s.TimeMachine {
+			vfsObjs = append(vfsObjs, "fruit", "streams_xattr")
+		}
+		if len(vfsObjs) > 0 {
+			sb.WriteString("   vfs objects = " + strings.Join(vfsObjs, " ") + "\n")
+		}
+
+		// Apple-style character encoding (catia)
+		if s.AppleEncoding {
+			sb.WriteString("   catia:mappings = 0x22:0xf022,0x2a:0xf02a,0x2f:0xf02f,0x3a:0xf03a,0x3c:0xf03c,0x3e:0xf03e,0x3f:0xf03f,0x5c:0xf05c,0x7c:0xf07c\n")
+		}
+
+		// Recycle Bin
+		if s.RecycleBin {
+			sb.WriteString("   recycle:repository = .recycle\n")
+			sb.WriteString("   recycle:keeptree = yes\n")
+			sb.WriteString("   recycle:versions = yes\n")
+			sb.WriteString("   recycle:touch = yes\n")
+			sb.WriteString("   recycle:directory_mode = 2770\n")
+			sb.WriteString("   recycle:subdir_mode = 2770\n")
+			sb.WriteString("   recycle:maxsize = 0\n")
+		}
+
+		// Time Machine
+		if s.TimeMachine {
+			sb.WriteString("   fruit:time machine = yes\n")
+			if s.TMQuotaGB > 0 {
+				sb.WriteString(fmt.Sprintf("   fruit:time machine max size = %dG\n", s.TMQuotaGB))
+			}
+		}
 	}
 	sb.WriteString("\n" + smbEndMarker + "\n")
 	managed := sb.String()
@@ -234,6 +306,67 @@ func boolSMB(b bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+// StartRecycleCleaner starts a goroutine that runs at 2 AM daily and removes
+// files older than RecycleRetainDays from each share's .recycle directory.
+// configDir is passed so it can reload shares dynamically each night.
+func StartRecycleCleaner(configDir string) {
+	go func() {
+		for {
+			now := time.Now()
+			next := time.Date(now.Year(), now.Month(), now.Day()+1, 2, 0, 0, 0, now.Location())
+			time.Sleep(time.Until(next))
+			runRecycleCleaner(configDir)
+		}
+	}()
+}
+
+func runRecycleCleaner(configDir string) {
+	shares, err := ListSMBShares(configDir)
+	if err != nil {
+		log.Printf("recycle cleaner: load shares: %v", err)
+		return
+	}
+	for _, s := range shares {
+		if !s.RecycleBin || s.RecycleRetainDays <= 0 {
+			continue
+		}
+		recycleDir := filepath.Join(s.Path, ".recycle")
+		cutoff := time.Now().AddDate(0, 0, -s.RecycleRetainDays)
+		if err := cleanOlderThan(recycleDir, cutoff); err != nil {
+			log.Printf("recycle cleaner: %s: %v", recycleDir, err)
+		} else {
+			log.Printf("recycle cleaner: cleaned %s (older than %d days)", recycleDir, s.RecycleRetainDays)
+		}
+	}
+}
+
+func cleanOlderThan(dir string, cutoff time.Time) error {
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if e.IsDir() {
+				_ = os.RemoveAll(p)
+			} else {
+				_ = os.Remove(p)
+			}
+		} else if e.IsDir() {
+			_ = cleanOlderThan(p, cutoff)
+		}
+	}
+	return nil
 }
 
 // writeFileSudo writes content to a path using sudo tee.

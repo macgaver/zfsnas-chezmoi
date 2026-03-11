@@ -24,14 +24,20 @@ type AppConfig struct {
 	MaxSmbdProcesses  int       `json:"max_smbd_processes,omitempty"`  // Samba max smbd processes (0 = use default 100)
 }
 
+// UserPreferences holds per-user UI preferences persisted across sessions.
+type UserPreferences struct {
+	ActivityBarCollapsed bool `json:"activity_bar_collapsed,omitempty"`
+}
+
 // User represents a portal or SMB-only user.
 type User struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	Role         string    `json:"role"` // admin, read-only, smb-only
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string          `json:"id"`
+	Username     string          `json:"username"`
+	Email        string          `json:"email"`
+	PasswordHash string          `json:"password_hash"`
+	Role         string          `json:"role"` // admin, read-only, smb-only
+	CreatedAt    time.Time       `json:"created_at"`
+	Preferences  UserPreferences `json:"preferences,omitempty"`
 }
 
 var (

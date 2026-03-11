@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>A ZFS NAS management portal that gets out of your way.</strong><br/>
-  Single binary. HTTPS from day one. No database. No bloat.
+  Single binary. Secure. No database. No bloat.
 </p>
 
 <p align="center">

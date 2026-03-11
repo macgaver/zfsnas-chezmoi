@@ -20,6 +20,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))),
 	)
 
+	// --- iOS / PWA home-screen icon (no auth needed — iOS fetches before login) ---
+	r.HandleFunc("/apple-touch-icon.png", HandleAppleTouchIcon).Methods("GET")
+	r.HandleFunc("/apple-touch-icon-precomposed.png", HandleAppleTouchIcon).Methods("GET")
+
 	// --- Pre-auth pages ---
 	r.HandleFunc("/setup", HandleSetupPage(readFile)).Methods("GET")
 	r.HandleFunc("/login", HandleLoginPage(readFile)).Methods("GET")
@@ -40,6 +44,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.HandleFunc("/api/auth/login", HandleLogin).Methods("POST")
 	r.HandleFunc("/api/auth/logout", HandleLogout).Methods("POST")
 	r.Handle("/api/auth/me", RequireAuth(http.HandlerFunc(HandleMe))).Methods("GET")
+	r.Handle("/api/prefs", RequireAuth(http.HandlerFunc(HandleUpdatePrefs))).Methods("PUT")
 
 	// Sessions (admin only)
 	r.Handle("/api/auth/sessions",
@@ -78,6 +83,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleGrowPool)))).Methods("POST")
 	r.Handle("/api/pool/destroy",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDestroyPool)))).Methods("POST")
+	r.Handle("/api/pool/upgrade",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleUpgradePool)))).Methods("POST")
 
 	// --- Datasets ---
 	r.Handle("/api/datasets",
@@ -150,6 +157,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleGetSettings(appCfg)))).Methods("GET")
 	r.Handle("/api/settings",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleUpdateSettings(appCfg))))).Methods("PUT")
+	r.Handle("/api/settings/timezone",
+		RequireAuth(http.HandlerFunc(HandleGetTimezone))).Methods("GET")
+	r.Handle("/api/settings/timezone",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetTimezone)))).Methods("PUT")
 
 	// --- Scrub ---
 	r.Handle("/api/pool/scrub/status",
@@ -208,6 +219,12 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// --- Dashboard metrics (RRD) ---
 	r.Handle("/api/dashboard/metrics",
 		RequireAuth(http.HandlerFunc(HandleGetDashboardMetrics))).Methods("GET")
+
+	// --- System power (admin only) ---
+	r.Handle("/api/system/reboot",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleReboot)))).Methods("POST")
+	r.Handle("/api/system/shutdown",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleShutdown)))).Methods("POST")
 
 	// --- Binary self-update (admin only) ---
 	r.Handle("/api/binary-update/check",

@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZFS NAS Portal</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ZFS NAS">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
@@ -190,30 +195,30 @@
     </div>
 
     <div class="sidebar-section">Overview</div>
-    <button class="nav-item" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">📈</span> Performance</button>
+    <button class="nav-item" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">📈</span><span class="nav-label"> Performance</span></button>
 
     <div class="sidebar-section">Storage</div>
-    <button class="nav-item" onclick="showPage('disks')"     id="nav-disks">    <span class="nav-icon">💿</span> Physical Disks</button>
-    <button class="nav-item" onclick="showPage('pool')"      id="nav-pool">     <span class="nav-icon">🗄</span> ZFS Pool</button>
-    <button class="nav-item" onclick="showPage('datasets')"  id="nav-datasets"> <span class="nav-icon">📁</span> Datasets</button>
-    <button class="nav-item" onclick="showPage('snapshots')" id="nav-snapshots"><span class="nav-icon">📸</span> Snapshots</button>
+    <button class="nav-item" onclick="showPage('disks')"     id="nav-disks">    <span class="nav-icon">💿</span><span class="nav-label"> Physical Disks</span></button>
+    <button class="nav-item" onclick="showPage('pool')"      id="nav-pool">     <span class="nav-icon">🗄</span><span class="nav-label"> ZFS Pool</span></button>
+    <button class="nav-item" onclick="showPage('datasets')"  id="nav-datasets"> <span class="nav-icon">📁</span><span class="nav-label"> Datasets</span></button>
+    <button class="nav-item" onclick="showPage('snapshots')" id="nav-snapshots"><span class="nav-icon">📸</span><span class="nav-label"> Snapshots</span></button>
 
     <div class="sidebar-section">Sharing</div>
-    <button class="nav-item" onclick="showPage('shares')"    id="nav-shares">   <span class="nav-icon">🔗</span> SMB Shares</button>
-    <button class="nav-item" onclick="showPage('nfs')"       id="nav-nfs">      <span class="nav-icon">🌐</span> NFS Shares</button>
+    <button class="nav-item" onclick="showPage('shares')"    id="nav-shares">   <span class="nav-icon">🔗</span><span class="nav-label"> SMB Shares</span></button>
+    <button class="nav-item" onclick="showPage('nfs')"       id="nav-nfs">      <span class="nav-icon">🌐</span><span class="nav-label"> NFS Shares</span></button>
 
     <div class="sidebar-section">System</div>
-    <button class="nav-item" onclick="showPage('users')"     id="nav-users">    <span class="nav-icon">👤</span> Users</button>
-    <button class="nav-item" onclick="showPage('prereqs')"   id="nav-prereqs">  <span class="nav-icon">🔧</span> Prerequisites</button>
-    <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span> Updates</button>
-    <button class="nav-item" onclick="toggleTermPanel()"     id="nav-terminal"> <span class="nav-icon">⌨</span> Terminal</button>
-    <button class="nav-item" onclick="showPage('settings')"  id="nav-settings"> <span class="nav-icon">⚙</span> Settings</button>
+    <button class="nav-item" onclick="showPage('users')"     id="nav-users">    <span class="nav-icon">👤</span><span class="nav-label"> Users</span></button>
+    <button class="nav-item" onclick="showPage('prereqs')"   id="nav-prereqs">  <span class="nav-icon">🔧</span><span class="nav-label"> Prerequisites</span></button>
+    <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span><span class="nav-label"> Updates</span></button>
+    <button class="nav-item" onclick="toggleTermPanel()"     id="nav-terminal"> <span class="nav-icon">⌨</span><span class="nav-label"> Terminal</span></button>
+    <button class="nav-item" onclick="showPage('settings')"  id="nav-settings"> <span class="nav-icon">⚙</span><span class="nav-label"> Settings</span></button>
 
     <div class="sidebar-section">Logs</div>
-    <button class="nav-item" onclick="showPage('activity')"  id="nav-activity"> <span class="nav-icon">📋</span> Activity Log</button>
+    <button class="nav-item" onclick="showPage('activity')"  id="nav-activity"> <span class="nav-icon">📋</span><span class="nav-label"> Activity Log</span></button>
 
     <div style="flex:1"></div>
-    <div style="padding:12px 20px 4px;border-top:1px solid var(--border);">
+    <div class="sidebar-footer" style="padding:12px 20px 4px;border-top:1px solid var(--border);">
       <button class="btn btn-ghost btn-sm w-full" onclick="openAbout()" style="margin-bottom:6px;">About / Support</button>
       <button class="btn btn-ghost btn-sm w-full" onclick="logout()">Sign Out</button>
     </div>
@@ -476,6 +481,27 @@
       <div class="page hidden" id="page-updates">
         <div class="page-header">
           <h2>Updates</h2>
+          <div style="position:relative;" id="power-btn-wrap">
+            <button class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:6px;"
+              onclick="togglePowerMenu()" id="btn-power">⏻ Power</button>
+            <div id="power-menu" class="hidden"
+              style="position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);
+                     border:1px solid var(--border);border-radius:var(--radius-sm);
+                     box-shadow:var(--shadow);z-index:60;min-width:150px;overflow:hidden;">
+              <button onclick="openPowerModal('reboot')"
+                style="display:block;width:100%;padding:10px 16px;text-align:left;
+                       background:none;border:none;color:var(--text-1);cursor:pointer;font-size:14px;"
+                onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+                ↺ Reboot
+              </button>
+              <button onclick="openPowerModal('shutdown')"
+                style="display:block;width:100%;padding:10px 16px;text-align:left;
+                       background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:14px;"
+                onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+                ⏻ Shutdown
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Binary / Portal Update card -->
@@ -558,7 +584,9 @@
           <h2>Settings</h2>
           <button class="btn btn-ghost btn-sm" onclick="loadSettings()">↻ Refresh</button>
         </div>
-        <div class="card" style="max-width:520px;margin-bottom:20px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:20px;align-items:start;">
+
+        <div class="card">
           <h3 style="margin-bottom:20px;">General</h3>
           <div id="settings-alert" class="alert alert-error hidden"></div>
           <div id="settings-ok" class="alert alert-success hidden" style="margin-bottom:16px;"></div>
@@ -592,7 +620,7 @@
         </div>
 
         <!-- Samba card -->
-        <div class="card" style="max-width:520px;margin-bottom:20px;">
+        <div class="card">
           <h3 style="margin-bottom:4px;">Samba (SMB)</h3>
           <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Performance and resource tuning for the Samba file sharing service.</p>
           <div id="smb-settings-alert" class="alert alert-error hidden"></div>
@@ -607,8 +635,25 @@
           <button class="btn btn-primary btn-sm" onclick="saveSmbSettings()" style="margin-top:4px;">Apply</button>
         </div>
 
+        <!-- Timezone card -->
+        <div class="card">
+          <h3 style="margin-bottom:4px;">Server Timezone
+            <i class="info-tip tip-down" style="margin-left:6px;" data-tip="Sets the system clock timezone for the entire server.&#10;&#10;This affects:&#10;• Snapshot schedules — cron times are interpreted in this timezone, so &quot;daily at 02:00&quot; means 2 AM local time.&#10;• Scrub schedule (Sunday 02:00 local time).&#10;• Audit log timestamps shown in the portal.&#10;• Any scheduled tasks or alerts.&#10;&#10;Change takes effect immediately — no restart required."></i>
+          </h3>
+          <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Configure the timezone used for scheduling and log timestamps.</p>
+          <div id="tz-alert" class="alert alert-error hidden"></div>
+          <div id="tz-ok"    class="alert alert-success hidden" style="margin-bottom:16px;"></div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Timezone</label>
+            <select id="settings-timezone" style="font-family:'SF Mono',monospace;font-size:14px;">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveTimezone()">Apply Timezone</button>
+        </div>
+
         <!-- Alerts card -->
-        <div class="card" style="max-width:520px;margin-bottom:20px;">
+        <div class="card">
           <h3 style="margin-bottom:4px;">Email Alerts</h3>
           <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Send notifications when important events occur.</p>
           <div id="alerts-alert" class="alert alert-error hidden"></div>
@@ -672,6 +717,7 @@
           </div>
         </div>
 
+        </div><!-- /settings grid -->
       </div>
 
     </div><!-- /pages-container -->
@@ -771,6 +817,162 @@
   </div>
 </div>
 
+<!-- Force Import Pool Modal -->
+<div class="modal-backdrop hidden" id="modal-force-import">
+  <div class="modal" style="max-width:500px;border:1px solid #ff9f0a;">
+    <div class="modal-header" style="background:rgba(255,159,10,0.08);border-bottom:1px solid #ff9f0a;">
+      <h3 style="color:#ff9f0a;">⚠ Force Import Pool</h3>
+      <button class="modal-close" onclick="closeForceImportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-error hidden" id="force-import-alert"></div>
+      <p style="font-size:14px;margin-bottom:10px;color:var(--text-1);">
+        ZFS reports this pool was previously in use by another system or was not cleanly exported.
+      </p>
+      <div id="force-import-error-msg" style="font-size:12px;font-family:'SF Mono',monospace;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:14px;color:var(--text-2);white-space:pre-wrap;word-break:break-word;"></div>
+      <p style="font-size:13px;margin-bottom:20px;color:#ff9f0a;font-weight:600;">
+        Only force-import if you are certain this pool is no longer in use elsewhere. Forcing import on an active pool can cause data corruption.
+      </p>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Type the pool name <strong id="force-import-pool-name-hint"></strong> to confirm:</label>
+        <input type="text" id="force-import-confirm-input" placeholder="" autocomplete="off"
+          style="border-color:#ff9f0a;" oninput="checkForceImportConfirm()">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeForceImportModal()">Cancel</button>
+      <button class="btn" id="btn-force-import-confirm"
+        style="background:#ff9f0a;color:#000;opacity:.4;cursor:not-allowed;"
+        disabled onclick="submitForceImport()">Force Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recursive Delete Dataset Modal -->
+<div class="modal-backdrop hidden" id="modal-recursive-delete">
+  <div class="modal" style="max-width:480px;border:1px solid var(--accent-danger);">
+    <div class="modal-header" style="background:rgba(255,59,48,0.08);border-bottom:1px solid var(--accent-danger);">
+      <h3 style="color:var(--accent-danger);">⚠ Dataset Has Children</h3>
+      <button class="modal-close" onclick="closeRecursiveDeleteModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-error hidden" id="recursive-delete-alert"></div>
+      <p style="font-size:14px;margin-bottom:8px;color:var(--text-1);">
+        <strong id="recursive-delete-ds-name"></strong> has child datasets and cannot be deleted normally.
+      </p>
+      <p style="font-size:13px;margin-bottom:20px;color:var(--accent-danger);font-weight:600;">
+        Recursive delete will permanently destroy this dataset and <em>all</em> of its children, including their data. This cannot be undone.
+      </p>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Type the dataset name <strong id="recursive-delete-name-hint"></strong> to confirm:</label>
+        <input type="text" id="recursive-delete-confirm-input" placeholder="" autocomplete="off"
+          style="border-color:var(--accent-danger);" oninput="checkRecursiveDeleteConfirm()">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRecursiveDeleteModal()">Cancel</button>
+      <button class="btn" id="btn-recursive-delete-confirm"
+        style="background:var(--accent-danger);color:#fff;opacity:.4;cursor:not-allowed;"
+        disabled onclick="submitRecursiveDelete()">Delete Recursively</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dataset Detail Modal (opened from pool bar / legend) -->
+<div class="modal-backdrop hidden" id="modal-dataset-detail">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <div>
+        <h3 id="dsd-title" style="margin-bottom:2px;"></h3>
+        <div id="dsd-path" style="font-size:11px;font-family:'SF Mono',monospace;color:var(--text-3);"></div>
+      </div>
+      <button class="modal-close" onclick="closeDatasetDetail()">✕</button>
+    </div>
+    <div class="modal-body" style="padding-top:12px;">
+      <div id="dsd-usage-bar" style="height:6px;border-radius:3px;background:var(--surface2);margin-bottom:16px;overflow:hidden;">
+        <div id="dsd-usage-fill" style="height:100%;border-radius:3px;transition:width .3s;"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;">
+        <div class="card-sm" style="padding:12px 14px;">
+          <div class="text-3 text-xs" style="text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Used</div>
+          <div id="dsd-used" style="font-size:17px;font-weight:700;color:var(--accent-2);"></div>
+          <div id="dsd-used-pct" style="font-size:11px;color:var(--text-3);margin-top:2px;"></div>
+        </div>
+        <div class="card-sm" style="padding:12px 14px;">
+          <div class="text-3 text-xs" style="text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Available</div>
+          <div id="dsd-avail" style="font-size:17px;font-weight:700;color:var(--accent-3);"></div>
+        </div>
+        <div class="card-sm" style="padding:12px 14px;">
+          <div class="text-3 text-xs" style="text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Referenced</div>
+          <div id="dsd-refer" style="font-size:17px;font-weight:700;"></div>
+        </div>
+        <div class="card-sm" style="padding:12px 14px;">
+          <div class="text-3 text-xs" style="text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Quota</div>
+          <div id="dsd-quota" style="font-size:17px;font-weight:700;"></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="stat-row"><span class="stat-label">Compression</span><span id="dsd-comp" class="stat-value"></span></div>
+        <div class="stat-row"><span class="stat-label">Compress ratio</span><span id="dsd-ratio" class="stat-value"></span></div>
+        <div class="stat-row"><span class="stat-label">Record size</span><span id="dsd-recsize" class="stat-value"></span></div>
+        <div class="stat-row"><span class="stat-label">Mountpoint</span><span id="dsd-mount" class="stat-value" style="font-family:'SF Mono',monospace;font-size:12px;word-break:break-all;"></span></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDatasetDetail()">Close</button>
+      <button class="btn btn-primary btn-sm" onclick="closeDatasetDetail();showPage('datasets')">Go to Datasets →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pool Upgrade Modal -->
+<div class="modal-backdrop hidden" id="modal-pool-upgrade">
+  <div class="modal" style="max-width:480px;border:1px solid var(--accent-2);">
+    <div class="modal-header" style="background:rgba(10,132,255,0.08);border-bottom:1px solid var(--accent-2);">
+      <h3 style="color:var(--accent-2);">⬆ Upgrade ZFS Pool</h3>
+      <button class="modal-close" onclick="closePoolUpgradeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-error hidden" id="pool-upgrade-alert"></div>
+      <p style="font-size:14px;margin-bottom:10px;color:var(--text-1);">
+        This will upgrade your pool to support all available ZFS feature flags on this system.
+      </p>
+      <p style="font-size:13px;margin-bottom:10px;color:var(--text-2);">
+        After the upgrade, pools with newer features may not be importable by older ZFS versions. Ensure any other systems that access this pool are also running a compatible ZFS version.
+      </p>
+      <p style="font-size:13px;font-weight:600;color:var(--accent-danger);">
+        This operation is irreversible.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closePoolUpgradeModal()">Cancel</button>
+      <button class="btn" id="btn-pool-upgrade-confirm"
+        style="background:var(--accent-2);color:#fff;"
+        onclick="submitPoolUpgrade()">Confirm Upgrade</button>
+    </div>
+  </div>
+</div>
+
+<!-- Power: Reboot / Shutdown Confirmation Modal -->
+<div class="modal-backdrop hidden" id="modal-power">
+  <div class="modal" style="max-width:440px;border:1px solid var(--accent-danger);">
+    <div class="modal-header" style="background:rgba(255,59,48,0.08);border-bottom:1px solid var(--accent-danger);">
+      <h3 style="color:var(--accent-danger);" id="power-modal-title">⏻ Confirm</h3>
+      <button class="modal-close" onclick="closePowerModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-error hidden" id="power-modal-alert"></div>
+      <p style="font-size:14px;color:var(--text-1);" id="power-modal-body"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closePowerModal()">Cancel</button>
+      <button class="btn" id="btn-power-confirm"
+        style="background:var(--accent-danger);color:#fff;"
+        onclick="submitPowerAction()">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <!-- Create User Modal -->
 <div class="modal-backdrop hidden" id="modal-create-user">
   <div class="modal">
@@ -780,22 +982,69 @@
     </div>
     <div id="modal-user-alert" class="alert alert-error hidden"></div>
     <form onsubmit="submitCreateUser(event)">
-      <div class="form-group"><label>Username</label><input type="text" id="new-username" required></div>
-      <div class="form-group"><label>Email</label><input type="email" id="new-email"></div>
+      <div class="form-group"><label>Username</label><input type="text" id="new-username" required autocomplete="off"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="new-email" autocomplete="off"></div>
       <div class="form-group">
         <label>Role <i class="info-tip tip-down" data-tip="Admin: full access to all portal features including settings and user management.&#10;&#10;Read-Only: can view all pages but cannot make changes.&#10;&#10;SMB-Only: no portal login — this account is used only for SMB file share authentication (Samba). Set an SMB password separately after creation."></i></label>
-        <select id="new-role">
+        <select id="new-role" onchange="onNewRoleChange()">
           <option value="admin">Admin — full access</option>
           <option value="read-only">Read-Only — browse only</option>
           <option value="smb-only">SMB-Only — file shares only (no portal login)</option>
         </select>
       </div>
-      <div class="form-group"><label>Password</label><input type="password" id="new-password" placeholder="Min 8 characters"></div>
+      <div id="new-password-wrap" class="form-group">
+        <label>Password</label>
+        <input type="password" id="new-password" placeholder="Min 8 characters" autocomplete="new-password">
+      </div>
+      <div id="new-smb-hint" class="hidden" style="font-size:13px;color:var(--text-3);margin-bottom:16px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        SMB-Only users do not have a portal password. After creation, set their Samba password from the user list.
+      </div>
       <div class="flex gap-2" style="margin-top:8px;">
         <button type="button" class="btn btn-ghost" onclick="closeCreateUser()">Cancel</button>
         <button type="submit" class="btn btn-primary" style="flex:1;">Create User</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal-backdrop hidden" id="modal-edit-user">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">
+      <div>
+        <h3 style="margin-bottom:2px;">Edit User</h3>
+        <div id="eu-username-label" style="font-size:12px;font-family:'SF Mono',monospace;color:var(--text-3);"></div>
+      </div>
+      <button class="modal-close" onclick="closeEditUser()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="edit-user-alert" class="alert alert-error hidden"></div>
+      <div id="edit-user-ok"    class="alert alert-success hidden" style="margin-bottom:12px;"></div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="eu-email" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select id="eu-role" onchange="onEditRoleChange()">
+          <option value="admin">Admin — full access</option>
+          <option value="read-only">Read-Only — browse only</option>
+          <option value="smb-only">SMB-Only — file shares only (no portal login)</option>
+        </select>
+        <div id="eu-role-self-hint" class="hidden" style="font-size:12px;color:var(--text-3);margin-top:4px;">Role cannot be changed for your own account.</div>
+      </div>
+      <div id="eu-password-wrap" class="form-group" style="margin-bottom:0;">
+        <label>New Password <span style="color:var(--text-3);font-weight:400;">(leave blank to keep current)</span></label>
+        <input type="password" id="eu-password" placeholder="Min 8 characters" autocomplete="new-password">
+      </div>
+      <div id="eu-smb-hint" class="hidden" style="font-size:13px;color:var(--text-3);margin-top:4px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        SMB-Only users do not have a portal password. Use "Set SMB Password" to manage their Samba credentials.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEditUser()">Cancel</button>
+      <button class="btn btn-primary" id="btn-edit-user-save" onclick="submitEditUser()">Save Changes</button>
+    </div>
   </div>
 </div>
 
@@ -1029,6 +1278,57 @@
         </div>
       </div>
 
+      <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--text-3);text-transform:uppercase;margin-bottom:12px;">Advanced Options</div>
+
+      <!-- Time Machine -->
+      <div style="margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="share-timemachine" style="width:15px;height:15px;accent-color:var(--accent-2);" onchange="toggleShareTM()">
+          <span>Time Machine <i class="info-tip tip-down" data-tip="Advertises this share as a macOS Time Machine backup destination. Requires the Samba fruit VFS module (apt install samba)."></i></span>
+        </label>
+        <div id="share-tm-quota-wrap" class="hidden" style="margin-top:8px;padding-left:23px;display:flex;align-items:center;gap:10px;">
+          <label style="font-size:13px;color:var(--text-2);white-space:nowrap;">Quota (GB)</label>
+          <input type="number" id="share-tm-quota" min="0" value="0" style="width:100px;">
+          <span class="text-3 text-xs">0 = unlimited</span>
+        </div>
+      </div>
+
+      <!-- Recycle Bin -->
+      <div style="margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="share-recycle" style="width:15px;height:15px;accent-color:var(--accent-2);" onchange="toggleShareRecycle()">
+          <span>Recycle Bin <i class="info-tip tip-down" data-tip="Deleted files are moved to a .recycle folder at the share root instead of being permanently removed. A nightly cleanup (2 AM) removes files older than the configured retention period."></i></span>
+        </label>
+        <div id="share-recycle-days-wrap" class="hidden" style="margin-top:8px;padding-left:23px;display:flex;align-items:center;gap:10px;">
+          <label style="font-size:13px;color:var(--text-2);white-space:nowrap;">Retention (days)</label>
+          <input type="number" id="share-recycle-days" min="0" value="0" style="width:100px;">
+          <span class="text-3 text-xs">0 = keep forever</span>
+        </div>
+      </div>
+
+      <!-- Durable Handles + Apple Encoding -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="share-durable" checked style="width:15px;height:15px;accent-color:var(--accent-2);">
+          <span>Durable Handles <i class="info-tip tip-down" data-tip="Enables SMB2/3 durable handles so clients can reconnect seamlessly after a brief network interruption without losing open file handles. Recommended for macOS and Windows clients."></i></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="share-apple-enc" style="width:15px;height:15px;accent-color:var(--accent-2);">
+          <span>Apple Encoding <i class="info-tip tip-down" data-tip="Maps special characters used in macOS filenames (colons, backslashes, etc.) to Unicode equivalents via the Samba catia VFS module, allowing Mac clients to read and write those files correctly."></i></span>
+        </label>
+      </div>
+
+      <!-- Allowed Hosts / Hosts Deny -->
+      <div class="form-group">
+        <label>Allowed Hosts <span class="text-3 text-xs">(optional)</span> <i class="info-tip" data-tip="Space-separated list of IP addresses, hostnames, or subnets (CIDR) allowed to access this share. Leave empty to allow all. Example: 192.168.1.0/24 10.0.0.5"></i></label>
+        <input type="text" id="share-allowed-hosts" placeholder="192.168.1.0/24 10.0.0.5" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Hosts Deny <span class="text-3 text-xs">(optional)</span> <i class="info-tip" data-tip="Space-separated list of IP addresses, hostnames, or subnets explicitly denied access to this share."></i></label>
+        <input type="text" id="share-hosts-deny" placeholder="10.0.1.0/24" autocomplete="off">
+      </div>
+
       <div class="flex gap-2" style="margin-top:8px;">
         <button type="button" class="btn btn-ghost" onclick="closeShareModal()">Cancel</button>
         <button type="submit" class="btn btn-primary" style="flex:1;" id="share-submit-btn">Create Share</button>
@@ -1127,7 +1427,7 @@
 </div>
 
 <!-- About Modal -->
-<div class="modal-backdrop hidden" id="modal-about" onclick="if(event.target===this)closeAbout()">
+<div class="modal-backdrop hidden" id="modal-about">
   <div class="modal" style="max-width:440px;text-align:center;">
     <button class="modal-close" onclick="closeAbout()" style="position:absolute;top:16px;right:16px;">✕</button>
 
@@ -1217,6 +1517,14 @@ let _dashCharts      = {};
       document.getElementById('nav-terminal').style.display = 'none';
       document.getElementById('btn-create-user').style.display = 'none';
     }
+    // Restore activity bar collapsed state from user preferences.
+    if (currentUser.preferences && currentUser.preferences.activity_bar_collapsed) {
+      abExpanded = false;
+      const bar = document.getElementById('activity-bar');
+      bar.classList.remove('expanded');
+      bar.classList.add('collapsed');
+      document.getElementById('ab-chevron').style.transform = '';
+    }
   } catch { window.location.href = '/login'; return; }
 
   // Fetch version badge + server IP, then check for updates (cached, once/day)
@@ -1300,6 +1608,12 @@ function toggleActivityBar() {
   bar.classList.toggle('collapsed', !abExpanded);
   document.getElementById('ab-chevron').style.transform = abExpanded ? 'rotate(180deg)' : '';
   if (abExpanded) refreshActivityBar();
+  // Persist preference (fire-and-forget).
+  fetch('/api/prefs', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({activity_bar_collapsed: !abExpanded}),
+  }).catch(() => {});
 }
 
 function startActivityBarRefresh() {
@@ -1536,12 +1850,15 @@ function skipService() {
 }
 
 // ===== Users =====
+let _usersCache = [];
+
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:24px;">Loading…</td></tr>';
   try {
     const resp  = await fetch('/api/users');
     const users = await resp.json();
+    _usersCache = users || [];
     if (!users.length) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:24px;">No users found.</td></tr>';
       return;
@@ -1553,9 +1870,10 @@ async function loadUsers() {
         <td><span class="badge badge-${roleBadge(u.role)}">${esc(u.role)}</span></td>
         <td class="text-2 text-sm">${formatDate(u.created_at)}</td>
         <td>${currentUser.role==='admin' ? `
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm" onclick="openSMBPasswordModal('${esc(u.username)}')" title="Set SMB password">Set SMB Password</button>
-            ${u.id!==currentUser.user_id ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);" onclick="deleteUser('${u.id}','${esc(u.username)}')">Delete</button>` : ''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" onclick="openSMBPasswordModal('${esc(u.username)}')" title="Set SMB password">SMB Password</button>
+            <button class="btn btn-ghost btn-sm" onclick="openEditUser('${esc(u.id)}')" title="Edit user" style="padding:6px 9px;">✏️</button>
+            ${u.id!==currentUser.user_id ? `<button class="btn btn-ghost btn-sm" onclick="deleteUser('${u.id}','${esc(u.username)}')" title="Delete user" style="padding:6px 9px;color:var(--accent-danger);">🗑️</button>` : ''}
           </div>` : ''}</td>
       </tr>
     `).join('');
@@ -1569,6 +1887,75 @@ async function deleteUser(id, username) {
   const resp = await fetch('/api/users/' + id, { method: 'DELETE' });
   const data = await resp.json();
   if (resp.ok) loadUsers(); else alert(data.error || 'Failed to delete user.');
+}
+
+let _editUserId = '';
+
+function openEditUser(id) {
+  const u = _usersCache.find(x => x.id === id);
+  if (!u) return;
+  _editUserId = id;
+
+  document.getElementById('eu-username-label').textContent = u.username;
+  document.getElementById('eu-email').value    = u.email || '';
+  document.getElementById('eu-role').value     = u.role;
+  document.getElementById('eu-password').value = '';
+  document.getElementById('edit-user-alert').classList.add('hidden');
+  document.getElementById('edit-user-ok').classList.add('hidden');
+
+  // Prevent changing your own role (avoid accidental self-lockout).
+  const isSelf = id === currentUser.user_id;
+  document.getElementById('eu-role').disabled = isSelf;
+  document.getElementById('eu-role-self-hint').classList.toggle('hidden', !isSelf);
+
+  onEditRoleChange();
+  document.getElementById('modal-edit-user').classList.remove('hidden');
+  setTimeout(() => document.getElementById('eu-email').focus(), 50);
+}
+
+function closeEditUser() {
+  document.getElementById('modal-edit-user').classList.add('hidden');
+}
+
+function onEditRoleChange() {
+  const isSMB = document.getElementById('eu-role').value === 'smb-only';
+  document.getElementById('eu-password-wrap').classList.toggle('hidden', isSMB);
+  document.getElementById('eu-smb-hint').classList.toggle('hidden', !isSMB);
+  if (isSMB) document.getElementById('eu-password').value = '';
+}
+
+async function submitEditUser() {
+  const alertEl = document.getElementById('edit-user-alert');
+  const okEl    = document.getElementById('edit-user-ok');
+  const btn     = document.getElementById('btn-edit-user-save');
+  alertEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+
+  const role = document.getElementById('eu-role').value;
+  const body = {
+    email: document.getElementById('eu-email').value.trim(),
+    role,
+  };
+  const pw = document.getElementById('eu-password').value;
+  if (pw && role !== 'smb-only') body.password = pw;
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const resp = await fetch('/api/users/' + _editUserId, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  btn.disabled = false; btn.textContent = 'Save Changes';
+
+  if (!resp.ok) {
+    alertEl.textContent = data.error || 'Failed to update user.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  okEl.textContent = 'Changes saved.';
+  okEl.classList.remove('hidden');
+  loadUsers();
 }
 
 let smbPwUsername = '';
@@ -1611,25 +1998,43 @@ async function submitSMBPassword(e) {
 }
 
 function openCreateUser() {
-  document.getElementById('modal-create-user').classList.remove('hidden');
+  // Reset all fields so re-opening never shows stale data.
+  document.getElementById('new-username').value = '';
+  document.getElementById('new-email').value    = '';
+  document.getElementById('new-password').value = '';
+  document.getElementById('new-role').value     = 'admin';
   document.getElementById('modal-user-alert').classList.add('hidden');
-  document.getElementById('new-username').focus();
+  onNewRoleChange();
+  document.getElementById('modal-create-user').classList.remove('hidden');
+  setTimeout(() => document.getElementById('new-username').focus(), 50);
 }
+
 function closeCreateUser() { document.getElementById('modal-create-user').classList.add('hidden'); }
+
+function onNewRoleChange() {
+  const isSMB = document.getElementById('new-role').value === 'smb-only';
+  document.getElementById('new-password-wrap').classList.toggle('hidden', isSMB);
+  document.getElementById('new-smb-hint').classList.toggle('hidden', !isSMB);
+  const pwInput = document.getElementById('new-password');
+  pwInput.required = !isSMB;
+  if (isSMB) pwInput.value = '';
+}
 
 async function submitCreateUser(e) {
   e.preventDefault();
   const alertEl = document.getElementById('modal-user-alert');
   alertEl.classList.add('hidden');
+  const role    = document.getElementById('new-role').value;
+  const body    = {
+    username: document.getElementById('new-username').value.trim(),
+    email:    document.getElementById('new-email').value.trim(),
+    role,
+  };
+  if (role !== 'smb-only') body.password = document.getElementById('new-password').value;
   const resp = await fetch('/api/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: document.getElementById('new-username').value.trim(),
-      email:    document.getElementById('new-email').value.trim(),
-      role:     document.getElementById('new-role').value,
-      password: document.getElementById('new-password').value,
-    }),
+    body: JSON.stringify(body),
   });
   const data = await resp.json();
   if (!resp.ok) {
@@ -1684,6 +2089,49 @@ async function loadSettings() {
     const maxSmbd = document.getElementById('settings-max-smbd');
     if (maxSmbd) maxSmbd.value = appSettings.max_smbd_processes || 100;
   } catch {}
+  loadTimezone();
+}
+
+let _tzLoaded = false;
+async function loadTimezone() {
+  const sel = document.getElementById('settings-timezone');
+  if (!sel) return;
+  try {
+    const resp = await fetch('/api/settings/timezone');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    // Only rebuild the option list the first time (it's ~600 entries).
+    if (!_tzLoaded) {
+      sel.innerHTML = (data.timezones || []).map(tz =>
+        `<option value="${esc(tz)}">${esc(tz)}</option>`
+      ).join('');
+      _tzLoaded = true;
+    }
+    sel.value = data.timezone || 'UTC';
+  } catch {}
+}
+
+async function saveTimezone() {
+  const alertEl = document.getElementById('tz-alert');
+  const okEl    = document.getElementById('tz-ok');
+  alertEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  const sel = document.getElementById('settings-timezone');
+  const tz  = sel ? sel.value : '';
+  if (!tz) return;
+  const resp = await fetch('/api/settings/timezone', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({timezone: tz}),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    alertEl.textContent = data.error || 'Failed to set timezone.';
+    alertEl.classList.remove('hidden');
+  } else {
+    okEl.textContent = `Timezone set to ${data.timezone}.`;
+    okEl.classList.remove('hidden');
+  }
 }
 
 function selectStorageUnit(unit, save) {
@@ -1902,7 +2350,10 @@ function renderPoolBar() {
   const free  = poolData.usable_avail || poolData.free;
   const usedByData = poolData.usable_used || poolData.alloc;
 
-  sumEl.textContent = `${poolData.name}  ·  ${fmtBytes(total)} usable  ·  ${fmtBytes(usedByData)} used  ·  ${fmtBytes(free)} free  ·  ${poolData.health}`;
+  const summaryUsedPct = total > 0 ? (usedByData / total * 100) : 0;
+  const summaryFreePct = 100 - summaryUsedPct;
+  const summaryPctColor = summaryUsedPct >= 80 ? 'var(--accent-danger)' : summaryUsedPct >= 75 ? '#ff9f0a' : 'var(--accent-3)';
+  sumEl.innerHTML = `${esc(poolData.name)}  ·  ${fmtBytes(total)} usable  ·  ${fmtBytes(usedByData)} used <span style="color:${summaryPctColor};font-weight:700;">(${summaryUsedPct.toFixed(1)}%)</span>  ·  ${fmtBytes(free)} free (${summaryFreePct.toFixed(1)}%)  ·  ${esc(poolData.health)}`;
 
   // Use depth-1 datasets (direct children of pool root) to avoid double-counting.
   const depth1 = (datasetData || []).filter(d => d.depth === 1);
@@ -2014,9 +2465,18 @@ async function _fetchPoolStatus() {
     const resp = await fetch('/api/pool/status');
     const data = await resp.json();
     if (resp.ok) {
-      pre.textContent = data.output || '(no output)';
+      const statusText = data.output || '(no output)';
+      pre.textContent = statusText;
       const tick = document.getElementById('pool-status-tick');
       if (tick) tick.textContent = 'Updated ' + new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      // Show upgrade button if zpool status hints that an upgrade is available.
+      const upgradeWrap = document.getElementById('pool-upgrade-btn-wrap');
+      if (upgradeWrap && currentUser && currentUser.role === 'admin') {
+        const needsUpgrade = statusText.includes('zpool upgrade') || statusText.toLowerCase().includes('newer version');
+        upgradeWrap.innerHTML = needsUpgrade
+          ? `<button class="btn btn-sm" style="background:var(--accent-2);color:#fff;margin-right:4px;" onclick="openPoolUpgradeModal()">⬆ Upgrade Pool</button>`
+          : '';
+      }
     }
   } catch { /* ignore network hiccups */ }
   _fetchScrubStatus();
@@ -2033,10 +2493,11 @@ function renderPoolExists(el, pool) {
 
   // Inject header action buttons.
   document.getElementById('pool-header-actions').innerHTML = currentUser.role === 'admin' ? `
-    <button class="btn btn-ghost btn-sm" onclick="detectPools()">🔍 Detect Existing Pool</button>
+    <span id="pool-upgrade-btn-wrap"></span>
+    <button class="btn btn-ghost btn-sm" onclick="detectPools()">⬇ Import ZFS Pool</button>
     <button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);border-color:var(--accent-danger);"
       onclick="openDestroyPoolModal()">Destroy Pool</button>
-  ` : `<button class="btn btn-ghost btn-sm" onclick="detectPools()">🔍 Detect Existing Pool</button>`;
+  ` : `<button class="btn btn-ghost btn-sm" onclick="detectPools()">⬇ Import ZFS Pool</button>`;
 
   // Member disks section.
   const membersHtml = (pool.members && pool.members.length)
@@ -2119,7 +2580,7 @@ function renderPoolExists(el, pool) {
 
 function renderPoolCreate(el) {
   document.getElementById('pool-header-actions').innerHTML =
-    `<button class="btn btn-ghost btn-sm" onclick="detectPools()">🔍 Detect Existing Pool</button>`;
+    `<button class="btn btn-ghost btn-sm" onclick="detectPools()">⬇ Import ZFS Pool</button>`;
   el.innerHTML = `
     <div class="card" style="max-width:600px;">
       <h3 style="margin-bottom:6px;">Create ZFS Pool</h3>
@@ -2289,13 +2750,20 @@ async function detectPools() {
   const choice = prompt(`Found pools:\n${names}\n\nEnter pool name to import:`);
   if (!choice) return;
 
+  const poolName = choice.trim();
   const r = await fetch('/api/pool/import', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({name: choice.trim()}),
+    body: JSON.stringify({name: poolName}),
   });
   const d = await r.json();
-  if (r.ok) { await refreshPoolBar(); loadPool(); }
-  else alert(d.error || 'Import failed.');
+  if (r.ok) { await refreshPoolBar(); loadPool(); return; }
+
+  const errMsg = d.error || 'Import failed.';
+  if (errMsg.includes('-f') || errMsg.toLowerCase().includes('previously') || errMsg.toLowerCase().includes('force')) {
+    openForceImportModal(poolName, errMsg);
+  } else {
+    alert(errMsg);
+  }
 }
 
 // ===== Scrub =====
@@ -2528,6 +2996,189 @@ async function submitDestroyPool() {
   loadPool();
 }
 
+// ===== Force Import Pool =====
+let _forceImportPoolName = '';
+
+function openForceImportModal(poolName, errorMsg) {
+  _forceImportPoolName = poolName;
+  document.getElementById('force-import-pool-name-hint').textContent = `"${poolName}"`;
+  document.getElementById('force-import-confirm-input').value = '';
+  document.getElementById('force-import-confirm-input').placeholder = poolName;
+  document.getElementById('force-import-error-msg').textContent = errorMsg;
+  document.getElementById('force-import-alert').classList.add('hidden');
+  checkForceImportConfirm();
+  document.getElementById('modal-force-import').classList.remove('hidden');
+  setTimeout(() => document.getElementById('force-import-confirm-input').focus(), 50);
+}
+
+function closeForceImportModal() {
+  document.getElementById('modal-force-import').classList.add('hidden');
+}
+
+function checkForceImportConfirm() {
+  const val = document.getElementById('force-import-confirm-input').value;
+  const match = val === _forceImportPoolName;
+  const btn = document.getElementById('btn-force-import-confirm');
+  btn.disabled = !match;
+  btn.style.opacity = match ? '1' : '.4';
+  btn.style.cursor  = match ? 'pointer' : 'not-allowed';
+}
+
+async function submitForceImport() {
+  const btn     = document.getElementById('btn-force-import-confirm');
+  const alertEl = document.getElementById('force-import-alert');
+  btn.disabled = true; btn.textContent = 'Importing…';
+  alertEl.classList.add('hidden');
+
+  const r = await fetch('/api/pool/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name: _forceImportPoolName, force: true}),
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    btn.disabled = false; btn.textContent = 'Force Import';
+    checkForceImportConfirm();
+    alertEl.textContent = d.error || 'Force import failed.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  closeForceImportModal();
+  await refreshPoolBar();
+  loadPool();
+}
+
+// ===== Recursive Delete Dataset =====
+let _recursiveDeleteName = '';
+
+function openRecursiveDeleteModal(datasetName) {
+  _recursiveDeleteName = datasetName;
+  document.getElementById('recursive-delete-ds-name').textContent = datasetName;
+  document.getElementById('recursive-delete-name-hint').textContent = `"${datasetName}"`;
+  document.getElementById('recursive-delete-confirm-input').value = '';
+  document.getElementById('recursive-delete-confirm-input').placeholder = datasetName;
+  document.getElementById('recursive-delete-alert').classList.add('hidden');
+  checkRecursiveDeleteConfirm();
+  document.getElementById('modal-recursive-delete').classList.remove('hidden');
+  setTimeout(() => document.getElementById('recursive-delete-confirm-input').focus(), 50);
+}
+
+function closeRecursiveDeleteModal() {
+  document.getElementById('modal-recursive-delete').classList.add('hidden');
+}
+
+function checkRecursiveDeleteConfirm() {
+  const val = document.getElementById('recursive-delete-confirm-input').value;
+  const match = val === _recursiveDeleteName;
+  const btn = document.getElementById('btn-recursive-delete-confirm');
+  btn.disabled = !match;
+  btn.style.opacity = match ? '1' : '.4';
+  btn.style.cursor  = match ? 'pointer' : 'not-allowed';
+}
+
+async function submitRecursiveDelete() {
+  const btn     = document.getElementById('btn-recursive-delete-confirm');
+  const alertEl = document.getElementById('recursive-delete-alert');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  alertEl.classList.add('hidden');
+
+  const resp = await fetch('/api/datasets/' + encodeURIComponent(_recursiveDeleteName) + '?recursive=true', {method:'DELETE'});
+  const data = await resp.json();
+  if (!resp.ok) {
+    btn.disabled = false; btn.textContent = 'Delete Recursively';
+    checkRecursiveDeleteConfirm();
+    alertEl.textContent = data.error || 'Failed to delete dataset.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  closeRecursiveDeleteModal();
+  await refreshPoolBar();
+  loadDatasets();
+}
+
+// ===== Pool Upgrade =====
+function openPoolUpgradeModal() {
+  document.getElementById('pool-upgrade-alert').classList.add('hidden');
+  document.getElementById('btn-pool-upgrade-confirm').disabled = false;
+  document.getElementById('btn-pool-upgrade-confirm').textContent = 'Confirm Upgrade';
+  document.getElementById('modal-pool-upgrade').classList.remove('hidden');
+}
+function closePoolUpgradeModal() {
+  document.getElementById('modal-pool-upgrade').classList.add('hidden');
+}
+async function submitPoolUpgrade() {
+  const btn     = document.getElementById('btn-pool-upgrade-confirm');
+  const alertEl = document.getElementById('pool-upgrade-alert');
+  btn.disabled = true; btn.textContent = 'Upgrading…';
+  alertEl.classList.add('hidden');
+  const resp = await fetch('/api/pool/upgrade', {method:'POST'});
+  const data = await resp.json();
+  if (!resp.ok) {
+    btn.disabled = false; btn.textContent = 'Confirm Upgrade';
+    alertEl.textContent = data.error || 'Upgrade failed.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  closePoolUpgradeModal();
+  // Refresh pool status to re-check if upgrade button should still show.
+  _fetchPoolStatus();
+}
+
+// ===== Power (Reboot / Shutdown) =====
+let _powerAction = '';
+function togglePowerMenu() {
+  const m = document.getElementById('power-menu');
+  m.classList.toggle('hidden');
+}
+function openPowerModal(action) {
+  _powerAction = action;
+  document.getElementById('power-menu').classList.add('hidden');
+  document.getElementById('power-modal-alert').classList.add('hidden');
+  const btn = document.getElementById('btn-power-confirm');
+  btn.disabled = false;
+  if (action === 'reboot') {
+    document.getElementById('power-modal-title').textContent = '↺ Reboot Server';
+    document.getElementById('power-modal-body').textContent = 'The server will reboot immediately. All active sessions will be disconnected. Are you sure?';
+    btn.textContent = 'Reboot Now';
+  } else {
+    document.getElementById('power-modal-title').textContent = '⏻ Shut Down Server';
+    document.getElementById('power-modal-body').textContent = 'The server will power off immediately. You will need physical access or remote power control to turn it back on. Are you sure?';
+    btn.textContent = 'Shut Down Now';
+  }
+  document.getElementById('modal-power').classList.remove('hidden');
+}
+function closePowerModal() {
+  document.getElementById('modal-power').classList.add('hidden');
+}
+async function submitPowerAction() {
+  const btn     = document.getElementById('btn-power-confirm');
+  const alertEl = document.getElementById('power-modal-alert');
+  btn.disabled = true;
+  btn.textContent = _powerAction === 'reboot' ? 'Rebooting…' : 'Shutting down…';
+  alertEl.classList.add('hidden');
+  const resp = await fetch(`/api/system/${_powerAction}`, {method:'POST'});
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    btn.disabled = false;
+    btn.textContent = _powerAction === 'reboot' ? 'Reboot Now' : 'Shut Down Now';
+    alertEl.textContent = data.error || 'Command failed.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  // Server is going down — show a persistent message and close modal.
+  closePowerModal();
+  alert(_powerAction === 'reboot'
+    ? 'Reboot initiated. The portal will be unavailable for a moment.'
+    : 'Shutdown initiated. The server is powering off.');
+}
+// Close power menu when clicking outside it.
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('power-btn-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const m = document.getElementById('power-menu');
+    if (m) m.classList.add('hidden');
+  }
+});
+
 // ===== Datasets =====
 let datasetCache = [];
 
@@ -2649,8 +3300,14 @@ async function deleteDataset(name) {
   if (!confirm(`Delete dataset "${name}"?\n\nThis will fail if it has children or snapshots.`)) return;
   const resp = await fetch('/api/datasets/' + encodeURIComponent(name), {method:'DELETE'});
   const data = await resp.json();
-  if (resp.ok) { await refreshPoolBar(); loadDatasets(); }
-  else alert(data.error || 'Failed to delete dataset.');
+  if (resp.ok) { await refreshPoolBar(); loadDatasets(); return; }
+
+  const errMsg = data.error || 'Failed to delete dataset.';
+  if (errMsg.toLowerCase().includes('children') || errMsg.includes('-r')) {
+    openRecursiveDeleteModal(name);
+  } else {
+    alert(errMsg);
+  }
 }
 
 function openEditDataset(name, quotaStr, comp) {
@@ -2990,7 +3647,35 @@ async function deleteSnapshot(name) {
 function openDatasetDetail(name) {
   const d = (datasetData || []).find(x => x.name === name);
   if (!d) return;
-  alert(`${d.name}\n\nUsed: ${fmtBytes(d.used)}\nAvailable: ${fmtBytes(d.avail)}\nQuota: ${d.quota > 0 ? fmtBytes(d.quota) : 'none'}\nCompression: ${d.compression}\nRatio: ${d.compress_ratio}`);
+
+  // Title: short name, full path below.
+  document.getElementById('dsd-title').textContent = d.short_name || d.name;
+  document.getElementById('dsd-path').textContent  = d.name;
+
+  // Usage bar (used vs quota if set, else used vs used+avail).
+  const capacity = d.quota > 0 ? d.quota : (d.used + d.avail);
+  const usedPct  = capacity > 0 ? Math.min(100, d.used / capacity * 100) : 0;
+  const barColor = usedPct >= 80 ? 'var(--accent-danger)' : usedPct >= 75 ? '#ff9f0a' : 'var(--accent-2)';
+  document.getElementById('dsd-usage-fill').style.width      = usedPct.toFixed(1) + '%';
+  document.getElementById('dsd-usage-fill').style.background = barColor;
+
+  document.getElementById('dsd-used').textContent     = fmtBytes(d.used);
+  document.getElementById('dsd-used-pct').textContent = usedPct.toFixed(1) + '% of ' + (d.quota > 0 ? 'quota' : 'pool');
+  document.getElementById('dsd-used').style.color     = barColor;
+  document.getElementById('dsd-avail').textContent    = fmtBytes(d.avail);
+  document.getElementById('dsd-refer').textContent    = fmtBytes(d.refer);
+  document.getElementById('dsd-quota').textContent    = d.quota > 0 ? fmtBytes(d.quota) : '—';
+
+  document.getElementById('dsd-comp').textContent    = d.compression || '—';
+  document.getElementById('dsd-ratio').textContent   = d.compress_ratio || '—';
+  document.getElementById('dsd-recsize').textContent = d.record_size ? fmtBytes(d.record_size) : '—';
+  document.getElementById('dsd-mount').textContent   = d.mountpoint || '—';
+
+  document.getElementById('modal-dataset-detail').classList.remove('hidden');
+}
+
+function closeDatasetDetail() {
+  document.getElementById('modal-dataset-detail').classList.add('hidden');
 }
 
 // ===== Disks =====
@@ -3311,6 +3996,16 @@ async function openCreateShare() {
   document.getElementById('share-browseable').checked = true;
   document.getElementById('share-readonly').checked = false;
   document.getElementById('share-guestok').checked = false;
+  document.getElementById('share-timemachine').checked = false;
+  document.getElementById('share-tm-quota').value = '0';
+  document.getElementById('share-tm-quota-wrap').classList.add('hidden');
+  document.getElementById('share-recycle').checked = false;
+  document.getElementById('share-recycle-days').value = '0';
+  document.getElementById('share-recycle-days-wrap').classList.add('hidden');
+  document.getElementById('share-durable').checked = true;
+  document.getElementById('share-apple-enc').checked = false;
+  document.getElementById('share-allowed-hosts').value = '';
+  document.getElementById('share-hosts-deny').value = '';
   document.getElementById('share-alert').classList.add('hidden');
   await loadShareFormData([]);
   document.getElementById('modal-share').classList.remove('hidden');
@@ -3348,6 +4043,16 @@ async function _openEditShareObj(s) {
   document.getElementById('share-browseable').checked = !!s.browseable;
   document.getElementById('share-readonly').checked = !!s.read_only;
   document.getElementById('share-guestok').checked = !!s.guest_ok;
+  document.getElementById('share-timemachine').checked = !!s.time_machine;
+  document.getElementById('share-tm-quota').value = s.tm_quota_gb || 0;
+  document.getElementById('share-tm-quota-wrap').classList.toggle('hidden', !s.time_machine);
+  document.getElementById('share-recycle').checked = !!s.recycle_bin;
+  document.getElementById('share-recycle-days').value = s.recycle_retain_days || 0;
+  document.getElementById('share-recycle-days-wrap').classList.toggle('hidden', !s.recycle_bin);
+  document.getElementById('share-durable').checked = s.durable_handles !== false;
+  document.getElementById('share-apple-enc').checked = !!s.apple_encoding;
+  document.getElementById('share-allowed-hosts').value = s.allowed_hosts || '';
+  document.getElementById('share-hosts-deny').value = s.hosts_deny || '';
   document.getElementById('share-alert').classList.add('hidden');
   await loadShareFormData(s.valid_users || []);
   document.getElementById('modal-share').classList.remove('hidden');
@@ -3394,6 +4099,13 @@ function sharePathSelect(val) {
   if (val) document.getElementById('share-path').value = val;
 }
 
+function toggleShareTM() {
+  document.getElementById('share-tm-quota-wrap').classList.toggle('hidden', !document.getElementById('share-timemachine').checked);
+}
+function toggleShareRecycle() {
+  document.getElementById('share-recycle-days-wrap').classList.toggle('hidden', !document.getElementById('share-recycle').checked);
+}
+
 function closeShareModal() {
   document.getElementById('modal-share').classList.add('hidden');
   shareEditName = null;
@@ -3411,8 +4123,22 @@ async function submitShare(e) {
   const readOnly   = document.getElementById('share-readonly').checked;
   const guestOK    = document.getElementById('share-guestok').checked;
   const validUsers = [...document.querySelectorAll('input[name="share-user"]:checked')].map(cb => cb.value);
+  const timeMachine    = document.getElementById('share-timemachine').checked;
+  const tmQuotaGB      = parseInt(document.getElementById('share-tm-quota').value, 10) || 0;
+  const recycleBin     = document.getElementById('share-recycle').checked;
+  const recycleRetainDays = parseInt(document.getElementById('share-recycle-days').value, 10) || 0;
+  const durableHandles = document.getElementById('share-durable').checked;
+  const appleEncoding  = document.getElementById('share-apple-enc').checked;
+  const allowedHosts   = document.getElementById('share-allowed-hosts').value.trim();
+  const hostsDeny      = document.getElementById('share-hosts-deny').value.trim();
 
-  const body = { name, path, comment, browseable, read_only: readOnly, guest_ok: guestOK, valid_users: validUsers };
+  const body = {
+    name, path, comment, browseable, read_only: readOnly, guest_ok: guestOK, valid_users: validUsers,
+    time_machine: timeMachine, tm_quota_gb: tmQuotaGB,
+    recycle_bin: recycleBin, recycle_retain_days: recycleRetainDays,
+    durable_handles: durableHandles, apple_encoding: appleEncoding,
+    allowed_hosts: allowedHosts, hosts_deny: hostsDeny,
+  };
   const isEdit = shareEditName !== null;
   const url    = isEdit ? '/api/shares/' + encodeURIComponent(shareEditName) : '/api/shares';
   const method = isEdit ? 'PUT' : 'POST';
@@ -4408,6 +5134,49 @@ function applyBinaryUpdate() {
     if (checkBtn) checkBtn.disabled = false;
   };
 }
+
+// ── iOS PWA zoom reset ────────────────────────────────────────────────────────
+// When the user switches away and returns, iOS can leave the viewport zoomed in.
+// On visibility restore, briefly lock maximum-scale=1 to snap zoom back to 1×,
+// then restore the original content so pinch-zoom still works normally.
+(function () {
+  const vpMeta = document.querySelector('meta[name=viewport]');
+  if (!vpMeta) return;
+  const original = vpMeta.getAttribute('content');
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      vpMeta.setAttribute('content', original + ', maximum-scale=1');
+      setTimeout(function () { vpMeta.setAttribute('content', original); }, 300);
+    }
+  });
+})();
+
+// Close any modal by clicking its backdrop (outside the dialog box).
+document.addEventListener('click', function(e) {
+  if (!e.target.classList.contains('modal-backdrop')) return;
+  const closeFns = {
+    'modal-add-disks':        closeAddDisksModal,
+    'modal-destroy-pool':     closeDestroyPoolModal,
+    'modal-force-import':     closeForceImportModal,
+    'modal-recursive-delete': closeRecursiveDeleteModal,
+    'modal-dataset-detail':   closeDatasetDetail,
+    'modal-pool-upgrade':     closePoolUpgradeModal,
+    'modal-power':            closePowerModal,
+    'modal-create-user':      closeCreateUser,
+    'modal-edit-user':        closeEditUser,
+    'modal-smb-password':     closeSMBPasswordModal,
+    'modal-create-dataset':   closeCreateDataset,
+    'modal-edit-dataset':     closeEditDataset,
+    'modal-schedule':         closeScheduleModal,
+    'modal-snapshot':         closeSnapshotModal,
+    'modal-share':            closeShareModal,
+    'modal-nfs-share':        closeNFSShareModal,
+    'modal-install':          closeInstallModal,
+    'modal-about':            closeAbout,
+  };
+  const fn = closeFns[e.target.id];
+  if (fn) fn();
+});
 </script>
 </body>
 </html>

@@ -194,6 +194,27 @@ func HandleDestroyPool(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"message": "pool destroyed"})
 }
 
+func HandleUpgradePool(w http.ResponseWriter, r *http.Request) {
+	pool, err := system.GetPool()
+	if err != nil || pool == nil {
+		jsonErr(w, http.StatusBadRequest, "no pool configured")
+		return
+	}
+	if err := system.UpgradePool(pool.Name); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:   sess.Username,
+		Role:   sess.Role,
+		Action: audit.ActionUpgradePool,
+		Target: pool.Name,
+		Result: audit.ResultOK,
+	})
+	jsonOK(w, map[string]string{"message": "pool upgraded"})
+}
+
 func HandleDetectPools(w http.ResponseWriter, r *http.Request) {
 	pools, err := system.DetectImportablePools()
 	if err != nil {
@@ -208,7 +229,8 @@ func HandleDetectPools(w http.ResponseWriter, r *http.Request) {
 
 func HandleImportPool(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Force bool   `json:"force"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -218,8 +240,14 @@ func HandleImportPool(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "pool name is required")
 		return
 	}
-	if err := system.ImportPool(req.Name); err != nil {
-		jsonErr(w, http.StatusInternalServerError, err.Error())
+	var importErr error
+	if req.Force {
+		importErr = system.ImportPoolForce(req.Name)
+	} else {
+		importErr = system.ImportPool(req.Name)
+	}
+	if importErr != nil {
+		jsonErr(w, http.StatusInternalServerError, importErr.Error())
 		return
 	}
 

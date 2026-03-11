@@ -141,8 +141,15 @@ func HandleDeleteDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := system.DestroyDataset(path); err != nil {
-		jsonErr(w, http.StatusInternalServerError, err.Error())
+	recursive := r.URL.Query().Get("recursive") == "true"
+	var destroyErr error
+	if recursive {
+		destroyErr = system.DestroyDatasetRecursive(path)
+	} else {
+		destroyErr = system.DestroyDataset(path)
+	}
+	if destroyErr != nil {
+		jsonErr(w, http.StatusInternalServerError, destroyErr.Error())
 		return
 	}
 

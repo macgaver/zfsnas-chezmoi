@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="50 40 270 420">
+  <rect x="50" y="40" width="270" height="420" rx="40" fill="#0d0d0f"/>
+  <defs>
+    <filter id="glowCyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowViolet" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="ng" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00eaff"/>
+      <stop offset="100%" stop-color="#8a2cff"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(80,70)">
+    <rect x="0" y="0" width="220" height="360" rx="20"
+          fill="none" stroke="url(#ng)" stroke-width="6" filter="url(#glowCyan)"/>
+    <rect x="30" y="50"  width="160" height="40" rx="6"
+          fill="none" stroke="#00eaff" stroke-width="4" filter="url(#glowCyan)"/>
+    <rect x="30" y="140" width="160" height="40" rx="6"
+          fill="none" stroke="#8a2cff" stroke-width="4" filter="url(#glowViolet)"/>
+    <rect x="30" y="230" width="160" height="40" rx="6"
+          fill="none" stroke="#00eaff" stroke-width="4" filter="url(#glowCyan)"/>
+    <circle cx="50" cy="70"  r="5" fill="#00eaff"/>
+    <circle cx="50" cy="160" r="5" fill="#8a2cff"/>
+    <circle cx="50" cy="250" r="5" fill="#00eaff"/>
+  </g>
+</svg>

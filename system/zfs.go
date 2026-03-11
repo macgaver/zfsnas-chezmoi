@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -131,9 +132,21 @@ func poolMembers(poolName string) []string {
 		if skip {
 			continue
 		}
-		members = append(members, name)
+		members = append(members, resolveDevPath(name))
 	}
 	return members
+}
+
+// resolveDevPath resolves symlinks (e.g. /dev/disk/by-id/... or
+// /dev/disk/by-uuid/...) to their canonical /dev/sdX path.
+// Returns the original path unchanged if resolution fails or the result
+// does not look like a block device.
+func resolveDevPath(p string) string {
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil || !strings.HasPrefix(real, "/dev/") {
+		return p
+	}
+	return real
 }
 
 // CreatePool creates a new ZFS pool.
@@ -402,6 +415,27 @@ func ImportPool(name string) error {
 	return nil
 }
 
+// UpgradePool upgrades the pool to support all available ZFS feature flags.
+// This is irreversible — older ZFS versions may not be able to import the pool
+// after an upgrade.
+func UpgradePool(name string) error {
+	out, err := exec.Command("sudo", "zpool", "upgrade", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// ImportPoolForce imports a named pool with -f (force), bypassing the
+// "previously in use" safety check.
+func ImportPoolForce(name string) error {
+	out, err := exec.Command("sudo", "zpool", "import", "-f", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // ── Datasets ──────────────────────────────────────────────────────────────────
 
 // Dataset represents a ZFS filesystem dataset.
@@ -523,6 +557,15 @@ func SetDatasetProps(name string, props map[string]string) error {
 // DestroyDataset removes a dataset. Fails if it has children or snapshots.
 func DestroyDataset(name string) error {
 	out, err := exec.Command("sudo", "zfs", "destroy", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// DestroyDatasetRecursive removes a dataset and all its children recursively.
+func DestroyDatasetRecursive(name string) error {
+	out, err := exec.Command("sudo", "zfs", "destroy", "-r", name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}

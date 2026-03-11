@@ -82,17 +82,21 @@ func HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		jsonErr(w, http.StatusInternalServerError, "failed to hash password")
-		return
+	var passwordHash string
+	if req.Role != config.RoleSMBOnly {
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, "failed to hash password")
+			return
+		}
+		passwordHash = string(hash)
 	}
 
 	user := config.User{
 		ID:           newID(),
 		Username:     req.Username,
 		Email:        req.Email,
-		PasswordHash: string(hash),
+		PasswordHash: passwordHash,
 		Role:         req.Role,
 		CreatedAt:    time.Now(),
 	}

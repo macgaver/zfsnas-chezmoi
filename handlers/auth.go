@@ -244,14 +244,47 @@ func HandleKillSession(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"message": "session terminated"})
 }
 
-// HandleMe returns the current user's info.
+// HandleMe returns the current user's info including their stored preferences.
 func HandleMe(w http.ResponseWriter, r *http.Request) {
 	sess := MustSession(r)
+	users, _ := config.LoadUsers()
+	user := config.FindUserByID(users, sess.UserID)
+	prefs := config.UserPreferences{}
+	if user != nil {
+		prefs = user.Preferences
+	}
 	jsonOK(w, map[string]interface{}{
-		"user_id":  sess.UserID,
-		"username": sess.Username,
-		"role":     sess.Role,
+		"user_id":     sess.UserID,
+		"username":    sess.Username,
+		"role":        sess.Role,
+		"preferences": prefs,
 	})
+}
+
+// HandleUpdatePrefs saves the current user's UI preferences.
+func HandleUpdatePrefs(w http.ResponseWriter, r *http.Request) {
+	sess := MustSession(r)
+	var prefs config.UserPreferences
+	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	users, err := config.LoadUsers()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load users")
+		return
+	}
+	user := config.FindUserByID(users, sess.UserID)
+	if user == nil {
+		jsonErr(w, http.StatusNotFound, "user not found")
+		return
+	}
+	user.Preferences = prefs
+	if err := config.SaveUsers(users); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save preferences")
+		return
+	}
+	jsonOK(w, prefs)
 }
 
 func newID() string {

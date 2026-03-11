@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/system"
@@ -90,4 +91,46 @@ func HandleUpdateSettings(appCfg *config.AppConfig) http.HandlerFunc {
 
 		jsonOK(w, map[string]string{"message": "settings saved — restart required for port change"})
 	}
+}
+
+// HandleGetTimezone returns the current timezone and the full list of available timezones.
+func HandleGetTimezone(w http.ResponseWriter, r *http.Request) {
+	tzs, err := system.ListTimezones()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to list timezones")
+		return
+	}
+	jsonOK(w, map[string]interface{}{
+		"timezone":  system.GetTimezone(),
+		"timezones": tzs,
+	})
+}
+
+// HandleSetTimezone sets the system timezone.
+func HandleSetTimezone(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Timezone string `json:"timezone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Timezone = strings.TrimSpace(req.Timezone)
+	if req.Timezone == "" {
+		jsonErr(w, http.StatusBadRequest, "timezone is required")
+		return
+	}
+	if err := system.SetTimezone(req.Timezone); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  audit.ActionUpdateSettings,
+		Result:  audit.ResultOK,
+		Details: "timezone set to " + req.Timezone,
+	})
+	jsonOK(w, map[string]string{"timezone": req.Timezone})
 }

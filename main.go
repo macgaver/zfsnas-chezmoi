@@ -107,6 +107,9 @@ func main() {
 	// ===== Scrub scheduler =====
 	handlers.StartScrubScheduler(appCfg)
 
+	// ===== Recycle bin nightly cleaner =====
+	system.StartRecycleCleaner(absConfig)
+
 	// ===== Session cleanup goroutine =====
 	go func() {
 		t := time.NewTicker(30 * time.Minute)
