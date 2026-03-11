@@ -58,8 +58,8 @@ Most NAS management software is slow to install, slow to load, and buried under 
 | Requirement | Version |
 |---|---|
 | Ubuntu | 24.04 LTS or later (<**26.04 highly recommended** for zfs expand support) |
-| Go (build from source) | 1.22 or later |
-| `sudo` access without password | Required for ZFS, Samba, and SMART commands |
+| Go (if you build from source) | 1.22 or later |
+| `sudo` access without password | Required for ZFS, Samba/NFS management, and SMART commands |
 
 The following system packages are **installed automatically** by the setup wizard if missing:
 
@@ -87,7 +87,7 @@ cd zfsnas-chezmoi
 go build -o zfsnas .
 
 # 3. Run
-sudo ./zfsnas
+./zfsnas
 ```
 
 ### Option B — Download a release binary
