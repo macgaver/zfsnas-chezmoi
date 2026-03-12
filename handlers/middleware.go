@@ -93,6 +93,32 @@ func ClearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
+// RequireAuthOrAPIKey allows requests that have either a valid session cookie
+// or a valid "Authorization: Bearer <api_key>" header. Used for the
+// TrueNAS-compatible /api/v2.0/ endpoints consumed by the homepage widget.
+func RequireAuthOrAPIKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Try session first.
+		if _, ok := SessionFromRequest(r); ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// Try API key.
+		auth := r.Header.Get("Authorization")
+		if len(auth) > 7 && auth[:7] == "Bearer " {
+			token := auth[7:]
+			keys, _ := config.LoadAPIKeys()
+			for _, k := range keys {
+				if k.Key == token {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+		jsonErr(w, http.StatusUnauthorized, "authentication required")
+	})
+}
+
 // isBrowser returns true if the request likely comes from a browser.
 func isBrowser(r *http.Request) bool {
 	accept := r.Header.Get("Accept")

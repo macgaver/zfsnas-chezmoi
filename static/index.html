@@ -71,6 +71,8 @@
     /* Prereqs status list */
     .prereq-status-ok   { color: var(--accent-3); font-size: 16px; }
     .prereq-status-miss { color: var(--accent-danger); font-size: 16px; }
+    .prereq-version     { font-size: 12px; color: var(--text-3); margin-left: 6px; }
+    .prereq-version-warn { font-size: 12px; color: var(--accent-warn, #f0b429); margin-left: 6px; font-weight: 600; }
 
     /* Alert event rows */
     .al-event-row {
@@ -209,7 +211,7 @@
 
     <div class="sidebar-section">System</div>
     <button class="nav-item" onclick="showPage('users')"     id="nav-users">    <span class="nav-icon">👤</span><span class="nav-label"> Users</span></button>
-    <button class="nav-item" onclick="showPage('prereqs')"   id="nav-prereqs">  <span class="nav-icon">🔧</span><span class="nav-label"> Prerequisites</span></button>
+    <button class="nav-item" onclick="showPage('prereqs')"   id="nav-prereqs">  <span class="nav-icon">🔧</span><span class="nav-label"> Prerequisites</span><span id="prereq-alert-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#f0b429;margin-left:auto;flex-shrink:0;box-shadow:0 0 4px rgba(240,180,41,0.6);"></span></button>
     <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span><span class="nav-label"> Updates</span></button>
     <button class="nav-item" onclick="toggleTermPanel()"     id="nav-terminal"> <span class="nav-icon">⌨</span><span class="nav-label"> Terminal</span></button>
     <button class="nav-item" onclick="showPage('settings')"  id="nav-settings"> <span class="nav-icon">⚙</span><span class="nav-label"> Settings</span></button>
@@ -244,11 +246,11 @@
     <!-- Disk I/O charts (shown only when a pool exists) -->
     <div id="io-bar">
       <div class="io-chart-wrap">
-        <div class="io-chart-label">Read KB/s</div>
+        <div class="io-chart-label">Read MB/s</div>
         <canvas id="io-chart-read"></canvas>
       </div>
       <div class="io-chart-wrap">
-        <div class="io-chart-label">Write KB/s</div>
+        <div class="io-chart-label">Write MB/s</div>
         <canvas id="io-chart-write"></canvas>
       </div>
       <div class="io-chart-wrap">
@@ -290,38 +292,47 @@
           <div id="dash-collect-progress" style="font-size:13px;">Charts will fill in over 24 hours.</div>
         </div>
         <div id="dash-charts" class="hidden">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:24px;">
             <div class="card-sm">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">CPU Usage (24h)</div>
-                <i class="info-tip tip-left" data-tip="% of total CPU time used across all cores.&#10;Source: /proc/stat (user + system + nice + irq…).&#10;Two readings 500 ms apart every 5 min; iowait excluded."></i>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span id="dash-max-cpu" style="font-size:11px;color:var(--text-3);"></span>
+                  <i class="info-tip tip-left" data-tip="% of total CPU time used across all cores.&#10;Source: /proc/stat (user + system + nice + irq…).&#10;Two readings 500 ms apart every 5 min; iowait excluded."></i>
+                </div>
               </div>
               <div style="position:relative;height:140px;"><canvas id="dash-chart-cpu"></canvas></div>
             </div>
             <div class="card-sm">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Memory Usage (24h)</div>
-                <i class="info-tip tip-left" data-tip="Stacked RAM usage from /proc/meminfo, sampled every 5 min.&#10;&#10;App (blue): memory held by processes&#10;  = MemTotal − MemFree − Buffers − Cached&#10;&#10;Cache (purple): Linux page cache + buffers&#10;  — re-usable; reclaimed on demand."></i>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span id="dash-max-mem" style="font-size:11px;color:var(--text-3);"></span>
+                  <i class="info-tip tip-left" data-tip="Stacked RAM usage from /proc/meminfo, sampled every 5 min.&#10;&#10;App (blue): memory held by processes&#10;  = MemTotal − MemFree − Buffers − Cached&#10;&#10;Cache (purple): Linux page cache + buffers&#10;  — re-usable; reclaimed on demand."></i>
+                </div>
               </div>
               <div style="position:relative;height:140px;"><canvas id="dash-chart-mem"></canvas></div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:16px;">
             <div class="card-sm">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Network I/O (24h)</div>
-                <i class="info-tip tip-left" data-tip="Combined throughput of all non-loopback network interfaces.&#10;Source: /proc/net/dev, sampled every 5 min.&#10;&#10;RX (green): bytes received → KB/s&#10;TX (orange): bytes sent → KB/s"></i>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span id="dash-max-net" style="font-size:11px;color:var(--text-3);"></span>
+                  <i class="info-tip tip-left" data-tip="Per-interface throughput (external interfaces only).&#10;Source: /proc/net/dev, sampled every 5 min.&#10;&#10;RX: bits received → Mbit/s&#10;TX: bits sent → Mbit/s&#10;&#10;Loopback and virtual interfaces (docker, veth, tun…) are excluded."></i>
+                </div>
               </div>
-              <div style="display:flex;gap:12px;margin-bottom:6px;">
-                <span style="font-size:11px;color:#32d74b;">▬ RX</span>
-                <span style="font-size:11px;color:#ff9f0a;">▬ TX</span>
-              </div>
+              <div id="dash-net-legend" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px;"></div>
               <div style="position:relative;height:120px;"><canvas id="dash-chart-net"></canvas></div>
             </div>
             <div class="card-sm">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Disk I/O (24h)</div>
-                <i class="info-tip tip-left" data-tip="Aggregate read/write throughput of ZFS pool member disks.&#10;Source: /proc/diskstats, sampled every 5 min.&#10;&#10;Read (cyan): sectors read × 512 B ÷ elapsed → KB/s&#10;Write (yellow): sectors written × 512 B ÷ elapsed → KB/s"></i>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span id="dash-max-disk" style="font-size:11px;color:var(--text-3);"></span>
+                  <i class="info-tip tip-left" data-tip="Aggregate read/write throughput of ZFS pool member disks.&#10;Source: /proc/diskstats, sampled every 5 min.&#10;&#10;Read (cyan): sectors read × 512 B ÷ elapsed → MB/s&#10;Write (yellow): sectors written × 512 B ÷ elapsed → MB/s"></i>
+                </div>
               </div>
               <div style="display:flex;gap:12px;margin-bottom:6px;">
                 <span style="font-size:11px;color:#64d2ff;">▬ Read</span>
@@ -334,7 +345,10 @@
             <div class="card-sm">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Disk Busy % (24h)</div>
-                <i class="info-tip tip-left" data-tip="Average % of time pool disks had I/O in flight (utilisation).&#10;Source: /proc/diskstats io_ticks field, sampled every 5 min.&#10;&#10;100% means a disk was fully saturated for the entire 5-min interval. Averaged across all pool member disks."></i>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span id="dash-max-busy" style="font-size:11px;color:var(--text-3);"></span>
+                  <i class="info-tip tip-left" data-tip="Average % of time pool disks had I/O in flight (utilisation).&#10;Source: /proc/diskstats io_ticks field, sampled every 5 min.&#10;&#10;100% means a disk was fully saturated for the entire 5-min interval. Averaged across all pool member disks."></i>
+                </div>
               </div>
               <div style="position:relative;height:90px;"><canvas id="dash-chart-busy"></canvas></div>
             </div>
@@ -355,6 +369,20 @@
           <div id="prereq-list">
             <div style="color:var(--text-3);text-align:center;padding:24px;">Checking…</div>
           </div>
+          <div id="prereq-sudo-section"></div>
+          <div id="zfs-module-warn" class="hidden" style="margin-top:16px;padding:14px 16px;background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.35);border-radius:var(--radius-sm);display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:20px;line-height:1.2;">⚠</span>
+            <div>
+              <div style="font-weight:700;color:#f0b429;font-size:14px;margin-bottom:4px;">ZFS kernel module not loaded</div>
+              <div style="font-size:13px;color:var(--text-2);line-height:1.6;">
+                <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px;">zfsutils-linux</code> is installed but the ZFS kernel module is not active.
+                ZFS pools and datasets will not be accessible until the module is loaded.<br>
+                <strong style="color:#f0b429;">A reboot is recommended</strong> to let the kernel load the ZFS module automatically.
+                Alternatively, run <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px;">sudo modprobe zfs</code> manually.
+              </div>
+            </div>
+          </div>
+
           <div class="divider"></div>
           <div id="prereq-actions" class="hidden">
             <button class="btn btn-primary" onclick="openInstallModal()" id="btn-install-pkgs">
@@ -389,6 +417,20 @@
               <tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- API Keys (admin only) -->
+        <div class="card" id="api-keys-card" style="margin-top:24px;display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <h3 style="margin:0;">API Keys</h3>
+              <button onclick="openAPIKeyInfo()" style="background:none;border:1px solid var(--border);border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;color:var(--text-2);display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;" title="About API Keys">i</button>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openCreateAPIKey()">+ Generate Key</button>
+          </div>
+          <div id="api-keys-list" style="margin-top:16px;">
+            <div style="color:var(--text-3);font-size:13px;">Loading…</div>
+          </div>
         </div>
       </div>
 
@@ -762,21 +804,27 @@
 <div class="modal-backdrop hidden" id="modal-add-disks">
   <div class="modal" style="max-width:560px;">
     <div class="modal-header">
-      <h3>Add Disk(s) to Pool</h3>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <h3 style="margin:0;">Add Capacity to Pool</h3>
+        <button type="button" onclick="openAddCapacityGuide()"
+          style="background:rgba(48,209,88,0.15);border:1.5px solid rgba(48,209,88,0.45);color:#30d158;border-radius:50%;width:24px;height:24px;font-size:13px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;"
+          title="Learn about adding capacity">ⓘ</button>
+      </div>
       <button class="modal-close" onclick="closeAddDisksModal()">✕</button>
     </div>
     <div class="modal-body">
       <div class="alert alert-error hidden" id="add-disks-alert"></div>
-      <p class="text-2" style="font-size:13px;margin-bottom:16px;">
-        Select one or more available disks to add to the pool. They will be added as a stripe vdev — use this to grow capacity.
-        <strong style="color:var(--accent-warn);">Disk data will be erased.</strong>
+      <p class="text-2" style="font-size:13px;margin-bottom:12px;">
+        Select the disk(s) to add. <strong style="color:var(--accent-warn);">All data on selected disks will be erased.</strong>
       </p>
-      <div id="add-disks-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;max-height:280px;overflow-y:auto;">
+      <div id="add-disks-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;max-height:240px;overflow-y:auto;">
         <div style="padding:16px;color:var(--text-3);text-align:center;">Loading…</div>
       </div>
-      <div id="add-disks-version-warn" style="display:none;margin-top:14px;padding:12px 14px;
-        background:rgba(255,190,46,0.1);border:1px solid var(--accent-warn);border-radius:8px;
-        color:var(--accent-warn);font-size:13px;gap:10px;align-items:flex-start;line-height:1.5;">
+
+      <!-- Dynamic mode selector — shown once ≥1 disk is checked -->
+      <div id="add-disks-mode-section" style="display:none;margin-top:16px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:8px;">How to add these disks:</div>
+        <div id="add-disks-mode-btns" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -787,6 +835,32 @@
 </div>
 
 <!-- Destroy Pool Modal -->
+<div class="modal-backdrop hidden" id="modal-confirm-create-pool" onclick="if(event.target===this)closeCreatePoolConfirm()">
+  <div class="modal" style="max-width:480px;border:1px solid var(--accent-danger);">
+    <div class="modal-header" style="background:rgba(255,59,48,0.08);border-bottom:1px solid var(--accent-danger);margin-bottom:0;">
+      <h3 style="color:var(--accent-danger);">⚠ Confirm Pool Creation</h3>
+      <button class="modal-close" onclick="closeCreatePoolConfirm()">✕</button>
+    </div>
+    <div class="modal-body" style="padding-top:20px;">
+      <p style="font-size:14px;color:var(--text-1);margin-bottom:16px;">
+        Creating pool <strong id="cpc-pool-name" style="color:var(--text-1);font-family:monospace;"></strong> will
+        <strong style="color:var(--accent-danger);">permanently erase all data</strong> on the following disk(s):
+      </p>
+      <div id="cpc-disk-list" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;display:flex;flex-direction:column;gap:6px;"></div>
+      <p style="font-size:13px;color:var(--text-3);line-height:1.5;">
+        This action cannot be undone. Make sure you have selected the correct disks and that they contain no data you wish to keep.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCreatePoolConfirm()">Cancel</button>
+      <button class="btn" onclick="_doCreatePool()"
+        style="background:var(--accent-danger);color:#fff;">
+        Erase &amp; Create Pool
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="modal-destroy-pool">
   <div class="modal" style="max-width:480px;border:1px solid var(--accent-danger);">
     <div class="modal-header" style="background:rgba(255,59,48,0.08);border-bottom:1px solid var(--accent-danger);">
@@ -1004,6 +1078,86 @@
         <button type="submit" class="btn btn-primary" style="flex:1;">Create User</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- API Key Info Modal -->
+<div class="modal-backdrop hidden" id="modal-apikey-info">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3>About API Keys</h3>
+      <button class="modal-close" onclick="closeAPIKeyInfo()">✕</button>
+    </div>
+    <div class="modal-body" style="font-size:14px;line-height:1.6;">
+      <p class="text-2">API keys grant read-only access to this portal's REST API (<code style="font-size:12px;">/api/v2.0/…</code>). They can be used by any tool that supports bearer token authentication.</p>
+      <div class="al-section-title" style="margin-top:18px;">Compatible integrations</div>
+      <p class="text-2">This API is compatible with the <strong>TrueNAS</strong> widget on <a href="https://gethomepage.dev" target="_blank" rel="noopener" style="color:var(--accent);">homepage.dev</a>. Add the following to your <code style="font-size:12px;">services.yaml</code>:</p>
+      <pre style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;font-size:12px;overflow-x:auto;margin-top:10px;line-height:1.5;">- My NAS:
+    href: https://&lt;your-nas-ip&gt;:8443
+    widget:
+      type: truenas
+      url: https://&lt;your-nas-ip&gt;:8443
+      key: &lt;your-api-key&gt;
+      version: 1
+      enablePools: true</pre>
+      <p class="text-3" style="font-size:12px;margin-top:10px;"><code>version: 1</code> forces HTTP REST mode (WebSocket is not supported).</p>
+      <div class="al-section-title" style="margin-top:18px;">Available endpoints</div>
+      <div style="font-size:12px;font-family:'SF Mono',monospace;color:var(--text-2);line-height:1.8;">
+        GET /api/v2.0/alert/list<br>
+        GET /api/v2.0/system/info<br>
+        GET /api/v2.0/system/version<br>
+        GET /api/v2.0/pool<br>
+        GET /api/v2.0/pool/dataset<br>
+        GET /api/v2.0/pool/snapshottask<br>
+        GET /api/v2.0/snapshot<br>
+        GET /api/v2.0/disk<br>
+        GET /api/v2.0/sharing/smb<br>
+        GET /api/v2.0/sharing/nfs<br>
+        GET /api/v2.0/service
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeAPIKeyInfo()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create API Key Modal -->
+<div class="modal-backdrop hidden" id="modal-create-apikey">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>Generate API Key</h3>
+      <button class="modal-close" onclick="closeCreateAPIKey()">✕</button>
+    </div>
+    <!-- State 1: name form -->
+    <div id="apk-form">
+      <div id="apk-alert" class="alert alert-error hidden"></div>
+      <div class="form-group">
+        <label>Key Name <span class="text-3 text-xs">(e.g. "homepage")</span></label>
+        <input type="text" id="apk-name" placeholder="homepage" autocomplete="off">
+      </div>
+      <div class="flex gap-2" style="margin-top:8px;">
+        <button type="button" class="btn btn-ghost" onclick="closeCreateAPIKey()">Cancel</button>
+        <button type="button" class="btn btn-primary" style="flex:1;" id="apk-generate-btn" onclick="submitCreateAPIKey()">Generate</button>
+      </div>
+    </div>
+    <!-- State 2: key reveal (shown once) -->
+    <div id="apk-reveal" class="hidden">
+      <div class="alert" style="background:rgba(255,159,10,0.12);border:1px solid #ff9f0a;color:#ff9f0a;margin-bottom:16px;font-size:13px;">
+        Copy this key now — it will <strong>not</strong> be shown again.
+      </div>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Your API Key</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="apk-reveal-value" readonly style="font-family:'SF Mono',monospace;font-size:12px;flex:1;cursor:text;" onclick="this.select()">
+        <button class="btn btn-ghost btn-sm" id="apk-copy-btn" onclick="copyAPIKey()">Copy</button>
+      </div>
+      <p class="text-3" style="font-size:12px;margin-top:10px;">
+        Use this key in your homepage <code>services.yaml</code> as <code>key:</code> with <code>version: 1</code>.
+      </p>
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary w-full" onclick="closeCreateAPIKey()">Done</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1478,10 +1632,239 @@
        style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;background:rgba(255,94,91,0.1);border:1px solid rgba(255,94,91,0.3);border-radius:var(--radius-sm);text-decoration:none;margin-bottom:4px;">
       <span style="font-size:22px;">☕</span>
       <div style="text-align:left;">
-        <div style="font-size:13px;font-weight:700;color:#ff6b6b;">Buy me a coffee</div>
+        <div style="font-size:13px;font-weight:700;color:#ff6b6b;">Buy us a coffee</div>
         <div style="font-size:11px;color:var(--text-3);">Support the project on Ko-fi — every coffee helps!</div>
       </div>
     </a>
+  </div>
+</div>
+
+<!-- Add Capacity Guide Modal -->
+<div class="modal-backdrop hidden" id="modal-add-capacity-guide" onclick="if(event.target===this)closeAddCapacityGuide()">
+  <div class="modal" style="max-width:660px;padding:0;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+
+    <div class="modal-header" style="background:rgba(48,209,88,0.08);border-bottom:1px solid rgba(48,209,88,0.25);padding:20px 24px;margin-bottom:0;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:22px;color:#30d158;">ⓘ</span>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--text-1);">Add Capacity — Guide</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Understand what happens before you add disks</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeAddCapacityGuide()">✕</button>
+    </div>
+
+    <div style="padding:20px 24px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;">
+
+      <!-- RAIDZ Expansion -->
+      <div style="background:var(--surface2);border:1px solid rgba(48,209,88,0.3);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:13px;font-weight:700;color:var(--text-1);">RAIDZ Expansion</span>
+          <span style="font-size:11px;padding:2px 7px;border-radius:20px;background:rgba(48,209,88,0.15);color:#30d158;font-weight:600;">ZFS 2.3+ only · 1 disk</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.7;">
+          The selected disk is attached <strong style="color:var(--text-2);">directly into your existing RAIDZ-1 or RAIDZ-2 vdev</strong>,
+          increasing its capacity in-place. No new vdev is created — the pool's fault tolerance is fully maintained throughout
+          the process. ZFS rebalances data in the background after expansion.<br><br>
+          <strong style="color:var(--text-2);">Why reported capacity may temporarily decrease:</strong>
+          During expansion ZFS must rewrite existing data blocks to account for the wider stripe. Until rebalancing completes,
+          ZFS reports the pool's usable capacity conservatively — it accounts for the <em>worst-case</em> space overhead of
+          the in-progress rewrite. This is expected behaviour: reported capacity will rise progressively as each segment
+          finishes rebalancing, returning to (and exceeding) the pre-expansion size once the process is complete.
+          Pool data remains fully accessible and protected throughout.<br><br>
+          <span style="color:#f0b429;">⚠ Only available when your pool's top-level vdev is RAIDZ-1 or RAIDZ-2 and ZFS ≥ 2.3 is installed.
+          Not available for mirror or stripe pools.</span>
+        </div>
+      </div>
+
+      <!-- Adding a new vdev -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:13px;font-weight:700;color:var(--text-1);">Adding a New Vdev</span>
+          <span style="font-size:11px;padding:2px 7px;border-radius:20px;background:rgba(10,132,255,0.12);color:#0a84ff;font-weight:600;">Mirror · RAIDZ-1 · RAIDZ-2 · Stripe</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.7;margin-bottom:10px;">
+          A completely new, independent vdev is appended to the pool. ZFS stripes data <strong style="color:var(--text-2);">across all vdevs</strong> —
+          so capacity grows immediately. However, each vdev is independent: <strong style="color:#ff3b30;">if the new vdev fails entirely,
+          only the data on that vdev is lost</strong> (the rest of the pool survives).
+        </div>
+
+        <!-- sub-cards -->
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;gap:10px;padding:10px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="width:32px;height:32px;background:#30d158;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💾</div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text-1);margin-bottom:2px;">Mirror <span style="font-weight:400;color:var(--text-3);">(min 2 disks)</span></div>
+              <div style="font-size:11px;color:var(--text-3);line-height:1.5;">All disks in the vdev are identical copies. Best read performance. Usable capacity = size of one disk × number of pairs.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;padding:10px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="width:32px;height:32px;background:#0a84ff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💾</div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text-1);margin-bottom:2px;">RAIDZ-1 <span style="font-weight:400;color:var(--text-3);">(min 3 disks · RAID5)</span></div>
+              <div style="font-size:11px;color:var(--text-3);line-height:1.5;">Single distributed parity. Survives 1 disk failure. Usable = (n−1) × disk size.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;padding:10px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="width:32px;height:32px;background:#bf5af2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💾</div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text-1);margin-bottom:2px;">RAIDZ-2 <span style="font-weight:400;color:var(--text-3);">(min 4 disks · RAID6)</span></div>
+              <div style="font-size:11px;color:var(--text-3);line-height:1.5;">Double distributed parity. Survives 2 simultaneous failures. Best protection for large-disk arrays.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;padding:10px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid rgba(255,59,48,0.2);">
+            <div style="width:32px;height:32px;background:#ff3b30;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💾</div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text-1);margin-bottom:2px;">Stripe <span style="font-weight:400;color:var(--text-3);">(any number of disks)</span></div>
+              <div style="font-size:11px;color:var(--text-3);line-height:1.5;">No redundancy within the vdev. Maximum usable space. <strong style="color:#ff3b30;">Any disk failure in this vdev loses all data in it.</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Warning box -->
+      <div style="padding:12px 14px;background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.3);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);line-height:1.6;">
+        <strong style="color:#f0b429;">⚠ Important:</strong> Adding a new vdev is <strong>permanent</strong> — vdevs cannot be removed from a pool once added.
+        All selected disks will have their existing data erased. Make sure you have selected the right disks before confirming.
+      </div>
+
+    </div>
+
+    <div style="padding:14px 24px;border-top:1px solid var(--border);text-align:right;flex-shrink:0;">
+      <button class="btn btn-primary btn-sm" onclick="closeAddCapacityGuide()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pool Layout Guide Modal -->
+<div class="modal-backdrop hidden" id="modal-pool-layout-guide" onclick="if(event.target===this)closePoolLayoutGuide()">
+  <div class="modal" style="max-width:680px;padding:0;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+
+    <!-- Header -->
+    <div class="modal-header" style="background:rgba(48,209,88,0.08);border-bottom:1px solid rgba(48,209,88,0.25);padding:20px 24px;margin-bottom:0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:22px;color:#30d158;">ⓘ</span>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--text-1);">ZFS Pool Layout Guide</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">This decision is permanent — choose carefully</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closePoolLayoutGuide()">✕</button>
+    </div>
+
+    <!-- Warning banner -->
+    <div style="background:rgba(255,159,10,0.10);border-bottom:1px solid rgba(255,159,10,0.25);padding:10px 24px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:16px;">⚠</span>
+      <span style="font-size:13px;color:#f0b429;font-weight:600;">Pool layout <em style="text-decoration:underline dotted;">cannot be changed</em> after creation. Migrating to a different layout requires destroying the pool and losing all data.</span>
+    </div>
+
+    <!-- Layout cards -->
+    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;flex:1;">
+
+      <!-- Stripe -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:700;color:var(--text-1);">Stripe</span>
+            <span style="font-size:11px;padding:2px 7px;border-radius:20px;background:rgba(255,59,48,0.15);color:#ff3b30;font-weight:600;">No redundancy</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-3);">Min 1 disk · 100% usable</span>
+        </div>
+        <!-- Disk diagram -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+          <div style="width:44px;height:44px;background:var(--accent-2);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.9;">💾</div>
+          <div style="width:44px;height:44px;background:var(--accent-2);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.9;">💾</div>
+          <div style="width:44px;height:44px;background:var(--accent-2);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.9;">💾</div>
+          <span style="margin-left:4px;font-size:13px;color:var(--text-2);">→ all capacity combined, no protection</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.6;">
+          Maximum throughput and usable capacity. All disks form a single volume.
+          <strong style="color:#ff3b30;">One disk failure destroys the entire pool and all data.</strong>
+          Suitable only for scratch space or data you can afford to lose.
+        </div>
+      </div>
+
+      <!-- Mirror (RAIDZ) -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:700;color:var(--text-1);">RAIDZ</span>
+            <span style="font-size:11px;padding:2px 7px;border-radius:20px;background:rgba(48,209,88,0.15);color:#30d158;font-weight:600;">mirror</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-3);">Min 2 disks · ~50% usable</span>
+        </div>
+        <!-- Disk diagram -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:4px;background:rgba(48,209,88,0.07);border:1px solid rgba(48,209,88,0.2);border-radius:6px;padding:6px 10px;">
+            <div style="width:36px;height:36px;background:#30d158;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;">💾</div>
+            <span style="font-size:16px;color:var(--text-3);">⇄</span>
+            <div style="width:36px;height:36px;background:#30d158;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;">💾</div>
+            <span style="font-size:11px;color:#30d158;margin-left:4px;font-weight:600;">mirror pair</span>
+          </div>
+          <span style="font-size:12px;color:var(--text-2);">+ add more pairs to scale capacity</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.6;">
+          Every disk is fully duplicated on its mirror partner. Survives 1 disk failure per pair.
+          Excellent read performance. Capacity = half the total raw disk space.
+          You can add more mirror pairs later to grow the pool.
+        </div>
+      </div>
+
+      <!-- RAIDZ-1 -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:700;color:var(--text-1);">RAIDZ-1</span>
+            <span style="font-size:11px;padding:2px 7px;border-radius:20px;background:rgba(10,132,255,0.15);color:#0a84ff;font-weight:600;">RAID5</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-3);">Min 3 disks · (n−1)/n usable</span>
+        </div>
+        <!-- Disk diagram -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+          <div style="width:40px;height:40px;background:#0a84ff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;opacity:.9;">💾</div>
+          <div style="width:40px;height:40px;background:#0a84ff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;opacity:.9;">💾</div>
+          <div style="width:40px;height:40px;background:#0a84ff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;opacity:.9;">💾</div>
+          <div style="width:40px;height:40px;background:rgba(10,132,255,0.35);border:2px dashed #0a84ff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#0a84ff;font-weight:700;">P</div>
+          <span style="margin-left:4px;font-size:12px;color:var(--text-2);">1 parity block distributed across disks</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.6;">
+          Single distributed parity. Survives 1 disk failure. With 3 disks: ⅔ usable capacity; with 4 disks: ¾.
+          Good balance of capacity and protection. Rebuild time increases with disk size.
+          <strong style="color:#f0b429;">Requires ZFS 2.3+ for online disk expansion within the vdev.</strong>
+        </div>
+      </div>
+
+      <!-- RAIDZ-2 -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:700;color:var(--text-1);">RAIDZ-2</span>
+            <span style="font-size:11px;padding:2px 7px;border-radius:20px;background:rgba(191,90,242,0.15);color:#bf5af2;font-weight:600;">RAID6</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-3);">Min 4 disks · (n−2)/n usable</span>
+        </div>
+        <!-- Disk diagram -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+          <div style="width:40px;height:40px;background:#bf5af2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;opacity:.9;">💾</div>
+          <div style="width:40px;height:40px;background:#bf5af2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;opacity:.9;">💾</div>
+          <div style="width:40px;height:40px;background:#bf5af2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;opacity:.9;">💾</div>
+          <div style="width:40px;height:40px;background:rgba(191,90,242,0.35);border:2px dashed #bf5af2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#bf5af2;font-weight:700;">P</div>
+          <div style="width:40px;height:40px;background:rgba(191,90,242,0.35);border:2px dashed #bf5af2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#bf5af2;font-weight:700;">P</div>
+          <span style="margin-left:4px;font-size:12px;color:var(--text-2);">2 parity blocks</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.6;">
+          Double distributed parity. Survives any 2 simultaneous disk failures — critical for arrays of 6+ disks
+          where the probability of a second failure during rebuild is non-negligible.
+          Most suitable for large drives (8 TB+) where rebuild windows are long.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:14px 24px;border-top:1px solid var(--border);text-align:right;">
+      <button class="btn btn-primary btn-sm" onclick="closePoolLayoutGuide()">Got it</button>
+    </div>
   </div>
 </div>
 
@@ -1553,7 +1936,7 @@ function showPage(name) {
   page.classList.remove('hidden');
   const nav = document.getElementById('nav-' + name);
   if (nav) nav.classList.add('active');
-  if (name === 'users')     loadUsers();
+  if (name === 'users')     { loadUsers(); if (currentUser.role === 'admin') { document.getElementById('api-keys-card').style.display = ''; loadAPIKeys(); } }
   if (name === 'activity')  loadAudit();
   if (name === 'prereqs')   loadPrereqs();
   if (name === 'disks')     loadDisks();
@@ -1687,7 +2070,16 @@ async function checkPrereqsBanner() {
     if (!resp.ok) return;
     prereqData = await resp.json();
     const missing = prereqData.packages.filter(p => !p.installed);
+    const sudo = prereqData.sudo_access || {};
+    const sudoError = sudo.type === 'none' || (sudo.type === 'hardened' && (sudo.missing_commands || []).length > 0);
+    const needsAttention = missing.length > 0 || prereqData.zfs_module_warn || sudoError;
     const banner  = document.getElementById('prereq-banner');
+    const dot     = document.getElementById('prereq-alert-dot');
+    if (dot) {
+      dot.style.display = needsAttention ? 'inline-block' : 'none';
+      dot.style.background = sudoError ? '#ff3b30' : '#f0b429';
+      dot.style.boxShadow  = sudoError ? '0 0 4px rgba(255,59,48,0.6)' : '0 0 4px rgba(240,180,41,0.6)';
+    }
     if (missing.length) {
       banner.className = 'banner banner-warn';
       banner.innerHTML = `
@@ -1720,18 +2112,86 @@ async function loadPrereqs() {
   }
 
   const missing = prereqData.packages.filter(p => !p.installed);
+  const zfsWarn = prereqData.zfsutils_warn || false;
 
-  document.getElementById('prereq-list').innerHTML = prereqData.packages.map(p => `
+  // Show/hide kernel module warning.
+  document.getElementById('zfs-module-warn').classList.toggle('hidden', !prereqData.zfs_module_warn);
+
+  // ── Sudo security row ─────────────────────────────────────────────────────
+  const sudo = prereqData.sudo_access || {};
+  const sudoMissing = sudo.missing_commands || [];
+  const sudoError = sudo.type === 'none' || (sudo.type === 'hardened' && sudoMissing.length > 0);
+  let sudoIcon, sudoLabel, sudoLabelColor, sudoDesc;
+  if (sudo.type === 'root') {
+    sudoIcon = '⚠'; sudoLabelColor = '#f0b429';
+    sudoLabel = 'Running as root';
+    sudoDesc = 'The process is running as the root user. All operations succeed without sudo, but this is not recommended for production. Consider a dedicated user with scoped sudo rules.';
+  } else if (sudo.type === 'all') {
+    sudoIcon = '✓'; sudoLabelColor = 'var(--accent-3)';
+    sudoLabel = 'Sudo — full access (NOPASSWD: ALL)';
+    sudoDesc = 'Full passwordless sudo is granted. All ZFS, system, and package operations are available.';
+  } else if (sudo.type === 'hardened' && sudoMissing.length === 0) {
+    sudoIcon = '✓'; sudoLabelColor = 'var(--accent-3)';
+    sudoLabel = 'Sudo — hardened (all commands covered)';
+    sudoDesc = 'Specific sudo rules are in place and all required commands are permitted.';
+  } else if (sudo.type === 'hardened') {
+    sudoIcon = '✕'; sudoLabelColor = 'var(--accent-danger)';
+    sudoLabel = 'Sudo — hardened (incomplete)';
+    sudoDesc = 'Specific sudo rules are in place but the following required commands are missing: <strong style="color:var(--accent-danger);">'
+      + sudoMissing.map(c => esc(c)).join(', ') + '</strong>';
+  } else {
+    sudoIcon = '✕'; sudoLabelColor = 'var(--accent-danger)';
+    sudoLabel = 'No sudo access';
+    sudoDesc = 'The application has no sudo privileges. Most ZFS and system operations will fail.';
+  }
+  document.getElementById('prereq-sudo-section').innerHTML = `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);">Security</span>
+        <a href="https://github.com/macgaver/zfsnas-chezmoi/blob/main/SECURITY.md" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent-2);text-decoration:none;line-height:1;" title="Open SECURITY.md">ⓘ</a>
+      </div>
+      <div class="prereq-row">
+        <div>
+          <div class="prereq-name" style="color:${sudoLabelColor};">${sudoIcon} ${esc(sudoLabel)}</div>
+          <div class="prereq-desc" style="margin-top:3px;">${sudoDesc}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Keep the sidebar dot in sync with the live data.
+  const needsAttention = missing.length > 0 || prereqData.zfs_module_warn || sudoError;
+  const dot = document.getElementById('prereq-alert-dot');
+  if (dot) {
+    dot.style.display = needsAttention ? 'inline-block' : 'none';
+    dot.style.background = sudoError ? '#ff3b30' : '#f0b429';
+    dot.style.boxShadow  = sudoError ? '0 0 4px rgba(255,59,48,0.6)' : '0 0 4px rgba(240,180,41,0.6)';
+  }
+
+  document.getElementById('prereq-list').innerHTML = prereqData.packages.map(p => {
+    const isZfsWarn = zfsWarn && p.name === 'zfsutils-linux';
+    let versionBadge = '';
+    if (p.installed && p.version) {
+      if (isZfsWarn) {
+        versionBadge = `<span class="prereq-version-warn">${esc(p.version)}</span>`
+          + `<span class="info-tip" style="margin-left:4px;" data-tip="ZFS 2.3 or higher is recommended. Some advanced features like RAIDZ expansion may be unavailable with this version.">ⓘ</span>`;
+      } else {
+        versionBadge = `<span class="prereq-version">${esc(p.version)}</span>`;
+      }
+    }
+    return `
     <div class="prereq-row">
       <div>
-        <div class="prereq-name">${esc(p.name)}</div>
+        <div class="prereq-name" style="display:flex;align-items:center;gap:4px;">
+          ${esc(p.name)}${versionBadge}
+        </div>
         <div class="prereq-desc">${esc(p.description)}</div>
       </div>
       <span class="${p.installed ? 'prereq-status-ok' : 'prereq-status-miss'}">
         ${p.installed ? '✓ Installed' : '✕ Missing'}
       </span>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   if (missing.length) {
     document.getElementById('prereq-actions').classList.remove('hidden');
@@ -2046,6 +2506,101 @@ async function submitCreateUser(e) {
   loadUsers();
 }
 
+// ===== API Key Info =====
+function openAPIKeyInfo()  { document.getElementById('modal-apikey-info').classList.remove('hidden'); }
+function closeAPIKeyInfo() { document.getElementById('modal-apikey-info').classList.add('hidden'); }
+
+// ===== API Keys =====
+async function loadAPIKeys() {
+  const list = document.getElementById('api-keys-list');
+  if (!list) return;
+  try {
+    const resp = await fetch('/api/settings/api-keys');
+    if (!resp.ok) { list.innerHTML = '<div style="color:var(--text-3);font-size:13px;">Unavailable.</div>'; return; }
+    const keys = await resp.json();
+    if (!keys.length) {
+      list.innerHTML = '<div style="color:var(--text-3);font-size:13px;">No API keys yet. Generate one to use with the homepage widget.</div>';
+      return;
+    }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="font-size:12px;color:var(--text-3);">
+        <th style="text-align:left;padding:6px 0;font-weight:600;">Name</th>
+        <th style="text-align:left;padding:6px 0;font-weight:600;">Key</th>
+        <th style="text-align:left;padding:6px 0;font-weight:600;">Created</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${keys.map(k => `
+        <tr style="border-top:1px solid var(--border);font-size:13px;">
+          <td style="padding:10px 0;font-weight:600;">${esc(k.name)}</td>
+          <td style="padding:10px 0;font-family:'SF Mono',monospace;color:var(--text-2);">${esc(k.key_prefix)}</td>
+          <td style="padding:10px 0;color:var(--text-3);">${formatDate(k.created_at)}</td>
+          <td style="padding:10px 0;text-align:right;">
+            <button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);" onclick="deleteAPIKey('${esc(k.id)}','${esc(k.name)}')">Delete</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } catch {
+    list.innerHTML = '<div style="color:var(--accent-danger);font-size:13px;">Failed to load API keys.</div>';
+  }
+}
+
+async function deleteAPIKey(id, name) {
+  if (!confirm(`Delete API key "${name}"? Any integration using it will stop working.`)) return;
+  const resp = await fetch('/api/settings/api-keys/' + id, { method: 'DELETE' });
+  if (resp.ok) loadAPIKeys(); else alert('Failed to delete key.');
+}
+
+function openCreateAPIKey() {
+  document.getElementById('apk-name').value = '';
+  document.getElementById('apk-alert').classList.add('hidden');
+  document.getElementById('apk-form').classList.remove('hidden');
+  document.getElementById('apk-reveal').classList.add('hidden');
+  document.getElementById('apk-generate-btn').disabled = false;
+  document.getElementById('apk-generate-btn').textContent = 'Generate';
+  document.getElementById('modal-create-apikey').classList.remove('hidden');
+  setTimeout(() => document.getElementById('apk-name').focus(), 50);
+}
+
+function closeCreateAPIKey() {
+  document.getElementById('modal-create-apikey').classList.add('hidden');
+  loadAPIKeys();
+}
+
+async function submitCreateAPIKey() {
+  const alertEl = document.getElementById('apk-alert');
+  const btn     = document.getElementById('apk-generate-btn');
+  alertEl.classList.add('hidden');
+  const name = document.getElementById('apk-name').value.trim();
+  if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('hidden'); return; }
+  btn.disabled = true; btn.textContent = 'Generating…';
+  const resp = await fetch('/api/settings/api-keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const data = await resp.json();
+  btn.disabled = false; btn.textContent = 'Generate';
+  if (!resp.ok) {
+    alertEl.textContent = data.error || 'Failed to generate key.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  document.getElementById('apk-reveal-value').value = data.key;
+  document.getElementById('apk-copy-btn').textContent = 'Copy';
+  document.getElementById('apk-form').classList.add('hidden');
+  document.getElementById('apk-reveal').classList.remove('hidden');
+}
+
+function copyAPIKey() {
+  const input = document.getElementById('apk-reveal-value');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    document.getElementById('apk-copy-btn').textContent = '✓ Copied';
+    setTimeout(() => { document.getElementById('apk-copy-btn').textContent = 'Copy'; }, 2000);
+  });
+}
+
 // ===== Full Audit Log Page =====
 async function loadAudit() {
   const el = document.getElementById('activity-list');
@@ -2308,7 +2863,9 @@ function fmtBytes(n) {
 }
 
 // ===== Pool bar chart =====
-let poolData = null;
+let poolData      = null;
+let _addDisksVer  = null;  // ZFS version info cached when Add Disks modal opens
+let _addDisksMode = null;  // currently selected add mode
 let datasetData = [];
 
 async function refreshPoolBar() {
@@ -2318,6 +2875,25 @@ async function refreshPoolBar() {
     datasetData = dr.ok ? await dr.json() : [];
   } catch { return; }
   renderPoolBar();
+}
+
+function poolStatusLabel(pool) {
+  if (pool.operation) return pool.operation.toUpperCase();
+  return pool.health;
+}
+
+function poolStatusColor(pool) {
+  if (pool.operation === 'scrubbing' || pool.operation === 'expanding') return '#0a84ff';
+  if (pool.operation === 'resilvering') return '#5ac8fa';
+  if (pool.health === 'ONLINE') return 'var(--accent-3)';
+  if (pool.health === 'DEGRADED') return 'var(--accent-warn)';
+  return 'var(--accent-danger)';
+}
+
+function poolStatusBadge(pool) {
+  const label = poolStatusLabel(pool);
+  const color = poolStatusColor(pool);
+  return `<span style="color:${color};font-weight:700;">${esc(label)}</span>`;
 }
 
 function renderPoolBar() {
@@ -2353,7 +2929,7 @@ function renderPoolBar() {
   const summaryUsedPct = total > 0 ? (usedByData / total * 100) : 0;
   const summaryFreePct = 100 - summaryUsedPct;
   const summaryPctColor = summaryUsedPct >= 80 ? 'var(--accent-danger)' : summaryUsedPct >= 75 ? '#ff9f0a' : 'var(--accent-3)';
-  sumEl.innerHTML = `${esc(poolData.name)}  ·  ${fmtBytes(total)} usable  ·  ${fmtBytes(usedByData)} used <span style="color:${summaryPctColor};font-weight:700;">(${summaryUsedPct.toFixed(1)}%)</span>  ·  ${fmtBytes(free)} free (${summaryFreePct.toFixed(1)}%)  ·  ${esc(poolData.health)}`;
+  sumEl.innerHTML = `${esc(poolData.name)}  ·  ${fmtBytes(total)} usable  ·  ${fmtBytes(usedByData)} used <span style="color:${summaryPctColor};font-weight:700;">(${summaryUsedPct.toFixed(1)}%)</span>  ·  ${fmtBytes(free)} free (${summaryFreePct.toFixed(1)}%)  ·  ${poolStatusBadge(poolData)}`;
 
   // Use depth-1 datasets (direct children of pool root) to avoid double-counting.
   const depth1 = (datasetData || []).filter(d => d.depth === 1);
@@ -2483,8 +3059,7 @@ async function _fetchPoolStatus() {
 }
 
 function renderPoolExists(el, pool) {
-  const healthColor = pool.health === 'ONLINE' ? 'var(--accent-3)' :
-                      pool.health === 'DEGRADED' ? 'var(--accent-warn)' : 'var(--accent-danger)';
+  const healthColor = poolStatusColor(pool);
 
   // Usable = root used + root avail (matches `zfs list`).
   const usableSize  = pool.usable_size  || pool.size;
@@ -2509,14 +3084,14 @@ function renderPoolExists(el, pool) {
     : '<div class="text-3 text-sm" style="padding:10px 0;">No device info available (run SMART refresh)</div>';
 
   const addDiskBtn = currentUser.role === 'admin'
-    ? `<button class="btn btn-ghost btn-sm" style="margin-top:14px;width:100%;" onclick="openAddDisksModal()">+ Add Disk(s)</button>`
+    ? `<button class="btn btn-sm" style="margin-top:14px;width:100%;background:rgba(48,209,88,0.15);border:1.5px solid rgba(48,209,88,0.45);color:#30d158;font-weight:600;" onclick="openAddDisksModal()">+ Add Capacity</button>`
     : '';
 
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;">
       <div class="card-sm">
         <div class="text-3 text-xs mb-1" style="text-transform:uppercase;letter-spacing:.08em;">Health</div>
-        <div style="font-size:20px;font-weight:700;color:${healthColor};">${esc(pool.health)}</div>
+        <div style="font-size:20px;font-weight:700;color:${healthColor};">${poolStatusLabel(pool)}</div>
       </div>
       <div class="card-sm">
         <div class="text-3 text-xs mb-1" style="text-transform:uppercase;letter-spacing:.08em;">Usable Capacity</div>
@@ -2546,7 +3121,7 @@ function renderPoolExists(el, pool) {
       <div class="card" style="min-width:0;">
         <h3 style="margin-bottom:16px;">Pool Details</h3>
         <div class="stat-row"><span class="stat-label">Pool name</span><span class="stat-value">${esc(pool.name)}</span></div>
-        <div class="stat-row"><span class="stat-label">Health</span><span class="stat-value" style="color:${healthColor};">${esc(pool.health)}</span></div>
+        <div class="stat-row"><span class="stat-label">Health</span><span class="stat-value" style="color:${healthColor};">${poolStatusLabel(pool)}</span></div>
         <div class="stat-row"><span class="stat-label">Usable capacity</span><span class="stat-value">${fmtBytes(usableSize)}</span></div>
         <div class="stat-row"><span class="stat-label">Used</span><span class="stat-value">${fmtBytes(usableUsed)}</span></div>
         <div class="stat-row"><span class="stat-label">Available</span><span class="stat-value">${fmtBytes(usableAvail)}</span></div>
@@ -2583,7 +3158,12 @@ function renderPoolCreate(el) {
     `<button class="btn btn-ghost btn-sm" onclick="detectPools()">⬇ Import ZFS Pool</button>`;
   el.innerHTML = `
     <div class="card" style="max-width:600px;">
-      <h3 style="margin-bottom:6px;">Create ZFS Pool</h3>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <h3 style="margin:0;">Create ZFS Pool</h3>
+        <button type="button" onclick="openPoolLayoutGuide()"
+          style="background:rgba(48,209,88,0.15);border:1.5px solid rgba(48,209,88,0.45);color:#30d158;border-radius:50%;width:26px;height:26px;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;"
+          title="Pool layout guide — read before choosing">ⓘ</button>
+      </div>
       <p class="text-2" style="font-size:14px;margin-bottom:24px;">Select disks and configure your pool. All data on selected disks will be erased.</p>
 
       <div id="create-pool-alert" class="alert alert-error hidden"></div>
@@ -2596,11 +3176,11 @@ function renderPoolCreate(el) {
       <div class="form-group">
         <label>Layout</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;" id="cp-layout-btns">
-          ${['stripe','raidz1','raidz2'].map((l,i) => `
+          ${[['stripe','Stripe'],['mirror','RAIDZ'],['raidz1','RAIDZ-1'],['raidz2','RAIDZ-2']].map(([l,label],i) => `
             <button type="button" onclick="selectLayout('${l}')" id="cp-layout-${l}"
               class="btn ${i===0?'btn-primary':'btn-ghost'}"
               style="flex:1;min-width:100px;">
-              ${l === 'stripe' ? 'Stripe' : l === 'raidz1' ? 'RAIDZ-1' : 'RAIDZ-2'}
+              ${label}
             </button>`).join('')}
         </div>
         <div id="cp-layout-hint" class="text-3 text-sm" style="margin-top:6px;">No redundancy — any disk failure loses data. Min 1 disk.</div>
@@ -2636,7 +3216,7 @@ function renderPoolCreate(el) {
         </div>
       </div>
 
-      <button class="btn btn-primary w-full" onclick="submitCreatePool()" style="margin-top:8px;">
+      <button class="btn btn-primary w-full" id="btn-create-pool" onclick="submitCreatePool()" style="margin-top:8px;">
         Create Pool
       </button>
     </div>`;
@@ -2651,13 +3231,19 @@ function renderPoolCreate(el) {
 
 const layoutHints = {
   stripe:  'No redundancy — any disk failure loses data. Min 1 disk.',
-  raidz1:  'Single parity — survives 1 disk failure. Min 3 disks.',
-  raidz2:  'Double parity — survives 2 disk failures. Min 4 disks.',
+  mirror:  'Mirrored disks — survives 1 disk failure per mirror pair. Min 2 disks. (mirror)',
+  raidz1:  'Single parity — survives 1 disk failure. Min 3 disks. (RAID5)',
+  raidz2:  'Double parity — survives 2 disk failures. Min 4 disks. (RAID6)',
 };
+
+function openPoolLayoutGuide()    { document.getElementById('modal-pool-layout-guide').classList.remove('hidden'); }
+function closePoolLayoutGuide()   { document.getElementById('modal-pool-layout-guide').classList.add('hidden'); }
+function openAddCapacityGuide()   { document.getElementById('modal-add-capacity-guide').classList.remove('hidden'); }
+function closeAddCapacityGuide()  { document.getElementById('modal-add-capacity-guide').classList.add('hidden'); }
 
 function selectLayout(l) {
   window._cpLayout = l;
-  ['stripe','raidz1','raidz2'].forEach(x => {
+  ['stripe','mirror','raidz1','raidz2'].forEach(x => {
     document.getElementById('cp-layout-'+x).className = 'btn ' + (x===l?'btn-primary':'btn-ghost');
   });
   document.getElementById('cp-layout-hint').textContent = layoutHints[l];
@@ -2704,7 +3290,7 @@ async function loadPoolDisks() {
     </label>`).join('');
 }
 
-async function submitCreatePool() {
+function submitCreatePool() {
   const alertEl = document.getElementById('create-pool-alert');
   alertEl.classList.add('hidden');
 
@@ -2714,15 +3300,36 @@ async function submitCreatePool() {
   if (!name) { alertEl.textContent = 'Pool name is required.'; alertEl.classList.remove('hidden'); return; }
   if (!devices.length) { alertEl.textContent = 'Select at least one disk.'; alertEl.classList.remove('hidden'); return; }
 
-  const minDisks = {stripe:1, raidz1:3, raidz2:4};
+  const minDisks = {stripe:1, mirror:2, raidz1:3, raidz2:4};
   if (devices.length < minDisks[window._cpLayout]) {
     alertEl.textContent = `${window._cpLayout} requires at least ${minDisks[window._cpLayout]} disks.`;
     alertEl.classList.remove('hidden'); return;
   }
 
-  if (!confirm(`⚠ This will ERASE all data on: ${devices.join(', ')}\n\nCreate pool "${name}"?`)) return;
+  // Show styled confirmation modal instead of browser confirm().
+  window._cpPending = { name, devices };
+  document.getElementById('cpc-pool-name').textContent = name;
+  document.getElementById('cpc-disk-list').innerHTML = devices.map(d =>
+    `<div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+       <span style="color:var(--accent-danger);font-size:15px;">✕</span>
+       <span style="font-family:monospace;color:var(--text-1);">${esc(d)}</span>
+     </div>`
+  ).join('');
+  document.getElementById('modal-confirm-create-pool').classList.remove('hidden');
+}
 
-  const btn = document.querySelector('#pool-content .btn-primary');
+function closeCreatePoolConfirm() {
+  document.getElementById('modal-confirm-create-pool').classList.add('hidden');
+  window._cpPending = null;
+}
+
+async function _doCreatePool() {
+  const { name, devices } = window._cpPending || {};
+  if (!name || !devices) return;
+  closeCreatePoolConfirm();
+
+  const alertEl = document.getElementById('create-pool-alert');
+  const btn = document.getElementById('btn-create-pool');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating pool…';
   addActiveJob('pool-create', 'Creating ZFS pool…');
 
@@ -2856,20 +3463,23 @@ async function setScrubSchedule(enabled) {
 // ===== Add Disks to Pool =====
 async function openAddDisksModal() {
   document.getElementById('add-disks-alert').classList.add('hidden');
+  document.getElementById('add-disks-mode-section').style.display = 'none';
+  document.getElementById('add-disks-mode-btns').innerHTML = '';
+  _addDisksVer  = null;
+  _addDisksMode = null;
   document.getElementById('modal-add-disks').classList.remove('hidden');
+
   const listEl = document.getElementById('add-disks-list');
   listEl.innerHTML = '<div style="padding:16px;color:var(--text-3);text-align:center;">Loading available disks…</div>';
 
-  // Fetch ZFS version and disk list in parallel.
   try {
     const [disksResp, verResp] = await Promise.all([
       fetch('/api/disks'),
       fetch('/api/pool/zfs-version'),
     ]);
     const disks = await disksResp.json() || [];
-    const ver   = verResp.ok ? await verResp.json() : null;
+    _addDisksVer = verResp.ok ? await verResp.json() : null;
 
-    // Use the same logic as renderDisks to identify ZFS-assigned disks.
     const stripPart = p => {
       if (/\/nvme\d+n\d+p\d+$/.test(p)) return p.replace(/p\d+$/, '');
       if (/\/sd[a-z]+\d+$/.test(p))     return p.replace(/\d+$/, '');
@@ -2879,61 +3489,124 @@ async function openAddDisksModal() {
     const poolDevices = new Set(
       ((poolData && poolData.members) ? poolData.members : []).map(stripPart)
     );
-    const isZfsDisk  = d => poolDevices.has(d.device) || poolDevices.has('/dev/' + d.name);
+    const isZfsDisk   = d => poolDevices.has(d.device) || poolDevices.has('/dev/' + d.name);
     const hasIdentity = d => !!(d.vendor || d.model);
-
-    // Only show disks that are truly available (not in pool, not in use, have identity).
-    const available = disks.filter(d => !isZfsDisk(d) && !d.in_use && hasIdentity(d));
+    const available   = disks.filter(d => !isZfsDisk(d) && !d.in_use && hasIdentity(d));
 
     if (!available.length) {
       listEl.innerHTML = '<div style="padding:16px;color:var(--text-3);text-align:center;">No available disks found.</div>';
       return;
     }
+
     listEl.innerHTML = available.map(d => `
       <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;">
-        <input type="checkbox" name="add-disk" value="${esc(d.device||('/dev/'+d.name))}" style="width:15px;height:15px;accent-color:var(--accent-2);">
+        <input type="checkbox" name="add-disk" value="${esc(d.device||('/dev/'+d.name))}"
+          style="width:15px;height:15px;accent-color:var(--accent-2);" onchange="updateAddDisksMode()">
         <div style="flex:1;">
           <div style="font-family:monospace;font-size:13px;font-weight:600;">${esc(d.device||('/dev/'+d.name))}</div>
           <div style="font-size:12px;color:var(--text-3);">${esc(d.model||d.vendor||'Unknown')} — ${fmtBytes(d.size_bytes||0)}</div>
         </div>
       </label>`).join('');
-
-    // Show version warning if ZFS < 2.4.
-    const warnEl = document.getElementById('add-disks-version-warn');
-    if (ver && !ver.raidz_expand) {
-      warnEl.innerHTML = `
-        <span style="font-size:16px;">⚠</span>
-        <div>
-          <strong>ZFS ${esc(ver.version)} detected — RAIDZ expansion not supported.</strong><br>
-          Selected disk(s) will be added as a new stripe vdev and will <em>not</em> be protected
-          by your existing RAIDZ. To grow the actual RAIDZ, upgrade to
-          <strong>Ubuntu 26.04 LTS</strong> or later (which ships with ZFS 2.4+).
-        </div>`;
-      warnEl.style.display = 'flex';
-    } else {
-      warnEl.style.display = 'none';
-    }
   } catch(e) {
     listEl.innerHTML = `<div style="padding:16px;color:var(--accent-danger);">Failed to load disks: ${esc(e.message)}</div>`;
   }
 }
 
+function updateAddDisksMode() {
+  const count   = document.querySelectorAll('input[name="add-disk"]:checked').length;
+  const section = document.getElementById('add-disks-mode-section');
+  const btnsEl  = document.getElementById('add-disks-mode-btns');
+
+  if (count === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const vdevType  = poolData && poolData.vdev_type || 'stripe';
+  const isRaidz   = vdevType === 'raidz1' || vdevType === 'raidz2';
+  const canExpand = count === 1 && isRaidz && _addDisksVer && _addDisksVer.raidz_expand;
+
+  // Build available options from most to least protective.
+  const opts = [];
+  if (canExpand) opts.push({
+    mode: 'expand', label: 'RAIDZ Expansion', badge: 'ZFS 2.3+', badgeColor: '#30d158',
+    desc: 'Attaches this disk directly to the existing RAIDZ vdev, expanding its capacity in-place. No new vdev is created.',
+  });
+  if (count >= 4) opts.push({
+    mode: 'raidz2', label: 'RAIDZ-2', badge: 'RAID6', badgeColor: '#bf5af2',
+    desc: 'Add these disks as a new RAIDZ-2 vdev — double parity, survives 2 simultaneous disk failures.',
+  });
+  if (count >= 3) opts.push({
+    mode: 'raidz1', label: 'RAIDZ-1', badge: 'RAID5', badgeColor: '#0a84ff',
+    desc: 'Add these disks as a new RAIDZ-1 vdev — single parity, survives 1 disk failure.',
+  });
+  if (count >= 2) opts.push({
+    mode: 'mirror', label: 'RAIDZ', badge: 'mirror', badgeColor: '#30d158',
+    desc: 'Add these disks as a new mirror vdev — all disks are identical copies, survives 1 disk failure per pair.',
+  });
+  opts.push({
+    mode: 'stripe', label: 'Stripe', badge: 'no redundancy', badgeColor: '#ff3b30',
+    desc: 'Add these disks as a stripe vdev — maximum capacity, no fault tolerance. Any disk failure loses all data in this vdev.',
+  });
+
+  // Keep current mode if still valid, otherwise default to first (most protective).
+  if (!_addDisksMode || !opts.find(o => o.mode === _addDisksMode)) {
+    _addDisksMode = opts[0].mode;
+  }
+
+  btnsEl.innerHTML = opts.map(o => {
+    const sel = o.mode === _addDisksMode;
+    return `
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;
+      border:1px solid ${sel ? 'var(--accent-2)' : 'var(--border)'};
+      border-radius:var(--radius-sm);cursor:pointer;
+      background:${sel ? 'rgba(10,132,255,0.06)' : 'transparent'};">
+      <input type="radio" name="add-disk-mode" value="${o.mode}" ${sel ? 'checked' : ''}
+        onchange="selectAddDisksMode('${o.mode}')"
+        style="margin-top:3px;accent-color:var(--accent-2);flex-shrink:0;">
+      <div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+          <span style="font-size:13px;font-weight:700;color:var(--text-1);">${o.label}</span>
+          <span style="font-size:11px;padding:1px 7px;border-radius:20px;font-weight:600;
+            background:${o.badgeColor}22;color:${o.badgeColor};">${o.badge}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.5;">${o.desc}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function selectAddDisksMode(mode) {
+  _addDisksMode = mode;
+  updateAddDisksMode();
+}
+
 function closeAddDisksModal() {
   document.getElementById('modal-add-disks').classList.add('hidden');
+  _addDisksVer  = null;
+  _addDisksMode = null;
 }
 
 async function submitAddDisks() {
   const checked = [...document.querySelectorAll('input[name="add-disk"]:checked')].map(c => c.value);
-  if (!checked.length) { alert('Select at least one disk.'); return; }
-
   const alertEl = document.getElementById('add-disks-alert');
-  const btn = document.getElementById('btn-add-disks-submit');
   alertEl.classList.add('hidden');
+
+  if (!checked.length) {
+    alertEl.textContent = 'Select at least one disk.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  if (!_addDisksMode) {
+    alertEl.textContent = 'Select how to add the disks.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('btn-add-disks-submit');
   btn.disabled = true; btn.textContent = 'Adding…';
 
   const resp = await fetch('/api/pool/grow', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ devices: checked }),
+    body: JSON.stringify({ devices: checked, mode: _addDisksMode }),
   });
   const data = await resp.json();
   btn.disabled = false; btn.textContent = 'Add to Pool';
@@ -2992,6 +3665,8 @@ async function submitDestroyPool() {
     return;
   }
   closeDestroyPoolModal();
+  // Rescan disks so the freed drives appear immediately in the create-pool form.
+  await fetch('/api/disks/scan', { method: 'POST' }).catch(() => {});
   await refreshPoolBar();
   loadPool();
 }
@@ -4620,6 +5295,8 @@ function initTerminal() {
   _term.open(container);
   // Fit cols to container width; rows is fixed at 25.
   _termFit.fit();
+  // Auto-focus so the user can type immediately without clicking.
+  requestAnimationFrame(() => _term.focus());
 
   document.getElementById('btn-term-reconnect').style.display = 'none';
 
@@ -4769,8 +5446,8 @@ function initIOCharts() {
   }
 
   _ioCharts = {
-    read:  makeChart('io-chart-read',  'KB/s'),
-    write: makeChart('io-chart-write', 'KB/s'),
+    read:  makeChart('io-chart-read',  'MB/s'),
+    write: makeChart('io-chart-write', 'MB/s'),
     busy:  makeChart('io-chart-busy',  '%'),
   };
 }
@@ -4813,8 +5490,8 @@ function updateIOCharts(data) {
   _ioDevices.forEach((dev, i) => {
     const sample = data.devices[dev] || { read_kbps: 0, write_kbps: 0, busy_pct: 0 };
     const buf = _ioBufs[dev];
-    _ioShift(buf.read,  sample.read_kbps);
-    _ioShift(buf.write, sample.write_kbps);
+    _ioShift(buf.read,  sample.read_kbps  / 1024);
+    _ioShift(buf.write, sample.write_kbps / 1024);
     _ioShift(buf.busy,  sample.busy_pct);
 
     // Sync chart dataset data arrays
@@ -4899,10 +5576,14 @@ async function _loadDashStats() {
 
 async function _fetchDashboardMetrics() {
   try {
-    const resp = await fetch('/api/dashboard/metrics');
-    if (!resp.ok) return;
-    const data = await resp.json();
-    _renderDashboardCharts(data);
+    const [mResp, iResp] = await Promise.all([
+      fetch('/api/dashboard/metrics'),
+      fetch('/api/net/ifaces'),
+    ]);
+    if (!mResp.ok) return;
+    const data   = await mResp.json();
+    const ifaceIPs = iResp.ok ? await iResp.json() : {};
+    _renderDashboardCharts(data, ifaceIPs);
   } catch (_) {}
 }
 
@@ -4972,7 +5653,7 @@ function _dashChartOpts(yLabel, yMax, stacked = false) {
         ticks: {
           color: tickColor,
           font: { size: 10 },
-          callback: val => yMax === 100 ? val + '%' : val,
+          callback: val => yMax === 100 ? val + '%' : val + ' ' + yLabel,
         },
         grid: { color: gridColor },
       },
@@ -5020,19 +5701,25 @@ function _dashDS(label, color, values, fill) {
   };
 }
 
-function _renderDashboardCharts(data) {
-  const cpu   = data.cpu_pct         || [];
-  const mem   = data.mem_used_pct    || [];
-  const netRx = data.net_rx_kbps     || [];
-  const netTx = data.net_tx_kbps     || [];
-  const diskR = data.disk_read_kbps  || [];
-  const diskW = data.disk_write_kbps || [];
-  const diskB = data.disk_busy_pct   || [];
+const _NIC_RX_COLORS = ['#32d74b', '#64d2ff', '#ff453a', '#a78bfa'];
+const _NIC_TX_COLORS = ['#ff9f0a', '#bf5af2', '#ffd60a', '#34d399'];
 
-  const memApp   = data.mem_app_pct   || [];
-  const memCache = data.mem_cache_pct || [];
+function _renderDashboardCharts(data, ifaceIPs = {}) {
+  const cpu      = data.cpu_pct        || [];
+  const diskR    = data.disk_read_mbps  || [];
+  const diskW    = data.disk_write_mbps || [];
+  const diskB    = data.disk_busy_pct   || [];
+  const memApp   = data.mem_app_pct    || [];
+  const memCache = data.mem_cache_pct  || [];
 
-  const totalSamples = Math.max(cpu.length, memApp.length, netRx.length, diskR.length, diskB.length);
+  // Discover per-NIC series from response keys (net_{iface}_rx)
+  const nicNames = Object.keys(data)
+    .filter(k => /^net_.+_rx$/.test(k))
+    .map(k => k.slice(4, -3))
+    .sort();
+
+  const totalSamples = Math.max(cpu.length, memApp.length, diskR.length, diskB.length,
+    nicNames.reduce((m, n) => Math.max(m, (data['net_' + n + '_rx'] || []).length), 0));
   const collectEl = document.getElementById('dash-collecting');
   const chartsEl  = document.getElementById('dash-charts');
 
@@ -5047,24 +5734,68 @@ function _renderDashboardCharts(data) {
 
   const cpuD  = _dashBuild24h([cpu]);
   const memD  = _dashBuild24h([memApp, memCache]);
-  const netD  = _dashBuild24h([netRx, netTx]);
   const dskD  = _dashBuild24h([diskR, diskW]);
   const busyD = _dashBuild24h([diskB]);
 
-  _makeDashChart('dash-chart-cpu',  [_dashDS('CPU %',       '#0a84ff', cpuD.dataArrays[0],  true)],  cpuD.labels,  '%',    100);
+  _makeDashChart('dash-chart-cpu', [_dashDS('CPU %', '#0a84ff', cpuD.dataArrays[0], true)], cpuD.labels, '%', 100);
   _makeDashChartStacked('dash-chart-mem', [
     _dashDS('App %',   '#0a84ff', memD.dataArrays[0], true),
     _dashDS('Cache %', '#bf5af2', memD.dataArrays[1], true),
   ], memD.labels, '%', 100);
-  _makeDashChart('dash-chart-net',  [
-    _dashDS('RX KB/s',   '#32d74b', netD.dataArrays[0],  false),
-    _dashDS('TX KB/s',   '#ff9f0a', netD.dataArrays[1],  false),
-  ], netD.labels, 'KB/s', null);
+
+  // Network: one RX + one TX dataset per NIC, shared time grid
+  let netDatasets = [];
+  let netLabels   = [];
+  let legendHtml  = '';
+  if (nicNames.length > 0) {
+    const rxSeries = nicNames.map(n => data['net_' + n + '_rx'] || []);
+    const txSeries = nicNames.map(n => data['net_' + n + '_tx'] || []);
+    const built = _dashBuild24h([...rxSeries, ...txSeries]);
+    netLabels = built.labels;
+    const half = nicNames.length;
+    nicNames.forEach((iface, i) => {
+      const rxColor  = _NIC_RX_COLORS[i % _NIC_RX_COLORS.length];
+      const txColor  = _NIC_TX_COLORS[i % _NIC_TX_COLORS.length];
+      const ipSuffix = ifaceIPs[iface] ? ' (' + ifaceIPs[iface] + ')' : '';
+      const label    = iface + ipSuffix;
+      netDatasets.push(_dashDS(label + ' RX', rxColor, built.dataArrays[i],        false));
+      netDatasets.push(_dashDS(label + ' TX', txColor, built.dataArrays[half + i], false));
+      legendHtml += `<span style="font-size:11px;color:${rxColor};">▬ ${label} RX</span> `;
+      legendHtml += `<span style="font-size:11px;color:${txColor};">▬ ${label} TX</span> `;
+    });
+  } else {
+    netLabels = _dashBuild24h([[]]).labels;
+  }
+  document.getElementById('dash-net-legend').innerHTML = legendHtml;
+  _makeDashChart('dash-chart-net', netDatasets, netLabels, 'Mbit/s', null);
+
   _makeDashChart('dash-chart-disk', [
-    _dashDS('Read KB/s', '#64d2ff', dskD.dataArrays[0],  false),
-    _dashDS('Write KB/s','#ffd60a', dskD.dataArrays[1],  false),
-  ], dskD.labels, 'KB/s', null);
-  _makeDashChart('dash-chart-busy', [_dashDS('Busy %',      '#ff453a', busyD.dataArrays[0], true)],  busyD.labels, '%',    100);
+    _dashDS('Read MB/s',  '#64d2ff', dskD.dataArrays[0], false),
+    _dashDS('Write MB/s', '#ffd60a', dskD.dataArrays[1], false),
+  ], dskD.labels, 'MB/s', null);
+  _makeDashChart('dash-chart-busy', [_dashDS('Busy %', '#ff453a', busyD.dataArrays[0], true)], busyD.labels, '%', 100);
+
+  // ── Max-seen labels ──────────────────────────────────────────────────────────
+  function _arrMax(arr) { return arr.reduce((m, v) => (v != null && v > m ? v : m), 0); }
+
+  const cpuMax  = _arrMax(cpuD.dataArrays[0]);
+  document.getElementById('dash-max-cpu').textContent = cpuMax > 0 ? 'max ' + cpuMax.toFixed(1) + '%' : '';
+
+  // Memory: max of the element-wise sum of both stacked series
+  const memSum  = memD.dataArrays[0].map((v, i) => (v ?? 0) + (memD.dataArrays[1][i] ?? 0));
+  const memMax  = _arrMax(memSum);
+  document.getElementById('dash-max-mem').textContent = memMax > 0 ? 'max ' + memMax.toFixed(1) + '%' : '';
+
+  // Network: max across all datasets (all RX + TX curves)
+  const netMax  = netDatasets.reduce((m, ds) => Math.max(m, _arrMax(ds.data)), 0);
+  document.getElementById('dash-max-net').textContent = netMax > 0 ? 'max ' + netMax.toFixed(2) + ' Mbit/s' : '';
+
+  // Disk I/O: max of the higher of read or write
+  const diskMax = Math.max(_arrMax(dskD.dataArrays[0]), _arrMax(dskD.dataArrays[1]));
+  document.getElementById('dash-max-disk').textContent = diskMax > 0 ? 'max ' + diskMax.toFixed(2) + ' MB/s' : '';
+
+  const busyMax = _arrMax(busyD.dataArrays[0]);
+  document.getElementById('dash-max-busy').textContent = busyMax > 0 ? 'max ' + busyMax.toFixed(1) + '%' : '';
 }
 
 // ===== Binary Self-Update =====
@@ -5156,12 +5887,16 @@ document.addEventListener('click', function(e) {
   if (!e.target.classList.contains('modal-backdrop')) return;
   const closeFns = {
     'modal-add-disks':        closeAddDisksModal,
+    'modal-confirm-create-pool':  closeCreatePoolConfirm,
+    'modal-add-capacity-guide':   closeAddCapacityGuide,
     'modal-destroy-pool':     closeDestroyPoolModal,
     'modal-force-import':     closeForceImportModal,
     'modal-recursive-delete': closeRecursiveDeleteModal,
     'modal-dataset-detail':   closeDatasetDetail,
     'modal-pool-upgrade':     closePoolUpgradeModal,
     'modal-power':            closePowerModal,
+    'modal-apikey-info':       closeAPIKeyInfo,
+    'modal-create-apikey':    closeCreateAPIKey,
     'modal-create-user':      closeCreateUser,
     'modal-edit-user':        closeEditUser,
     'modal-smb-password':     closeSMBPasswordModal,

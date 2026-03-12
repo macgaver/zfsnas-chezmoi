@@ -220,6 +220,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/dashboard/metrics",
 		RequireAuth(http.HandlerFunc(HandleGetDashboardMetrics))).Methods("GET")
 
+	// --- Network interface info ---
+	r.Handle("/api/net/ifaces",
+		RequireAuth(http.HandlerFunc(HandleGetNetIfaces))).Methods("GET")
+
 	// --- System power (admin only) ---
 	r.Handle("/api/system/reboot",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleReboot)))).Methods("POST")
@@ -231,6 +235,32 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleCheckBinaryUpdate(appCfg))))).Methods("GET")
 	r.Handle("/ws/binary-update-apply",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleBinaryUpdateApply(appCfg))))).Methods("GET")
+
+	// --- Homepage widget API keys (admin only) ---
+	r.Handle("/api/settings/api-keys",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleListAPIKeys)))).Methods("GET")
+	r.Handle("/api/settings/api-keys",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleCreateAPIKey)))).Methods("POST")
+	r.Handle("/api/settings/api-keys/{id}",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDeleteAPIKey)))).Methods("DELETE")
+
+	// --- TrueNAS-compatible read-only REST API (v2.0) ---
+	// Accepts session cookie OR Authorization: Bearer <api_key>
+	for path, h := range map[string]http.HandlerFunc{
+		"/api/v2.0/alert/list":       HandleHomepageAlertList,
+		"/api/v2.0/system/info":      HandleHomepageSystemInfo,
+		"/api/v2.0/system/version":   HandleHomepageSystemVersion,
+		"/api/v2.0/pool":             HandleHomepagePools,
+		"/api/v2.0/pool/dataset":     HandleHomepageDatasets,
+		"/api/v2.0/pool/snapshottask": HandleHomepageSnapshotTasks,
+		"/api/v2.0/snapshot":         HandleHomepageSnapshots,
+		"/api/v2.0/disk":             HandleHomepageDisks,
+		"/api/v2.0/sharing/smb":      HandleHomepageSMBShares,
+		"/api/v2.0/sharing/nfs":      HandleHomepageNFSShares,
+		"/api/v2.0/service":          HandleHomepageServices,
+	} {
+		r.Handle(path, RequireAuthOrAPIKey(http.HandlerFunc(h))).Methods("GET")
+	}
 
 	// Catch-all for SPA deep links: serve index.html for any unknown GET that
 	// doesn't start with /api/ or /static/.

@@ -1,13 +1,18 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/system"
+
+	"github.com/gorilla/mux"
 )
 
 // HandleGetSettings returns current application settings.
@@ -91,6 +96,124 @@ func HandleUpdateSettings(appCfg *config.AppConfig) http.HandlerFunc {
 
 		jsonOK(w, map[string]string{"message": "settings saved — restart required for port change"})
 	}
+}
+
+// apiKeyResponse is returned for list — omits the full key, shows only a prefix.
+type apiKeyResponse struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	KeyPrefix string    `json:"key_prefix"` // first 8 chars + "…"
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// HandleListAPIKeys returns all API keys with masked values (admin only).
+func HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	keys, err := config.LoadAPIKeys()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load keys")
+		return
+	}
+	out := make([]apiKeyResponse, len(keys))
+	for i, k := range keys {
+		prefix := k.Key
+		if len(prefix) > 8 {
+			prefix = prefix[:8] + "…"
+		}
+		out[i] = apiKeyResponse{ID: k.ID, Name: k.Name, KeyPrefix: prefix, CreatedAt: k.CreatedAt}
+	}
+	jsonOK(w, out)
+}
+
+// HandleCreateAPIKey generates a new named API key and returns the full value once (admin only).
+func HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		jsonErr(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to generate key")
+		return
+	}
+	key := hex.EncodeToString(buf)
+
+	idBuf := make([]byte, 8)
+	rand.Read(idBuf)
+	id := hex.EncodeToString(idBuf)
+
+	entry := config.APIKeyEntry{
+		ID:        id,
+		Name:      req.Name,
+		Key:       key,
+		CreatedAt: time.Now(),
+	}
+
+	keys, err := config.LoadAPIKeys()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load keys")
+		return
+	}
+	keys = append(keys, entry)
+	if err := config.SaveAPIKeys(keys); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save key")
+		return
+	}
+
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  audit.ActionUpdateSettings,
+		Result:  audit.ResultOK,
+		Details: "API key created: " + req.Name,
+	})
+	// Return full key — this is the only time it is sent to the client.
+	jsonOK(w, map[string]string{"id": id, "name": req.Name, "key": key})
+}
+
+// HandleDeleteAPIKey removes an API key by ID (admin only).
+func HandleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	keys, err := config.LoadAPIKeys()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load keys")
+		return
+	}
+	found := false
+	filtered := keys[:0]
+	for _, k := range keys {
+		if k.ID == id {
+			found = true
+		} else {
+			filtered = append(filtered, k)
+		}
+	}
+	if !found {
+		jsonErr(w, http.StatusNotFound, "key not found")
+		return
+	}
+	if err := config.SaveAPIKeys(filtered); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save keys")
+		return
+	}
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:   sess.Username,
+		Role:   sess.Role,
+		Action: audit.ActionUpdateSettings,
+		Result: audit.ResultOK,
+		Details: "API key deleted: " + id,
+	})
+	jsonOK(w, map[string]string{"message": "deleted"})
 }
 
 // HandleGetTimezone returns the current timezone and the full list of available timezones.

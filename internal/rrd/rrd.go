@@ -97,6 +97,17 @@ func (db *DB) Query(key string) []Sample {
 	return result
 }
 
+// Keys returns the names of all series currently stored in the DB.
+func (db *DB) Keys() []string {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	keys := make([]string, 0, len(db.data.Series))
+	for k := range db.data.Series {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // Flush persists the DB to disk atomically.
 func (db *DB) Flush() error {
 	db.mu.Lock()

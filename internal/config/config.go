@@ -19,7 +19,7 @@ type AppConfig struct {
 	Port              int       `json:"port"`
 	StorageUnit       string    `json:"storage_unit,omitempty"`        // "gb" (1000-based) or "gib" (1024-based)
 	SMARTLastRefresh  time.Time `json:"smart_last_refresh,omitempty"`
-	WeeklyScrub       bool      `json:"weekly_scrub,omitempty"`        // auto-scrub every Sunday at 02:00
+	WeeklyScrub       bool      `json:"weekly_scrub"`                  // auto-scrub every Sunday at 02:00 (default: true)
 	LiveUpdateEnabled bool      `json:"live_update_enabled,omitempty"` // enable in-place binary self-update
 	MaxSmbdProcesses  int       `json:"max_smbd_processes,omitempty"`  // Samba max smbd processes (0 = use default 100)
 }
@@ -81,6 +81,14 @@ func saveJSON(filename string, v interface{}) error {
 
 // LoadAppConfig loads or initializes application config with defaults.
 func LoadAppConfig() (*AppConfig, error) {
+	// Detect whether the config file already exists before loading, so we can
+	// distinguish a fresh install (apply all defaults) from an existing config
+	// that has WeeklyScrub explicitly set to false.
+	fresh := false
+	if _, err := os.Stat(filepath.Join(configDir, "config.json")); os.IsNotExist(err) {
+		fresh = true
+	}
+
 	cfg := &AppConfig{Port: 8443}
 	if err := loadJSON("config.json", cfg); err != nil {
 		return nil, err
@@ -94,7 +102,37 @@ func LoadAppConfig() (*AppConfig, error) {
 	if cfg.MaxSmbdProcesses == 0 {
 		cfg.MaxSmbdProcesses = 100
 	}
+	// Default weekly scrub to enabled on fresh installs. Existing configs that
+	// have WeeklyScrub explicitly saved (true or false) are left untouched.
+	if fresh {
+		cfg.WeeklyScrub = true
+	}
 	return cfg, nil
+}
+
+// APIKeyEntry represents a named API key used by external integrations (e.g. homepage widget).
+type APIKeyEntry struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Key       string    `json:"key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// LoadAPIKeys loads all API keys from disk.
+func LoadAPIKeys() ([]APIKeyEntry, error) {
+	var keys []APIKeyEntry
+	if err := loadJSON("api_keys.json", &keys); err != nil {
+		return nil, err
+	}
+	if keys == nil {
+		keys = []APIKeyEntry{}
+	}
+	return keys, nil
+}
+
+// SaveAPIKeys persists all API keys to disk.
+func SaveAPIKeys(keys []APIKeyEntry) error {
+	return saveJSON("api_keys.json", keys)
 }
 
 // SaveAppConfig persists application config.

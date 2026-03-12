@@ -10,8 +10,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
+	"strings"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -36,11 +36,18 @@ func main() {
 	flag.Parse()
 
 	// ===== Sudo check =====
-	if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "ERROR: zfsnas requires passwordless sudo access.")
-		fmt.Fprintln(os.Stderr, "       Please add the following line to /etc/sudoers (via visudo):")
+	sudoStatus := system.CheckSudoAccess()
+	if sudoStatus.Type == "none" {
+		fmt.Fprintln(os.Stderr, "ERROR: zfsnas requires sudo access.")
+		fmt.Fprintln(os.Stderr, "       See SECURITY.md for the recommended hardened sudoers configuration,")
+		fmt.Fprintln(os.Stderr, "       or grant full passwordless access with:")
 		fmt.Fprintln(os.Stderr, "         <your-user> ALL=(ALL) NOPASSWD: ALL")
 		os.Exit(1)
+	}
+	if sudoStatus.Type == "hardened" && len(sudoStatus.MissingCommands) > 0 {
+		fmt.Fprintf(os.Stderr, "WARNING: hardened sudo is configured but %d command(s) are missing from the sudoers rules: %s\n",
+			len(sudoStatus.MissingCommands), strings.Join(sudoStatus.MissingCommands, ", "))
+		fmt.Fprintln(os.Stderr, "         Some features may not work. See SECURITY.md for the full sudoers template.")
 	}
 
 	system.DebugMode = *debugMode

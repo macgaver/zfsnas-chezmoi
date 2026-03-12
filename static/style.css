@@ -537,6 +537,20 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 }
 .modal-close:hover { color: var(--text); }
 
+.modal-body {
+  padding-bottom: 4px;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
 /* ===== Terminal Panel ===== */
 .term-panel {
   flex-shrink: 0;

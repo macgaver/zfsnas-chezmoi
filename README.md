@@ -1,12 +1,10 @@
 <p align="center">
   <img src="static/logo.svg" alt="ZFS NAS Logo" width="700"/>
 </p>
-
 <p align="center">
   <strong>A ZFS NAS management portal that gets out of your way.</strong><br/>
   Single binary. Secure. No database. No bloat.
 </p>
-
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go" alt="Go 1.22+"/>
   <img src="https://img.shields.io/badge/Platform-Ubuntu%2022.04%2B-E95420?style=flat-square&logo=ubuntu" alt="Ubuntu 22.04+"/>
@@ -14,11 +12,8 @@
   <img src="https://img.shields.io/badge/Version-2.0.0-00eaff?style=flat-square" alt="Version 2.0.0"/>
 </p>
 
----
-
 ## Why ZFS NAS Chezmoi?
-
-Most NAS management software is slow to install, slow to load, and buried under layers of configuration. ZFS NAS Chezmoi is different:
+Most NAS management software are slow to install, slow to load, and buried under layers of configuration. ZFS NAS Chezmoi is different:
 
 - **One binary, zero dependencies** — compile once, copy anywhere, run. No Docker. No Node. No Python runtime.
 - **Instant startup** — the portal is live in under a second. All static assets are embedded directly in the binary.
@@ -62,11 +57,12 @@ Most NAS management software is slow to install, slow to load, and buried under 
 
 | Requirement | Version |
 |---|---|
-| Ubuntu | 22.04 LTS or later (24.04 LTS recommended) |
-| Go (build from source) | 1.22 or later |
-| `sudo` access | Required for ZFS, Samba, and SMART commands |
+| Debian | **13 (Bookworm) or later — recommended** |
+| Ubuntu | 26.04 LTS or later (also supported) |
+| Go (if you build from source) | 1.22 or later |
+| `sudo` access without password | Required for ZFS, Samba/NFS management, and SMART commands (or [sudo hardening](SECURITY.md)) |
 
-The following system packages are **installed automatically** by the setup wizard if missing:
+The following system packages are required. If any are missing, the **Prerequisites** tab will detect them and offer a guided installation:
 
 | Package | Purpose |
 |---|---|
@@ -76,12 +72,27 @@ The following system packages are **installed automatically** by the setup wizar
 | `smartmontools` | SSD wearout via `smartctl` |
 | `nvme-cli` | NVMe wearout via `nvme smart-log` |
 | `util-linux` | Disk listing via `lsblk` |
+| `sudo` | Required to run privileged ZFS, Samba, NFS, and SMART commands |
 
 ---
 
 ## Installation
 
-### Option A — Build from source
+### Option A — Quick installer (recommended)
+
+One command installs ZFS (if needed), creates a dedicated service account, downloads the latest binary, and registers a systemd service:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/macgaver/zfsnas-chezmoi/main/zfsnas-quickinstall-for-debian.sh)
+```
+
+> Run as root or with `sudo`. Supports Debian 13+ and Ubuntu 26.04+.
+
+Once the installer completes, open your browser at the URL it prints (e.g. `https://<your-server-ip>:8443/setup`) and follow the setup wizard.
+
+---
+
+### Option B — Build from source
 
 ```bash
 # 1. Clone the repository
@@ -92,10 +103,10 @@ cd zfsnas-chezmoi
 go build -o zfsnas .
 
 # 3. Run
-sudo ./zfsnas
+./zfsnas
 ```
 
-### Option B — Download a release binary
+### Option C — Download a release binary
 
 ```bash
 # Download the latest release for Linux amd64
@@ -104,9 +115,9 @@ chmod +x zfsnas-chezmoi.ca
 ./zfsnas
 ```
 
-### First-run setup
+### First-run setup (Options B and C)
 
-On first launch, open your browser and navigate to:
+Place the binary in a folder owned by a user with passwordless sudo access (you can restrict sudo to specific commands — see [SECURITY.md](SECURITY.md)). Then launch and open your browser at:
 
 ```
 https://<your-server-ip>:8443/setup
@@ -168,6 +179,12 @@ ZFS NAS Chezmoi is built to stay fast and simple as it grows:
 - **JSON file storage** — no database process to manage or back up
 - **WebSocket streaming** — real-time terminal, package installation output, and system metrics without polling hacks
 - **Background goroutines** — SMART refresh, health alerts, snapshot scheduling, and session cleanup run as lightweight goroutines inside the single process
+
+---
+
+## Security
+
+For the full security model, sudo hardening guide, TLS configuration, and authentication details see **[SECURITY.md](SECURITY.md)**.
 
 ---
 

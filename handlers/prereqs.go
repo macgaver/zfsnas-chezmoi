@@ -22,9 +22,31 @@ var wsUpgrader = websocket.Upgrader{
 // HandleCheckPrereqs returns the status of all required packages and the systemd service.
 func HandleCheckPrereqs(w http.ResponseWriter, r *http.Request) {
 	pkgs := system.CheckPackages()
+
+	// Flag zfsutils-linux if its version is below 2.3
+	zfsWarn := false
+	for _, p := range pkgs {
+		if p.Name == "zfsutils-linux" && p.Installed && p.Version != "" {
+			zfsWarn = system.ZfsutilsBelowMinVersion(p.Version, 2, 3)
+			break
+		}
+	}
+
+	// Warn if zfsutils-linux is installed but the kernel module is not loaded.
+	zfsModuleWarn := false
+	for _, p := range pkgs {
+		if p.Name == "zfsutils-linux" && p.Installed {
+			zfsModuleWarn = !system.ZfsModuleLoaded()
+			break
+		}
+	}
+
 	jsonOK(w, map[string]interface{}{
 		"packages":          pkgs,
 		"service_installed": system.IsServiceInstalled(),
+		"zfsutils_warn":     zfsWarn,
+		"zfs_module_warn":   zfsModuleWarn,
+		"sudo_access":       system.CheckSudoAccess(),
 	})
 }
 
@@ -56,6 +78,15 @@ func HandleInstallPrereqs(w http.ResponseWriter, r *http.Request) {
 		send("All packages are already installed.")
 		done(true, "nothing to do")
 		return
+	}
+
+	// Track whether zfsutils-linux is being freshly installed.
+	zfsWasInstalled := false
+	for _, m := range missing {
+		if m == "zfsutils-linux" {
+			zfsWasInstalled = true
+			break
+		}
 	}
 
 	send(fmt.Sprintf("Running: sudo apt-get install -y %s", strings.Join(missing, " ")))
@@ -116,6 +147,21 @@ func HandleInstallPrereqs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	send("Installation completed successfully.")
+
+	// If zfsutils-linux was just installed, attempt to load the kernel module.
+	if zfsWasInstalled {
+		send("─────────────────────────────────────────")
+		send("Loading ZFS kernel module (modprobe zfs)…")
+		if out, err := system.LoadZfsModule(); err != nil {
+			send("⚠ Could not load ZFS module automatically: " + err.Error())
+			if out != "" {
+				send(out)
+			}
+			send("A reboot is recommended to activate the ZFS kernel module.")
+		} else {
+			send("✓ ZFS kernel module loaded successfully.")
+		}
+	}
 	audit.Log(audit.Entry{
 		User:    sess.Username,
 		Role:    sess.Role,

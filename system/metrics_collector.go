@@ -3,6 +3,7 @@ package system
 import (
 	"bufio"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -63,15 +64,14 @@ func StartMetricsCollector(configDir string) {
 			if prevNet != nil && curNet != nil {
 				dtSec := now.Sub(prevNetTime).Seconds()
 				if dtSec > 0 {
-					var rxTotal, txTotal float64
 					for iface, cur := range curNet {
 						if prev, ok := prevNet[iface]; ok {
-							rxTotal += float64(cur.rxBytes-prev.rxBytes) / 1024 / dtSec
-							txTotal += float64(cur.txBytes-prev.txBytes) / 1024 / dtSec
+							rx := float64(cur.rxBytes-prev.rxBytes) * 8 / 1_000_000 / dtSec
+							tx := float64(cur.txBytes-prev.txBytes) * 8 / 1_000_000 / dtSec
+							db.Record("net_"+iface+"_rx", rx, now)
+							db.Record("net_"+iface+"_tx", tx, now)
 						}
 					}
-					db.Record("net_rx_kbps", rxTotal, now)
-					db.Record("net_tx_kbps", txTotal, now)
 				}
 			}
 			prevNet = curNet
@@ -84,12 +84,12 @@ func StartMetricsCollector(configDir string) {
 				if err == nil && prevDiskIO != nil {
 					dtSec := now.Sub(prevDiskTime).Seconds()
 					if dtSec > 0 {
-						var readKBps, writeKBps, busyTotal float64
+						var readMBps, writeMBps, busyTotal float64
 						count := 0
 						for dev, cur := range curDisk {
 							if prev, ok := prevDiskIO[dev]; ok {
-								readKBps  += float64(cur.sectorsRead-prev.sectorsRead)       * 512 / 1024 / dtSec
-								writeKBps += float64(cur.sectorsWritten-prev.sectorsWritten) * 512 / 1024 / dtSec
+								readMBps  += float64(cur.sectorsRead-prev.sectorsRead)       * 512 / 1_048_576 / dtSec
+								writeMBps += float64(cur.sectorsWritten-prev.sectorsWritten) * 512 / 1_048_576 / dtSec
 								dtMS := dtSec * 1000
 								busy := float64(cur.msIO-prev.msIO) / dtMS * 100
 								if busy > 100 {
@@ -99,8 +99,8 @@ func StartMetricsCollector(configDir string) {
 								count++
 							}
 						}
-						db.Record("disk_read_kbps",  readKBps,  now)
-						db.Record("disk_write_kbps", writeKBps, now)
+						db.Record("disk_read_mbps",  readMBps,  now)
+						db.Record("disk_write_mbps", writeMBps, now)
 						if count > 0 {
 							db.Record("disk_busy_pct", busyTotal/float64(count), now)
 						}
@@ -207,6 +207,49 @@ type netStat struct {
 	txBytes uint64
 }
 
+// GetIfaceIPv4s returns a map of external interface name → first IPv4 address.
+func GetIfaceIPv4s() map[string]string {
+	result := make(map[string]string)
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return result
+	}
+	for _, iface := range ifaces {
+		if !isExternalInterface(iface.Name) {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip != nil && ip.To4() != nil {
+				result[iface.Name] = ip.String()
+				break
+			}
+		}
+	}
+	return result
+}
+
+// isExternalInterface returns true for physical/bonded/wireless interfaces.
+// It excludes loopback, container, and virtual interfaces by name prefix.
+func isExternalInterface(name string) bool {
+	for _, pfx := range []string{"lo", "docker", "veth", "virbr", "br-", "tun", "tap", "vxlan", "dummy"} {
+		if strings.HasPrefix(name, pfx) {
+			return false
+		}
+	}
+	return true
+}
+
 func readNetStats() map[string]netStat {
 	f, err := os.Open("/proc/net/dev")
 	if err != nil {
@@ -228,8 +271,8 @@ func readNetStats() map[string]netStat {
 			continue
 		}
 		iface := strings.TrimSpace(parts[0])
-		if iface == "lo" {
-			continue // skip loopback
+		if !isExternalInterface(iface) {
+			continue
 		}
 		fields := strings.Fields(parts[1])
 		if len(fields) < 9 {

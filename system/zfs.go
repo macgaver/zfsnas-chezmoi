@@ -22,7 +22,9 @@ type Pool struct {
 	UsableUsed  uint64   `json:"usable_used"`  // root dataset used (zfs list)
 	UsableAvail uint64   `json:"usable_avail"` // root dataset avail (zfs list)
 	Health      string   `json:"health"`
-	Members     []string `json:"members"` // physical device paths in the pool
+	Members     []string `json:"members"`    // physical device paths in the pool
+	VdevType    string   `json:"vdev_type"`  // "stripe" | "mirror" | "raidz1" | "raidz2"
+	Operation   string   `json:"operation"`  // "" | "scrubbing" | "resilvering" | "expanding"
 	SizeStr     string   `json:"size_str"`
 	AllocStr    string   `json:"alloc_str"`
 	FreeStr     string   `json:"free_str"`
@@ -47,7 +49,9 @@ func GetPool() (*Pool, error) {
 	p.UsableUsed, p.UsableAvail = poolRootUsage(p.Name)
 	p.UsableSize = p.UsableUsed + p.UsableAvail
 	// Populate member devices from `zpool status -P`.
-	p.Members = poolMembers(p.Name)
+	p.Members    = poolMembers(p.Name)
+	p.VdevType   = poolVdevType(p.Name)
+	p.Operation  = poolOperation(p.Name)
 	return p, nil
 }
 
@@ -150,7 +154,7 @@ func resolveDevPath(p string) string {
 }
 
 // CreatePool creates a new ZFS pool.
-// layout: "stripe" | "raidz1" | "raidz2"
+// layout: "stripe" | "mirror" | "raidz1" | "raidz2"
 // ashift: 9, 12, or 13
 // compression: "off" | "lz4" | "zstd"
 func CreatePool(name, layout string, ashift int, compression string, devices []string) error {
@@ -162,7 +166,7 @@ func CreatePool(name, layout string, ashift int, compression string, devices []s
 		args = append(args, "-O", "compression="+compression)
 	}
 	args = append(args, name)
-	if layout == "raidz1" || layout == "raidz2" {
+	if layout == "mirror" || layout == "raidz1" || layout == "raidz2" {
 		args = append(args, layout)
 	}
 	args = append(args, devices...)
@@ -342,6 +346,67 @@ func GetZFSVersion() (major, minor, patch int, err error) {
 	return
 }
 
+// poolVdevType inspects `zpool status` and returns the top-level vdev type:
+// "raidz1", "raidz2", "mirror", or "stripe" (default when no named vdev is found).
+func poolVdevType(poolName string) string {
+	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	if err != nil {
+		return "stripe"
+	}
+	inConfig := false
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "config:") {
+			inConfig = true
+			continue
+		}
+		if !inConfig {
+			continue
+		}
+		fields := strings.Fields(trimmed)
+		if len(fields) == 0 {
+			continue
+		}
+		name := fields[0]
+		if strings.HasPrefix(name, "raidz2") {
+			return "raidz2"
+		}
+		if strings.HasPrefix(name, "raidz") { // raidz or raidz1
+			return "raidz1"
+		}
+		if strings.HasPrefix(name, "mirror") {
+			return "mirror"
+		}
+	}
+	return "stripe"
+}
+
+// poolOperation returns the current background operation on the pool:
+// "scrubbing", "resilvering", "expanding", or "" when idle.
+func poolOperation(poolName string) string {
+	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "scan:") {
+			rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "scan:"))
+			if strings.HasPrefix(rest, "scrub in progress") {
+				return "scrubbing"
+			}
+			if strings.HasPrefix(rest, "resilver in progress") {
+				return "resilvering"
+			}
+		}
+		// RAIDZ expansion shows as "expanding" in the config section.
+		if strings.Contains(trimmed, "expanding") {
+			return "expanding"
+		}
+	}
+	return ""
+}
+
 // getRaidzVdev returns the first raidz vdev name (e.g. "raidz1-0") from the
 // pool config, or an empty string if the pool is a stripe.
 func getRaidzVdev(poolName string) string {
@@ -386,10 +451,22 @@ func GrowPoolRaidz(name string, devices []string) error {
 	return nil
 }
 
-// GrowPool adds devices to an existing pool (zpool add).
+// GrowPool adds devices to an existing pool as a stripe vdev (zpool add).
 func GrowPool(name string, devices []string) error {
 	args := append([]string{"zpool", "add", "-f", name}, devices...)
 	debugLog("zpool add: %v", args)
+	out, err := exec.Command("sudo", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// GrowPoolWithVdev adds devices to an existing pool as a specific vdev type.
+// vdev must be "mirror", "raidz1", or "raidz2".
+func GrowPoolWithVdev(name, vdev string, devices []string) error {
+	args := append([]string{"zpool", "add", "-f", name, vdev}, devices...)
+	debugLog("zpool add vdev %s: %v", vdev, args)
 	out, err := exec.Command("sudo", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))

@@ -7,16 +7,32 @@ import (
 	"zfsnas/system"
 )
 
-var allMetricSeries = []string{
+var staticMetricSeries = []string{
 	"cpu_pct",
 	"mem_used_pct",
 	"mem_cache_pct",
 	"mem_app_pct",
-	"net_rx_kbps",
-	"net_tx_kbps",
-	"disk_read_kbps",
-	"disk_write_kbps",
+	"disk_read_mbps",
+	"disk_write_mbps",
 	"disk_busy_pct",
+}
+
+// buildDashboardKeys returns the full set of metric series to query: static series
+// plus any per-NIC net_{iface}_rx / net_{iface}_tx series present in the RRD.
+func buildDashboardKeys(db *rrd.DB) []string {
+	keys := make([]string, len(staticMetricSeries))
+	copy(keys, staticMetricSeries)
+	for _, k := range db.Keys() {
+		if strings.HasPrefix(k, "net_") && (strings.HasSuffix(k, "_rx") || strings.HasSuffix(k, "_tx")) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+// HandleGetNetIfaces returns a map of external interface name → IPv4 address.
+func HandleGetNetIfaces(w http.ResponseWriter, r *http.Request) {
+	jsonOK(w, system.GetIfaceIPv4s())
 }
 
 // HandleGetDashboardMetrics returns RRD time-series data for the dashboard charts.
@@ -28,7 +44,7 @@ func HandleGetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keys := allMetricSeries
+	keys := buildDashboardKeys(db)
 	if q := r.URL.Query().Get("series"); q != "" {
 		keys = strings.Split(q, ",")
 	}
