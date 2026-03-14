@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  ZFS NAS Portal — Quick Installer for Debian / Ubuntu
-#  Script version 1.1
+#  Script version 1.2
 #  https://github.com/macgaver/zfsnas-chezmoi
 #
 #  Usage (run as root or with sudo):
@@ -151,15 +151,49 @@ else
 fi
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
-header "Installing dependencies"
+header "Checking and installing dependencies"
 
 apt-get update -qq
-apt-get install -y -q --no-install-recommends \
-  curl \
-  ca-certificates \
-  sudo \
-  bash
-success "Base dependencies ready"
+
+# Map: "command" → "package(s) to install"
+# Only tools actually invoked by the portal binary are listed here.
+declare -A REQUIRED_CMDS=(
+  [curl]="curl"
+  [sudo]="sudo"
+  [lsblk]="util-linux"
+  [blkid]="util-linux"
+  [wipefs]="util-linux"
+  [sgdisk]="gdisk"
+  [partprobe]="parted"
+  [smartctl]="smartmontools"
+  [nvme]="nvme-cli"
+  [udevadm]="udev"
+  [timedatectl]="systemd"
+  [exportfs]="nfs-kernel-server"
+  [smbpasswd]="samba"
+)
+
+PKGS_TO_INSTALL=()
+for _cmd in "${!REQUIRED_CMDS[@]}"; do
+  if ! command -v "${_cmd}" &>/dev/null; then
+    _pkg="${REQUIRED_CMDS[$_cmd]}"
+    warn "Missing command '${_cmd}' — will install package '${_pkg}'"
+    PKGS_TO_INSTALL+=("${_pkg}")
+  fi
+done
+
+# Deduplicate and install
+if [[ ${#PKGS_TO_INSTALL[@]} -gt 0 ]]; then
+  # Sort + unique
+  mapfile -t PKGS_TO_INSTALL < <(printf '%s\n' "${PKGS_TO_INSTALL[@]}" | sort -u)
+  info "Installing missing packages: ${PKGS_TO_INSTALL[*]}"
+  apt-get install -y -q --no-install-recommends "${PKGS_TO_INSTALL[@]}"
+fi
+
+# Always ensure ca-certificates and bash are present
+apt-get install -y -q --no-install-recommends ca-certificates bash &>/dev/null
+
+success "All dependencies satisfied"
 
 # ── Create zfsnas user ────────────────────────────────────────────────────────
 header "Creating system user"
