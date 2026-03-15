@@ -68,6 +68,15 @@ const (
 	ActionPoolRecovered  = "pool_recovered"
 	ActionDiskProblem    = "disk_problem"
 	ActionDiskRecovered  = "disk_recovered"
+	// 2FA events.
+	Action2FAEnabled  = "2fa_enabled"
+	Action2FADisabled = "2fa_disabled"
+	// Encryption key events.
+	ActionGenerateKey = "generate_key"
+	ActionImportKey   = "import_key"
+	ActionDeleteKey   = "delete_key"
+	ActionLoadKey     = "load_key"
+	ActionUnloadKey   = "unload_key"
 )
 
 var (

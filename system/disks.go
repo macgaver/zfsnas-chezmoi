@@ -7,28 +7,38 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
+// SmartAttr is one row from the SMART attribute table.
+type SmartAttr struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Value int    `json:"value"` // normalised value
+	Raw   string `json:"raw"`   // raw value (human-readable string)
+}
+
 // DiskInfo describes a physical disk detected on the system.
 type DiskInfo struct {
-	Name       string    `json:"name"`
-	Device     string    `json:"device"`
-	Size       string    `json:"size"`
-	SizeBytes  uint64    `json:"size_bytes"`
-	Vendor     string    `json:"vendor"`
-	Model      string    `json:"model"`
-	Serial     string    `json:"serial"`
-	Transport  string    `json:"transport"`
-	DiskType   string    `json:"disk_type"` // HDD, SSD, NVMe
-	Rotational bool      `json:"rotational"`
-	WearoutPct *int      `json:"wearout_pct"` // nil = N/A
-	TempC      *int      `json:"temp_c"`      // nil = not available
-	SmartOK    bool      `json:"smart_ok"`
-	SmartMsg   string    `json:"smart_msg"`
-	InUse      bool      `json:"in_use"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	Name       string      `json:"name"`
+	Device     string      `json:"device"`
+	Size       string      `json:"size"`
+	SizeBytes  uint64      `json:"size_bytes"`
+	Vendor     string      `json:"vendor"`
+	Model      string      `json:"model"`
+	Serial     string      `json:"serial"`
+	Transport  string      `json:"transport"`
+	DiskType   string      `json:"disk_type"` // HDD, SSD, NVMe
+	Rotational bool        `json:"rotational"`
+	WearoutPct *int        `json:"wearout_pct"` // nil = N/A
+	TempC      *int        `json:"temp_c"`      // nil = not available
+	SmartOK    bool        `json:"smart_ok"`
+	SmartMsg   string      `json:"smart_msg"`
+	SmartAttrs []SmartAttr `json:"smart_attrs,omitempty"` // full attribute table
+	InUse      bool        `json:"in_use"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
 const smartCacheFile = "smart_cache.json"
@@ -127,6 +137,7 @@ func ListDisks(configDir string) ([]DiskInfo, error) {
 			info.TempC      = c.TempC
 			info.SmartOK    = c.SmartOK
 			info.SmartMsg   = c.SmartMsg
+			info.SmartAttrs = c.SmartAttrs
 			info.Serial     = c.Serial
 			info.UpdatedAt  = c.UpdatedAt
 		}
@@ -222,6 +233,18 @@ func querySMARTATA(info *DiskInfo) {
 	}
 
 	for _, attr := range s.AtaSmartAttributes.Table {
+		// Collect full attribute table for the detail popup.
+		rawStr := attr.Raw.String
+		if rawStr == "" {
+			rawStr = strconv.Itoa(attr.Raw.Value)
+		}
+		info.SmartAttrs = append(info.SmartAttrs, SmartAttr{
+			ID:    attr.ID,
+			Name:  attr.Name,
+			Value: attr.Value,
+			Raw:   rawStr,
+		})
+
 		// Temperature from attribute table (ID 194 or 190) if not already set.
 		if info.TempC == nil {
 			id := attr.ID
@@ -289,11 +312,23 @@ func querySMARTNVMe(info *DiskInfo) {
 		info.TempC = &t
 	}
 
-	// Use whichever field is non-zero (nvme-cli versions differ in field name).
+	// Build pseudo-attribute table from NVMe health log fields.
 	worn := nlog.PercentageUsed
 	if nlog.PercentUsed > worn {
 		worn = nlog.PercentUsed
 	}
+	info.SmartAttrs = []SmartAttr{
+		{ID: 0, Name: "Critical_Warning",   Value: nlog.CriticalWarning, Raw: fmt.Sprintf("0x%02x", nlog.CriticalWarning)},
+		{ID: 1, Name: "Avail_Spare",        Value: nlog.AvailSpare,        Raw: strconv.Itoa(nlog.AvailSpare) + "%"},
+		{ID: 2, Name: "Avail_Spare_Thresh", Value: nlog.AvailSpareThresh,  Raw: strconv.Itoa(nlog.AvailSpareThresh) + "%"},
+		{ID: 3, Name: "Percentage_Used",    Value: worn,                   Raw: strconv.Itoa(worn) + "%"},
+		{ID: 4, Name: "Power_Cycles",       Value: nlog.PowerCycles,       Raw: strconv.Itoa(nlog.PowerCycles)},
+		{ID: 5, Name: "Power_On_Hours",     Value: nlog.PowerOnHours,      Raw: strconv.Itoa(nlog.PowerOnHours) + " h"},
+		{ID: 6, Name: "Unsafe_Shutdowns",   Value: nlog.UnsafeShutdowns,   Raw: strconv.Itoa(nlog.UnsafeShutdowns)},
+		{ID: 7, Name: "Media_Errors",       Value: nlog.MediaErrors,       Raw: strconv.Itoa(nlog.MediaErrors)},
+		{ID: 8, Name: "Num_Err_Log_Entries",Value: nlog.NumErrLogEntries,  Raw: strconv.Itoa(nlog.NumErrLogEntries)},
+	}
+
 	if worn < 0 {
 		worn = 0
 	}
@@ -352,17 +387,25 @@ type smartctlOutput struct {
 			Name  string `json:"name"`
 			Value int    `json:"value"`
 			Raw   struct {
-				Value int `json:"value"`
+				Value  int    `json:"value"`
+				String string `json:"string"`
 			} `json:"raw"`
 		} `json:"table"`
 	} `json:"ata_smart_attributes"`
 }
 
 type nvmeSmartLog struct {
-	CriticalWarning int `json:"critical_warning"`
-	PercentageUsed  int `json:"percentage_used"` // nvme-cli 1.x field name
-	PercentUsed     int `json:"percent_used"`     // nvme-cli 2.x field name
-	Temperature     int `json:"temperature"`      // Kelvin (nvme smart-log)
+	CriticalWarning    int `json:"critical_warning"`
+	PercentageUsed     int `json:"percentage_used"` // nvme-cli 1.x field name
+	PercentUsed        int `json:"percent_used"`    // nvme-cli 2.x field name
+	Temperature        int `json:"temperature"`     // Kelvin (nvme smart-log)
+	AvailSpare         int `json:"avail_spare"`
+	AvailSpareThresh   int `json:"spare_thresh"`
+	PowerCycles        int `json:"power_cycles"`
+	PowerOnHours       int `json:"power_on_hours"`
+	UnsafeShutdowns    int `json:"unsafe_shutdowns"`
+	MediaErrors        int `json:"media_errors"`
+	NumErrLogEntries   int `json:"num_err_log_entries"`
 }
 
 // ---- Cache helpers ----
@@ -531,6 +574,46 @@ func formatBytes(b uint64) string {
 
 // RescanDisks asks the kernel to probe for newly connected physical disks by
 // writing "- - -" to every SCSI host scan file, then waits for udev to settle.
+// WipeDisk destroys all partition tables and filesystem signatures on the device.
+// This is irreversible. The device must not be mounted or in use by a ZFS pool.
+func WipeDisk(device string) error {
+	// Step 1: wipe filesystem signatures on every existing partition while
+	// the kernel still knows about them. This removes NTFS/ext4/etc. superblocks
+	// that live inside the partition, not on the disk itself.
+	if parts, err := filepath.Glob(device + "[0-9]*"); err == nil {
+		for _, p := range parts {
+			exec.Command("sudo", "wipefs", "-a", p).Run() //nolint — best-effort
+		}
+	}
+	// Also handle nvme partitions (nvme0n1p1, nvme0n1p2, …)
+	if parts, err := filepath.Glob(device + "p[0-9]*"); err == nil {
+		for _, p := range parts {
+			exec.Command("sudo", "wipefs", "-a", p).Run() //nolint
+		}
+	}
+
+	// Step 2: zero the first and last 2 MiB so no residual superblocks remain.
+	exec.Command("sudo", "dd", "if=/dev/zero", "of="+device, //nolint
+		"bs=1M", "count=2", "conv=fsync", "status=none").Run()
+
+	// Step 3: zap all partition tables (MBR, GPT, BSD disklabels).
+	// sgdisk exits non-zero on corrupt GPT even when it successfully destroys it,
+	// so treat it as best-effort; wipefs below is the authoritative cleanup.
+	exec.Command("sudo", "sgdisk", "--zap-all", device).Run() //nolint
+
+	// Step 4: wipe any remaining signatures on the whole disk.
+	if out, err := exec.Command("sudo", "wipefs", "-a", device).CombinedOutput(); err != nil {
+		return fmt.Errorf("wipefs -a %s: %s", device, strings.TrimSpace(string(out)))
+	}
+
+	// Step 5: tell the kernel the partition table changed and wait for udev
+	// to remove stale by-partuuid symlinks before returning.
+	exec.Command("sudo", "partprobe", device).Run()              //nolint
+	exec.Command("sudo", "udevadm", "settle", "--timeout=5").Run() //nolint
+
+	return nil
+}
+
 func RescanDisks() error {
 	hosts, err := filepath.Glob("/sys/class/scsi_host/host*/scan")
 	if err != nil {

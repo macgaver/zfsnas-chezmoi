@@ -39,6 +39,9 @@ type Pool struct {
 	Dedup       string   `json:"dedup"`        // root dataset dedup
 	Sync        string   `json:"sync"`         // root dataset sync
 	Atime       string   `json:"atime"`        // root dataset atime
+	Encrypted            bool   `json:"encrypted"`             // encryption property != "off"
+	KeyLocked            bool   `json:"key_locked"`            // keystatus == "unavailable"
+	EncryptionAlgorithm  string `json:"encryption_algorithm"`  // e.g. "aes-256-gcm", "" when off
 }
 
 // GetPool returns the single imported pool, or nil if none exists.
@@ -67,6 +70,7 @@ func GetPool() (*Pool, error) {
 	p.VdevType   = poolVdevType(p.Name)
 	p.Operation  = poolOperation(p.Name)
 	p.Compression, p.Dedup, p.Sync, p.Atime = poolRootProps(p.Name)
+	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	return p, nil
 }
 
@@ -115,6 +119,7 @@ func GetAllPools() ([]*Pool, error) {
 		p.VdevType  = poolVdevType(p.Name)
 		p.Operation = poolOperation(p.Name)
 		p.Compression, p.Dedup, p.Sync, p.Atime = poolRootProps(p.Name)
+		p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 		pools = append(pools, p)
 	}
 	return pools, nil
@@ -144,6 +149,7 @@ func GetPoolByName(name string) (*Pool, error) {
 	p.VdevType  = poolVdevType(p.Name)
 	p.Operation = poolOperation(p.Name)
 	p.Compression, p.Dedup, p.Sync, p.Atime = poolRootProps(p.Name)
+	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	return p, nil
 }
 
@@ -706,7 +712,8 @@ func PrepareZFSPartition(device string) (string, error) {
 // ashift: 9, 12, or 13
 // compression: "off" | "lz4" | "zstd"
 // dedup: "off" | "on" | "verify"
-func CreatePool(name, layout string, ashift int, compression, dedup string, devices []string) error {
+// keyFilePath: absolute path to 32-byte raw key file, or "" for no encryption
+func CreatePool(name, layout string, ashift int, compression, dedup string, devices []string, keyFilePath string) error {
 	// Prepare each disk and collect the stable partuuid paths.
 	partuuidPaths := make([]string, 0, len(devices))
 	for _, dev := range devices {
@@ -720,6 +727,13 @@ func CreatePool(name, layout string, ashift int, compression, dedup string, devi
 	args := []string{"zpool", "create",
 		"-o", fmt.Sprintf("ashift=%d", ashift),
 		"-O", "atime=off",
+	}
+	if keyFilePath != "" {
+		args = append(args,
+			"-O", "encryption=aes-256-gcm",
+			"-O", "keyformat=raw",
+			"-O", "keylocation=file://"+keyFilePath,
+		)
 	}
 	if compression != "off" {
 		args = append(args, "-O", "compression="+compression)
@@ -819,23 +833,25 @@ func parseScrubInfo(output string) *ScrubInfo {
 			if idx := strings.Index(rest, "since "); idx >= 0 {
 				info.StartTime = strings.TrimSpace(rest[idx+6:])
 			}
-			// Next line: "  9.99% done, 0 days 00:15:00 to go"
-			if i+1 < len(lines) {
-				next := strings.TrimSpace(lines[i+1])
+			// ZFS 2.x outputs an extra statistics line before the "% done" line:
+			//   line i+1: "35.5G scanned at 887M/s, 6.18G issued at 154M/s, 3.61T total"
+			//   line i+2: "0B repaired, 0.17% done, 0 days 00:39:09 to go"
+			// Older ZFS puts "% done" directly on line i+1. Search up to 4 lines ahead.
+			for j := i + 1; j < len(lines) && j <= i+4; j++ {
+				next := strings.TrimSpace(lines[j])
 				if pctIdx := strings.Index(next, "% done"); pctIdx > 0 {
 					pctStr := strings.TrimSpace(next[:pctIdx])
-					// might be "  9.99" — take last word
 					parts := strings.Fields(pctStr)
 					if len(parts) > 0 {
 						fmt.Sscanf(parts[len(parts)-1], "%f", &info.ProgressPct)
 					}
-				}
-				if toGoIdx := strings.Index(next, " to go"); toGoIdx > 0 {
-					// extract between ", " and " to go"
-					commaIdx := strings.LastIndex(next[:toGoIdx], ", ")
-					if commaIdx >= 0 {
-						info.TimeLeft = strings.TrimSpace(next[commaIdx+2 : toGoIdx])
+					if toGoIdx := strings.Index(next, " to go"); toGoIdx > 0 {
+						commaIdx := strings.LastIndex(next[:toGoIdx], ", ")
+						if commaIdx >= 0 {
+							info.TimeLeft = strings.TrimSpace(next[commaIdx+2 : toGoIdx])
+						}
 					}
+					break
 				}
 			}
 
@@ -933,6 +949,117 @@ func poolRootProps(name string) (compression, dedup, sync_, atime string) {
 		}
 	}
 	return
+}
+
+// poolEncryptionStatus returns (encrypted, keyLocked, algorithm) for a ZFS pool.
+// algorithm is the raw ZFS property value (e.g. "aes-256-gcm") or "" when off.
+func poolEncryptionStatus(name string) (encrypted, keyLocked bool, algorithm string) {
+	out, err := exec.Command("sudo", "zfs", "get", "-Hp", "-o", "property,value",
+		"encryption,keystatus", name).Output()
+	if err != nil {
+		return false, false, ""
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) < 2 {
+			continue
+		}
+		switch f[0] {
+		case "encryption":
+			if f[1] != "off" && f[1] != "-" {
+				encrypted = true
+				algorithm = f[1]
+			}
+		case "keystatus":
+			keyLocked = f[1] == "unavailable"
+		}
+	}
+	return
+}
+
+// GetEncryptionStatus returns the raw encryption property value for a dataset ("aes-256-gcm", "off", etc.).
+func GetEncryptionStatus(name string) string {
+	out, err := exec.Command("sudo", "zfs", "get", "-Hp", "-o", "value", "encryption", name).Output()
+	if err != nil {
+		return "off"
+	}
+	v := strings.TrimSpace(string(out))
+	if v == "" {
+		return "off"
+	}
+	return v
+}
+
+// GetKeyStatus returns the keystatus property value ("available", "unavailable", or "-").
+func GetKeyStatus(name string) string {
+	out, err := exec.Command("sudo", "zfs", "get", "-Hp", "-o", "value", "keystatus", name).Output()
+	if err != nil {
+		return "-"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// GetKeyLocation returns the keylocation property value for a dataset.
+func GetKeyLocation(name string) string {
+	out, err := exec.Command("sudo", "zfs", "get", "-Hp", "-o", "value", "keylocation", name).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// LoadPoolKey loads the encryption key for a pool so it can be accessed.
+// keyFilePath must be the absolute path to the 32-byte raw key file.
+func LoadPoolKey(poolName, keyFilePath string) error {
+	out, err := exec.Command("sudo", "zfs", "load-key",
+		"-L", "file://"+keyFilePath, poolName).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zfs load-key: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// MountDataset mounts a ZFS dataset. Silently ignores "already mounted" errors.
+func MountDataset(name string) error {
+	out, err := exec.Command("sudo", "zfs", "mount", name).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if strings.Contains(msg, "already mounted") {
+			return nil
+		}
+		return fmt.Errorf("zfs mount: %s", msg)
+	}
+	return nil
+}
+
+// MountUnlockedChildren mounts all encrypted-but-unlocked datasets that are
+// children of parent (prefix match) and are not yet mounted.
+func MountUnlockedChildren(parent string) {
+	datasets, err := ListAllDatasets()
+	if err != nil {
+		return
+	}
+	for _, d := range datasets {
+		if d.Name == parent {
+			continue
+		}
+		if !strings.HasPrefix(d.Name, parent+"/") {
+			continue
+		}
+		if d.Encrypted && !d.KeyLocked && !d.Mounted &&
+			d.Mountpoint != "none" && d.Mountpoint != "legacy" && d.CanMount != "off" {
+			MountDataset(d.Name)
+		}
+	}
+}
+
+// UnloadPoolKey unloads the encryption key for a pool (locks it).
+func UnloadPoolKey(poolName string) error {
+	out, err := exec.Command("sudo", "zfs", "unload-key", poolName).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zfs unload-key: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // SetPoolProperties sets one or more ZFS properties on the pool's root dataset.
@@ -1175,7 +1302,12 @@ type Dataset struct {
 	AvailStr         string `json:"avail_str"`
 	QuotaStr         string `json:"quota_str"`
 	RefreservationStr string `json:"refreservation_str"`
-	Depth            int    `json:"depth"` // 0 = pool root
+	Depth            int    `json:"depth"`     // 0 = pool root
+	Encrypted           bool   `json:"encrypted"`            // encryption != "off"
+	KeyLocked           bool   `json:"key_locked"`           // keystatus == "unavailable"
+	EncryptionAlgorithm string `json:"encryption_algorithm"` // e.g. "aes-256-gcm", "" when off
+	Mounted             bool   `json:"mounted"`              // zfs mounted == "yes"
+	CanMount            string `json:"canmount"`             // on|off|noauto
 }
 
 // DatasetCreateOptions holds all properties for creating a new dataset.
@@ -1189,6 +1321,7 @@ type DatasetCreateOptions struct {
 	CaseSensitivity string
 	RecordSize      string // raw ZFS value e.g. "128K", "inherit", ""
 	Comment         string
+	KeyFilePath     string // non-empty → create with AES-256-GCM encryption, key at this path
 }
 
 // ListDatasets returns all datasets under poolName as a flat list (pool root first).
@@ -1212,7 +1345,7 @@ func ListAllDatasets() ([]Dataset, error) {
 func ListDatasets(poolName string) ([]Dataset, error) {
 	out, err := exec.Command("sudo", "zfs", "list", "-Hp", "-r",
 		"-t", "filesystem",
-		"-o", "name,used,avail,refer,quota,refquota,compression,compressratio,recordsize,mountpoint,sync,dedup,casesensitivity,refreservation,zfsnas:comment",
+		"-o", "name,used,avail,refer,quota,refquota,compression,compressratio,recordsize,mountpoint,sync,dedup,casesensitivity,refreservation,zfsnas:comment,encryption,keystatus,mounted,canmount",
 		poolName).Output()
 	if err != nil {
 		return nil, fmt.Errorf("zfs list failed: %w", err)
@@ -1255,6 +1388,25 @@ func parseDatasetLine(line, poolName string) (Dataset, error) {
 	if comment == "-" {
 		comment = ""
 	}
+	// Fields 15 (encryption), 16 (keystatus), 17 (mounted) are present when the zfs
+	// list command includes them; older output without them is tolerated.
+	var dsEncrypted, dsKeyLocked bool
+	var dsEncAlgo string
+	dsMounted := true // assume mounted unless ZFS explicitly says "no"
+	if len(f) >= 17 {
+		if f[15] != "off" && f[15] != "-" {
+			dsEncrypted = true
+			dsEncAlgo = f[15]
+		}
+		dsKeyLocked = f[16] == "unavailable"
+	}
+	dsCanMount := "on"
+	if len(f) >= 18 {
+		dsMounted = f[17] == "yes"
+	}
+	if len(f) >= 19 {
+		dsCanMount = f[18]
+	}
 
 	// Derive human-readable record size string.
 	recordSizeRaw := formatBytesShort(recordSize)
@@ -1286,12 +1438,24 @@ func parseDatasetLine(line, poolName string) (Dataset, error) {
 		QuotaStr:          zeroOrBytes(quota),
 		RefreservationStr: zeroOrBytes(refreservation),
 		Depth:             depth,
+		Encrypted:           dsEncrypted,
+		KeyLocked:           dsKeyLocked,
+		EncryptionAlgorithm: dsEncAlgo,
+		Mounted:             dsMounted,
+		CanMount:            dsCanMount,
 	}, nil
 }
 
 // CreateDataset creates a new ZFS filesystem with the given options.
 func CreateDataset(name string, opts DatasetCreateOptions) error {
 	args := []string{"zfs", "create"}
+	if opts.KeyFilePath != "" {
+		args = append(args,
+			"-o", "encryption=aes-256-gcm",
+			"-o", "keyformat=raw",
+			"-o", "keylocation=file://"+opts.KeyFilePath,
+		)
+	}
 	if opts.Quota > 0 {
 		qt := "quota"
 		if opts.QuotaType == "refquota" {

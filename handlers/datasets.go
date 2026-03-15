@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"zfsnas/internal/audit"
+	"zfsnas/internal/keystore"
 	"zfsnas/system"
 
 	"github.com/gorilla/mux"
@@ -40,6 +41,7 @@ func HandleCreateDataset(w http.ResponseWriter, r *http.Request) {
 		CaseSensitivity string `json:"case_sensitivity"`
 		RecordSize      string `json:"record_size"`
 		Comment         string `json:"comment"`
+		KeyID           string `json:"key_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -57,6 +59,15 @@ func HandleCreateDataset(w http.ResponseWriter, r *http.Request) {
 		req.Compression = "inherit"
 	}
 
+	var keyFilePath string
+	if req.KeyID != "" {
+		if !keystore.Exists(req.KeyID) {
+			jsonErr(w, http.StatusBadRequest, "encryption key not found")
+			return
+		}
+		keyFilePath = keystore.KeyFilePath(req.KeyID)
+	}
+
 	opts := system.DatasetCreateOptions{
 		Quota:           req.Quota,
 		QuotaType:       req.QuotaType,
@@ -67,6 +78,7 @@ func HandleCreateDataset(w http.ResponseWriter, r *http.Request) {
 		CaseSensitivity: req.CaseSensitivity,
 		RecordSize:      req.RecordSize,
 		Comment:         strings.TrimSpace(req.Comment),
+		KeyFilePath:     keyFilePath,
 	}
 	if err := system.CreateDataset(req.Name, opts); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
@@ -204,4 +216,52 @@ func HandleDeleteDataset(w http.ResponseWriter, r *http.Request) {
 	})
 
 	jsonOK(w, map[string]string{"message": "dataset deleted"})
+}
+
+// HandleLoadDatasetKey loads an encryption key for a locked dataset and mounts it.
+// Body: {"key_id": "<uuid>"}
+func HandleLoadDatasetKey(w http.ResponseWriter, r *http.Request) {
+	path := mux.Vars(r)["path"]
+	if path == "" {
+		jsonErr(w, http.StatusBadRequest, "dataset path required")
+		return
+	}
+	var req struct {
+		KeyID string `json:"key_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.KeyID == "" {
+		jsonErr(w, http.StatusBadRequest, "key_id is required")
+		return
+	}
+	if !keystore.Exists(req.KeyID) {
+		jsonErr(w, http.StatusBadRequest, "key not found")
+		return
+	}
+	keyPath := keystore.KeyFilePath(req.KeyID)
+	if err := system.LoadPoolKey(path, keyPath); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load key: "+err.Error())
+		return
+	}
+	// Persist the keylocation so autoLoadEncryptionKeys can reload it after reboot.
+	if err := system.SetDatasetProps(path, map[string]string{
+		"keylocation": "file://" + keyPath,
+	}); err != nil {
+		// Non-fatal: key is loaded now, just won't survive reboot.
+		_ = err
+	}
+	if err := system.MountDataset(path); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "key loaded but mount failed: "+err.Error())
+		return
+	}
+	// Mount any unlocked child datasets that weren't auto-mounted.
+	system.MountUnlockedChildren(path)
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:   sess.Username,
+		Role:   sess.Role,
+		Action: audit.ActionLoadKey,
+		Target: path,
+		Result: audit.ResultOK,
+	})
+	jsonOK(w, map[string]string{"message": "key loaded and dataset mounted"})
 }

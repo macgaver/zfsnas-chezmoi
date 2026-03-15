@@ -14,6 +14,7 @@
   <script src="/static/vendor/xterm.min.js"></script>
   <script src="/static/vendor/xterm-addon-fit.min.js"></script>
   <script src="/static/vendor/chart.umd.min.js"></script>
+  <script src="/static/vendor/qrcode.min.js"></script>
   <style>
     /* Pool bar tooltip */
     .pool-tooltip {
@@ -196,9 +197,9 @@
     <button class="nav-item" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">📈</span><span class="nav-label"> Performance</span></button>
 
     <div class="sidebar-section">Storage</div>
-    <button class="nav-item" onclick="showPage('disks')"     id="nav-disks">    <span class="nav-icon">💿</span><span class="nav-label"> Physical Disks</span></button>
+    <button class="nav-item" onclick="showPage('disks')"     id="nav-disks">    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg></span><span class="nav-label"> Physical Disks</span><span id="nav-disks-dot" style="display:none;width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0;"></span></button>
     <button class="nav-item" onclick="showPage('pool')"      id="nav-pool">     <span class="nav-icon">🗄</span><span class="nav-label"> ZFS Pool</span><span id="nav-pool-dot" style="display:none;width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0;"></span></button>
-    <button class="nav-item" onclick="showPage('datasets')"  id="nav-datasets"> <span class="nav-icon">📁</span><span class="nav-label"> Datasets</span></button>
+    <button class="nav-item" onclick="showPage('datasets')"  id="nav-datasets"> <span class="nav-icon">📁</span><span class="nav-label"> Datasets</span><span id="nav-datasets-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#f0b429;margin-left:auto;flex-shrink:0;box-shadow:0 0 4px rgba(240,180,41,0.6);"></span></button>
     <button class="nav-item" onclick="showPage('snapshots')" id="nav-snapshots"><span class="nav-icon">📸</span><span class="nav-label"> Snapshots</span></button>
 
     <div class="sidebar-section">Sharing</div>
@@ -208,7 +209,7 @@
     <div class="sidebar-section">System</div>
     <button class="nav-item" onclick="showPage('users')"     id="nav-users">    <span class="nav-icon">👤</span><span class="nav-label"> Users</span></button>
     <button class="nav-item" onclick="showPage('prereqs')"   id="nav-prereqs">  <span class="nav-icon">🔧</span><span class="nav-label"> Prerequisites</span><span id="prereq-alert-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#f0b429;margin-left:auto;flex-shrink:0;box-shadow:0 0 4px rgba(240,180,41,0.6);"></span></button>
-    <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span><span class="nav-label"> Updates</span></button>
+    <button class="nav-item" onclick="showPage('updates')"   id="nav-updates">  <span class="nav-icon">⬆</span><span class="nav-label"> Updates / System</span><span id="nav-updates-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#f0b429;margin-left:auto;flex-shrink:0;box-shadow:0 0 4px rgba(240,180,41,0.6);"></span></button>
     <button class="nav-item" onclick="toggleTermPanel()"     id="nav-terminal"> <span class="nav-icon">⌨</span><span class="nav-label"> Terminal</span></button>
     <button class="nav-item" onclick="showPage('settings')"  id="nav-settings"> <span class="nav-icon">⚙</span><span class="nav-label"> Settings</span></button>
     <button class="nav-item" onclick="openAbout()"            id="nav-about">    <span class="nav-icon">ℹ</span><span class="nav-label"> About / Support</span></button>
@@ -532,11 +533,18 @@
               style="position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);
                      border:1px solid var(--border);border-radius:var(--radius-sm);
                      box-shadow:var(--shadow);z-index:60;min-width:150px;overflow:hidden;">
+              <button onclick="openPowerModal('restart-portal')"
+                style="display:block;width:100%;padding:10px 16px;text-align:left;
+                       background:none;border:none;color:var(--text-1);cursor:pointer;font-size:14px;"
+                onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+                ↻ Restart Portal
+              </button>
+              <div style="height:1px;background:var(--border);margin:2px 0;"></div>
               <button onclick="openPowerModal('reboot')"
                 style="display:block;width:100%;padding:10px 16px;text-align:left;
                        background:none;border:none;color:var(--text-1);cursor:pointer;font-size:14px;"
                 onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
-                ↺ Reboot
+                ↺ Reboot Server
               </button>
               <button onclick="openPowerModal('shutdown')"
                 style="display:block;width:100%;padding:10px 16px;text-align:left;
@@ -696,6 +704,38 @@
           <button class="btn btn-primary btn-sm" onclick="saveTimezone()">Apply Timezone</button>
         </div>
 
+        <!-- Encryption Key Management -->
+        <div class="card" id="card-key-mgmt">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div>
+              <h3 style="margin-bottom:2px;">Encryption Key Management</h3>
+              <div style="font-size:13px;color:var(--text-3);">Manage AES-256 key files used for ZFS pool encryption.</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="showImportKeySettings()">Import Key</button>
+              <button class="btn btn-primary btn-sm" onclick="showGenerateKeySettings()">Generate New Key</button>
+            </div>
+          </div>
+          <div id="key-mgmt-gen-wrap" class="hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+            <input type="text" id="key-mgmt-gen-name" placeholder="Key name (e.g. tank-key)" style="flex:1;" oninput="document.getElementById('btn-key-mgmt-gen').disabled=!this.value.trim();">
+            <button class="btn btn-primary btn-sm" id="btn-key-mgmt-gen" onclick="doGenerateKeySettings()" disabled>Create</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('key-mgmt-gen-wrap').classList.add('hidden')">Cancel</button>
+          </div>
+          <div id="key-mgmt-import-wrap" class="hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <input type="text" id="key-mgmt-import-name" placeholder="Key name" style="flex:1;">
+              <input type="file" id="key-mgmt-import-file" accept=".json" style="flex:1.5;">
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary btn-sm" onclick="doImportKeySettings()">Import</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('key-mgmt-import-wrap').classList.add('hidden')">Cancel</button>
+            </div>
+          </div>
+          <div id="key-mgmt-settings-list">
+            <div style="color:var(--text-3);font-size:13px;">Loading…</div>
+          </div>
+        </div>
+
         <!-- Alerts card -->
         <div class="card">
           <h3 style="margin-bottom:4px;">Email Alerts</h3>
@@ -703,56 +743,71 @@
           <div id="alerts-alert" class="alert alert-error hidden"></div>
           <div id="alerts-ok"    class="alert alert-success hidden" style="margin-bottom:16px;"></div>
 
-          <div class="al-section-title">SMTP Configuration</div>
-          <div class="form-group">
-            <label>Host</label>
-            <input type="text" id="al-host" placeholder="smtp.example.com">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 150px;gap:12px;">
-            <div class="form-group">
-              <label>Port</label>
-              <input type="number" id="al-port" value="587" min="1" max="65535">
-            </div>
-            <div class="form-group">
-              <label>Auth Mode</label>
-              <select id="al-auth" onchange="updateAuthFields()">
-                <option value="none">None</option>
-                <option value="plain">PLAIN</option>
-                <option value="starttls" selected>STARTTLS</option>
-                <option value="tls">TLS</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>From Address</label>
-            <input type="email" id="al-from" placeholder="nas@example.com">
-          </div>
-          <div id="al-auth-fields">
-            <div class="form-group">
-              <label>Username</label>
-              <input type="text" id="al-username" placeholder="SMTP username" autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label>Password</label>
-              <input type="password" id="al-password" placeholder="SMTP password" autocomplete="new-password">
-            </div>
-          </div>
           <div class="form-group">
             <label>Recipients <span style="color:var(--text-3);font-weight:400;">(one email per line)</span></label>
             <textarea id="al-to" rows="3" placeholder="admin@example.com&#10;ops@example.com" style="resize:vertical;"></textarea>
           </div>
 
-          <div class="al-section-title">Event Subscriptions</div>
-          <div>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-pool">    <span>Pool health degraded (DEGRADED / FAULTED)</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-smart">   <span>SMART error detected on any disk</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-wearout"> <span>Disk wearout exceeds <input type="number" id="al-wearout-pct" value="80" min="1" max="100" onclick="event.stopPropagation()">% <i class="info-tip tip-left tip-down" data-tip="Sends an alert when any SSD/NVMe reports wearout above this threshold. Wearout % is derived from SMART attribute 177 (wear levelling count) or 231 (SSD life left). HDDs without an endurance rating are excluded."></i></span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-login">   <span>Failed logins exceed <input type="number" id="al-login-count" value="5" min="1" max="1000" onclick="event.stopPropagation()"> attempts</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-updates"> <span>Ubuntu security updates available</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-scrub">   <span>Scrub completed with errors</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-snapshot"><span>Snapshot auto-policy failure</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-users">   <span>User created / deleted</span></label>
-            <label class="al-event-row"><input type="checkbox" id="al-ev-shares">  <span>Share created / deleted</span></label>
+          <!-- Collapsible SMTP Configuration -->
+          <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+            <button type="button" onclick="toggleSMTPConfig()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;color:var(--text-2);font-size:13px;font-weight:600;">
+              <span>SMTP Configuration</span>
+              <span id="al-smtp-chevron" style="transition:transform .15s;color:var(--text-3);">▶</span>
+            </button>
+            <div id="al-smtp-body" style="display:none;padding:0 14px 14px;">
+              <div class="form-group">
+                <label>Host</label>
+                <input type="text" id="al-host" placeholder="smtp.example.com">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 150px;gap:12px;">
+                <div class="form-group">
+                  <label>Port</label>
+                  <input type="number" id="al-port" value="587" min="1" max="65535">
+                </div>
+                <div class="form-group">
+                  <label>Auth Mode</label>
+                  <select id="al-auth" onchange="updateAuthFields()">
+                    <option value="none">None</option>
+                    <option value="plain">PLAIN</option>
+                    <option value="starttls" selected>STARTTLS</option>
+                    <option value="tls">TLS</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>From Address</label>
+                <input type="email" id="al-from" placeholder="nas@example.com">
+              </div>
+              <div id="al-auth-fields">
+                <div class="form-group">
+                  <label>Username</label>
+                  <input type="text" id="al-username" placeholder="SMTP username" autocomplete="off">
+                </div>
+                <div class="form-group">
+                  <label>Password</label>
+                  <input type="password" id="al-password" placeholder="SMTP password" autocomplete="new-password">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Collapsible Event Subscriptions -->
+          <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+            <button type="button" onclick="toggleEventSubs()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;color:var(--text-2);font-size:13px;font-weight:600;">
+              <span>Event Subscriptions</span>
+              <span id="al-events-chevron" style="transition:transform .15s;color:var(--text-3);">▶</span>
+            </button>
+            <div id="al-events-body" style="display:none;padding:0 14px 14px;">
+              <label class="al-event-row"><input type="checkbox" id="al-ev-pool">    <span>Pool health degraded (DEGRADED / FAULTED)</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-smart">   <span>SMART error detected on any disk</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-wearout"> <span>Disk wearout exceeds <input type="number" id="al-wearout-pct" value="80" min="1" max="100" onclick="event.stopPropagation()">% <i class="info-tip tip-left tip-down" data-tip="Sends an alert when any SSD/NVMe reports wearout above this threshold. Wearout % is derived from SMART attribute 177 (wear levelling count) or 231 (SSD life left). HDDs without an endurance rating are excluded."></i></span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-login">   <span>Failed logins exceed <input type="number" id="al-login-count" value="5" min="1" max="1000" onclick="event.stopPropagation()"> attempts</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-updates"> <span>Ubuntu security updates available</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-scrub">   <span>Scrub completed with errors</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-snapshot"><span>Snapshot auto-policy failure</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-users">   <span>User created / deleted</span></label>
+              <label class="al-event-row"><input type="checkbox" id="al-ev-shares">  <span>Share created / deleted</span></label>
+            </div>
           </div>
 
           <div style="display:flex;gap:8px;margin-top:20px;">
@@ -1104,6 +1159,7 @@
         <div class="stat-row"><span class="stat-label">Sync mode</span><span id="dsd-sync" class="stat-value"></span></div>
         <div class="stat-row"><span class="stat-label">Deduplication</span><span id="dsd-dedup" class="stat-value"></span></div>
         <div class="stat-row"><span class="stat-label">Case sensitivity</span><span id="dsd-case" class="stat-value"></span></div>
+        <div class="stat-row"><span class="stat-label">Encryption</span><span id="dsd-enc" class="stat-value"></span></div>
         <div class="stat-row"><span class="stat-label">Mountpoint</span><span id="dsd-mount" class="stat-value" style="font-family:'SF Mono',monospace;font-size:12px;word-break:break-all;"></span></div>
         <div id="dsd-comment-row" class="stat-row" style="display:none;">
           <span class="stat-label">Comment</span>
@@ -1121,12 +1177,12 @@
 <!-- Pool Cache Config Modal -->
 <!-- ===== Pool Settings Modal ===== -->
 <div class="modal-backdrop hidden" id="modal-pool-settings" onclick="if(event.target===this)closePoolSettingsModal()">
-  <div class="modal" style="max-width:540px;">
+  <div class="modal" style="max-width:540px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
       <h3>⚙ Pool Settings</h3>
       <button class="modal-close" onclick="closePoolSettingsModal()">✕</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body" style="overflow-y:auto;flex:1;">
       <div id="pool-settings-alert" class="alert alert-error hidden"></div>
       <p class="text-2 text-sm" style="margin-bottom:20px;">These settings apply to the pool's root dataset and are inherited by all datasets unless overridden.</p>
 
@@ -1146,6 +1202,27 @@
         <div>
           <label style="font-size:13px;font-weight:500;color:var(--text-2);display:block;margin-bottom:8px;">Access Time (atime) <i class="info-tip tip-down" data-tip="When enabled, ZFS updates the access timestamp on every file read. This causes extra write I/O and is rarely useful. Keeping atime OFF is recommended for NAS workloads."></i></label>
           <div style="display:flex;flex-direction:column;gap:6px;" id="ps-atime-btns"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Encryption key section — visible only when pool is encrypted and key is locked -->
+    <div id="ps-enc-section" style="display:none;border-top:1px solid var(--border);padding:16px 24px 0;">
+      <div style="border:1px solid var(--accent-warn, #f0b429);border-radius:6px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);">
+          <span>🔒</span>
+          <span style="font-weight:600;flex:1;">Encryption Key Not Loaded</span>
+        </div>
+        <div style="padding:12px;border-top:1px solid var(--border);">
+          <p style="font-size:0.85em;color:var(--text3);margin:0 0 10px 0;">Select a key to load and mount this pool.</p>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Encryption Key</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="ps-enc-key" style="flex:1;">
+                <option value="">— select a key —</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openKeyMgmtModal('ps')" style="white-space:nowrap;">Manage Keys</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1211,6 +1288,22 @@
       <button class="btn" id="btn-pool-upgrade-confirm"
         style="background:var(--accent-2);color:#fff;"
         onclick="submitPoolUpgrade()">Confirm Upgrade</button>
+    </div>
+  </div>
+</div>
+
+<!-- SMART Detail Modal -->
+<div class="modal-backdrop hidden" id="modal-smart-detail" onclick="if(event.target===this)closeSmartDetail()">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-header">
+      <h3 id="smart-detail-title">SMART Details</h3>
+      <button class="modal-close" onclick="closeSmartDetail()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+      <div id="smart-detail-body"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSmartDetail()">Close</button>
     </div>
   </div>
 </div>
@@ -1412,7 +1505,7 @@
 
 <!-- Edit User Modal -->
 <div class="modal-backdrop hidden" id="modal-edit-user">
-  <div class="modal" style="max-width:440px;">
+  <div class="modal" style="max-width:440px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
       <div>
         <h3 style="margin-bottom:2px;">Edit User</h3>
@@ -1420,7 +1513,8 @@
       </div>
       <button class="modal-close" onclick="closeEditUser()">✕</button>
     </div>
-    <div class="modal-body">
+    <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;">
+    <div class="modal-body" id="eu-modal-body" style="overflow-y:auto;flex:1;" onscroll="_euCheckScroll()">
       <div id="edit-user-alert" class="alert alert-error hidden"></div>
       <div id="edit-user-ok"    class="alert alert-success hidden" style="margin-bottom:12px;"></div>
       <div class="form-group">
@@ -1443,6 +1537,36 @@
       <div id="eu-smb-hint" class="hidden" style="font-size:13px;color:var(--text-3);margin-top:4px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);">
         SMB-Only users do not have a portal password. Use "Set SMB Password" to manage their Samba credentials.
       </div>
+
+      <!-- 2FA section — only shown when editing own account -->
+      <div id="eu-2fa-section" class="hidden" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">Two-Factor Authentication</div>
+            <div id="eu-2fa-status-label" style="font-size:12px;color:var(--text-3);margin-top:2px;">Loading…</div>
+          </div>
+          <button id="eu-2fa-toggle-btn" class="btn btn-sm btn-ghost" onclick="toggle2FA()" style="min-width:90px;"></button>
+        </div>
+        <!-- Setup flow: shown when user clicks Enable -->
+        <div id="eu-2fa-setup" class="hidden">
+          <div style="font-size:13px;color:var(--text-2);margin-bottom:12px;">Scan the QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.)</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:12px;">
+            <div id="eu-2fa-qr" style="background:#fff;padding:12px;border-radius:8px;display:inline-block;"></div>
+            <div style="font-size:12px;color:var(--text-3);">Or enter manually:</div>
+            <code id="eu-2fa-secret-display" style="font-size:13px;letter-spacing:2px;word-break:break-all;background:var(--surface2);padding:6px 10px;border-radius:6px;color:var(--text-1);"></code>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label>Verify setup — enter the 6-digit code from your app</label>
+            <input type="text" id="eu-2fa-verify-code" maxlength="6" placeholder="000000" autocomplete="one-time-code"
+                   style="font-size:20px;letter-spacing:6px;text-align:center;font-family:monospace;"
+                   oninput="onTOTPCodeInput()">
+          </div>
+          <div id="eu-2fa-verify-alert" class="alert alert-error hidden" style="margin-bottom:8px;"></div>
+          <div id="eu-2fa-verify-ok" class="alert alert-success hidden" style="margin-bottom:8px;">Code verified — click Save Changes to enable 2FA.</div>
+        </div>
+      </div>
+    </div>
+    <div id="eu-scroll-hint" style="position:absolute;bottom:0;left:0;right:0;height:36px;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;background:linear-gradient(transparent,var(--surface));transition:opacity 0.15s;"><span style="color:var(--text-3);font-size:14px;">▼</span></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeEditUser()">Cancel</button>
@@ -1481,10 +1605,10 @@
 
 <!-- Create Dataset Modal -->
 <div class="modal-backdrop hidden" id="modal-create-dataset">
-  <div class="modal" style="max-width:540px;">
+  <div class="modal" style="max-width:540px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header"><h3>Create Dataset</h3><button class="modal-close" onclick="closeCreateDataset()">✕</button></div>
     <div id="cds-alert" class="alert alert-error hidden"></div>
-    <form onsubmit="submitCreateDataset(event)">
+    <form onsubmit="submitCreateDataset(event)" style="overflow-y:auto;flex:1;">
       <div class="form-group">
         <label>Parent</label>
         <select id="cds-parent"></select>
@@ -1562,6 +1686,32 @@
           </select>
         </div>
       </div>
+      <!-- Encryption section -->
+      <div id="cds-enc-section" style="margin-top:12px;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);cursor:pointer;" onclick="toggleCDSEncryption()">
+          <span style="font-size:1em;">🔒</span>
+          <span style="font-weight:600;flex:1;">Encryption</span>
+          <span id="cds-enc-badge" style="font-size:0.78em;color:var(--text3);">Off</span>
+          <span id="cds-enc-chevron" style="font-size:0.8em;color:var(--text3);">▶</span>
+        </div>
+        <div id="cds-enc-body" style="display:none;padding:12px;border-top:1px solid var(--border);">
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="cds-enc-enable" onchange="onCDSEncChange()">
+              Enable AES-256-GCM encryption for this dataset
+            </label>
+          </div>
+          <div id="cds-enc-key-row" style="display:none;" class="form-group" style="margin-bottom:0;">
+            <label>Encryption Key</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="cds-enc-key" style="flex:1;">
+                <option value="">— select a key —</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openKeyMgmtModal('cds')" style="white-space:nowrap;">Manage Keys</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="form-group" style="margin-top:12px;">
         <label>Comment</label>
         <textarea id="cds-comment" rows="2" placeholder="Optional description for this dataset" style="resize:vertical;"></textarea>
@@ -1576,13 +1726,13 @@
 
 <!-- Edit Dataset Modal -->
 <div class="modal-backdrop hidden" id="modal-edit-dataset">
-  <div class="modal" style="max-width:540px;">
+  <div class="modal" style="max-width:540px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
       <div><h3>Edit Dataset</h3><div class="text-3 text-sm" id="eds-name" style="font-family:monospace;"></div></div>
       <button class="modal-close" onclick="closeEditDataset()">✕</button>
     </div>
     <div id="eds-alert" class="alert alert-error hidden"></div>
-    <form onsubmit="submitEditDataset(event)">
+    <form onsubmit="submitEditDataset(event)" style="overflow-y:auto;flex:1;">
       <div class="form-group">
         <label>Quota (0 = no limit) <i class="info-tip tip-down" data-tip="quota: caps the total space used by the dataset including snapshots and descendant datasets.&#10;&#10;refquota: caps only the dataset's own data — snapshots and children are not counted against the limit."></i></label>
         <div style="display:flex;gap:8px;">
@@ -1642,6 +1792,25 @@
             <option value="on">On</option>
             <option value="verify">Verify</option>
           </select>
+        </div>
+      </div>
+      <!-- Encryption key load section — shown only when dataset key is locked -->
+      <div id="eds-enc-section" style="display:none;margin-top:12px;border:1px solid var(--accent-warn, #f0b429);border-radius:6px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);">
+          <span>🔒</span>
+          <span style="font-weight:600;flex:1;">Encryption Key Not Loaded</span>
+        </div>
+        <div style="padding:12px;border-top:1px solid var(--border);">
+          <p style="font-size:0.85em;color:var(--text3);margin:0 0 10px 0;">Select a key to load and mount this dataset.</p>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Encryption Key</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="eds-enc-key" style="flex:1;">
+                <option value="">— select a key —</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openKeyMgmtModal('eds')" style="white-space:nowrap;">Manage Keys</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="form-group" style="margin-top:12px;">
@@ -2262,6 +2431,82 @@
   </div>
 </div>
 
+<!-- Encryption Key Management Modal -->
+<div class="modal-backdrop hidden" id="modal-key-mgmt" onclick="if(event.target===this)closeKeyMgmtModal()">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h3>🔑 Encryption Key Management</h3>
+      <button class="modal-close" onclick="closeKeyMgmtModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="key-mgmt-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+
+      <!-- Generate new key -->
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-end;">
+        <div class="form-group" style="flex:1;margin-bottom:0;">
+          <label style="font-size:12px;">New key name</label>
+          <input type="text" id="key-mgmt-generate-name" placeholder="e.g. tank-key" autocomplete="off"
+                 onkeydown="if(event.key==='Enter')generateKey()">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="generateKey()" style="margin-bottom:1px;">Generate New</button>
+      </div>
+
+      <!-- Import key -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:flex-end;">
+        <div class="form-group" style="flex:1;margin-bottom:0;">
+          <label style="font-size:12px;">Import name</label>
+          <input type="text" id="km-import-name" placeholder="e.g. backup-key" autocomplete="off">
+        </div>
+        <div class="form-group" style="flex:1.2;margin-bottom:0;">
+          <label style="font-size:12px;">Key file (.json)</label>
+          <input type="file" id="km-import-file" accept=".json">
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="importKey()" style="margin-bottom:1px;">Import</button>
+      </div>
+
+      <!-- Keys table -->
+      <div class="table-wrap" style="overflow:visible;">
+        <table>
+          <thead><tr>
+            <th>Name</th><th>Created</th><th>Used By</th><th></th>
+          </tr></thead>
+          <tbody id="key-mgmt-tbody">
+            <tr><td colspan="4" style="color:var(--text-3);text-align:center;padding:16px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeKeyMgmtModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Wipe Disk Confirm Modal -->
+<div class="modal-backdrop hidden" id="modal-wipe-disk" onclick="if(event.target===this)closeWipeDiskModal()">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h3 style="color:#ff453a;">⚠ Wipe Disk</h3>
+      <button class="modal-close" onclick="closeWipeDiskModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-2);margin-bottom:16px;">This will <strong>permanently destroy</strong> all partition tables and filesystem signatures on:</p>
+      <div style="font-family:monospace;font-size:15px;font-weight:700;color:#ff453a;background:var(--surface2);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:16px;" id="wipe-disk-device-name"></div>
+      <p style="color:var(--text-3);font-size:13px;margin-bottom:16px;">This action cannot be undone. Type the device path to confirm:</p>
+      <div class="form-group" style="margin-bottom:8px;">
+        <input type="text" id="wipe-disk-confirm-input" placeholder="e.g. /dev/sdb"
+               autocomplete="off" spellcheck="false"
+               oninput="onWipeDiskInput()" style="font-family:monospace;">
+      </div>
+      <div id="wipe-disk-alert" class="alert alert-error hidden" style="margin-bottom:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeWipeDiskModal()">Cancel</button>
+      <button class="btn btn-danger" id="btn-wipe-disk-confirm" onclick="confirmWipeDisk()" disabled>Wipe Disk</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ===== Constants =====
 const COLORS = [
@@ -2318,9 +2563,13 @@ let _dashCharts      = {};
   checkPrereqsBanner();
   await refreshPoolBar();
   updateServiceNavDots();
+  updateDatasetNavDot();
+  updateDiskNavDot();
   // Refresh pool bar every 60s.
   setInterval(refreshPoolBar, 60000);
   setInterval(updateServiceNavDots, 60000);
+  setInterval(updateDatasetNavDot, 60000);
+  setInterval(updateDiskNavDot, 300000); // refresh disk dot every 5 min
   startIOPoller();
 })();
 
@@ -2347,7 +2596,7 @@ function showPage(name) {
   if (name !== 'pool')      _clearPoolStatusInterval();
   if (name === 'shares')    loadShares();
   if (name === 'nfs')       loadNFSShares();
-  if (name === 'settings')  { loadSettings(); loadAlerts(); }
+  if (name === 'settings')  { loadSettings(); loadAlerts(); loadKeyMgmtSettings(); }
   if (name === 'updates')   initUpdatesPage();
   if (name !== 'dashboard') { clearInterval(_dashRefreshTimer); _dashRefreshTimer = null; }
   if (name === 'dashboard') loadDashboard();
@@ -2788,8 +3037,17 @@ function openEditUser(id) {
   document.getElementById('eu-role-self-hint').classList.toggle('hidden', !isSelf);
 
   onEditRoleChange();
+  init2FASection(u);
   document.getElementById('modal-edit-user').classList.remove('hidden');
-  setTimeout(() => document.getElementById('eu-email').focus(), 50);
+  setTimeout(() => { document.getElementById('eu-email').focus(); _euCheckScroll(); }, 50);
+}
+
+function _euCheckScroll() {
+  const body = document.getElementById('eu-modal-body');
+  const hint = document.getElementById('eu-scroll-hint');
+  if (!body || !hint) return;
+  const atBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 4;
+  hint.style.opacity = atBottom ? '0' : '1';
 }
 
 function closeEditUser() {
@@ -3222,6 +3480,20 @@ async function saveSmbSettings() {
 }
 
 // ===== Alerts =====
+function toggleEventSubs() {
+  const body    = document.getElementById('al-events-body');
+  const chevron = document.getElementById('al-events-chevron');
+  const open    = body.style.display !== 'none';
+  body.style.display      = open ? 'none' : 'block';
+  chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+function toggleSMTPConfig() {
+  const body    = document.getElementById('al-smtp-body');
+  const chevron = document.getElementById('al-smtp-chevron');
+  const open    = body.style.display !== 'none';
+  body.style.display        = open ? 'none' : 'block';
+  chevron.style.transform   = open ? 'rotate(0deg)' : 'rotate(90deg)';
+}
 async function loadAlerts() {
   try {
     const resp = await fetch('/api/alerts');
@@ -3624,11 +3896,60 @@ function updatePoolNavDot() {
     if (h === 'DEGRADED' || h === 'OFFLINE') worst = 'DEGRADED';
   }
 
-  const color = worst === 'ONLINE'  ? 'var(--accent-3)' :
-                worst === 'DEGRADED' ? 'var(--accent-warn)' : 'var(--accent-danger)';
+  // Also show yellow when any encrypted pool has its key locked.
+  const anyKeyLocked = allPoolsData.some(p => p.encrypted && p.key_locked);
+
+  // Show blue when any pool has an active informational operation (scrub, resilver, expand).
+  const anyActiveOp = allPoolsData.some(p => p.operation === 'scrubbing' || p.operation === 'resilvering' || p.operation === 'expanding');
+
+  const color = worst === 'FAULTED'  ? 'var(--accent-danger)' :
+                worst === 'DEGRADED' ? 'var(--accent-warn)'   :
+                anyKeyLocked         ? '#f0b429'               :
+                anyActiveOp          ? '#0a84ff'               :
+                                       'var(--accent-3)';
   dot.style.display = 'block';
   dot.style.background = color;
   dot.style.boxShadow = `0 0 5px ${color}`;
+}
+
+// Called after datasetCache is updated to reflect current mount state in the dot.
+function _applyDatasetNavDot() {
+  const dot = document.getElementById('nav-datasets-dot');
+  if (!dot) return;
+  if (!datasetCache.length) { dot.style.display = 'none'; return; }
+  // Only flag child datasets (depth>0) with a real mountpoint that are not mounted.
+  // Pool-root datasets (depth=0) are covered by the pool dot.
+  // Datasets with mountpoint=legacy or mountpoint=none are intentionally unmanaged by ZFS.
+  const hasUnmounted = datasetCache.some(d =>
+    d.depth > 0 &&
+    d.mountpoint !== 'none' &&
+    d.mountpoint !== 'legacy' &&
+    d.canmount !== 'off' &&
+    !d.mounted
+  );
+  dot.style.display = 'inline-block';
+  dot.style.background = hasUnmounted ? '#f0b429' : 'var(--accent-3)';
+  dot.style.boxShadow = hasUnmounted ? '0 0 4px rgba(240,180,41,0.6)' : '0 0 4px rgba(48,209,88,0.6)';
+}
+
+// Lightweight fetch to keep the disk nav dot current without rendering the full page.
+async function updateDiskNavDot() {
+  try {
+    const resp = await fetch('/api/disks');
+    if (!resp.ok) return;
+    _diskCache = await resp.json() || [];
+  } catch { return; }
+  _applyDiskNavDot(_diskCache);
+}
+
+// Lightweight fetch to keep the datasets dot current without rendering the full page.
+async function updateDatasetNavDot() {
+  try {
+    const resp = await fetch('/api/datasets');
+    if (!resp.ok) return;
+    datasetCache = await resp.json() || [];
+  } catch { return; }
+  _applyDatasetNavDot();
 }
 
 async function updateServiceNavDots() {
@@ -3682,7 +4003,8 @@ function _renderPoolTabTitle() {
     ).join('');
     titleEl.innerHTML = `<select id="pool-tab-selector" onchange="switchPoolTab(this.value)" style="appearance:none;-webkit-appearance:none;background:rgba(59,130,246,0.12) url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E&quot;) no-repeat right 10px center;border:1.5px solid rgba(59,130,246,0.40);border-radius:8px;color:#3b82f6;font-size:inherit;font-weight:600;cursor:pointer;font-family:inherit;padding:4px 34px 4px 12px;outline:none;line-height:inherit;">${opts}</select>`;
   } else {
-    titleEl.textContent = 'ZFS Pool';
+    const pool = allPoolsData[0];
+    titleEl.innerHTML = 'ZFS Pool' + (pool && pool.encrypted ? lockSVG(pool.key_locked) : '');
   }
 }
 
@@ -3795,7 +4117,7 @@ function renderPoolExists(el, pool) {
     return `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-        <span style="font-size:18px;${isOffline ? 'opacity:.4;' : ''}">💿</span>
+        <span style="${isOffline ? 'opacity:.4;' : ''}">${diskSVG(18)}</span>
         <div style="min-width:0;">
           <div style="font-family:monospace;font-size:13px;font-weight:600;">${esc(devPath)}${stateLabel}${sn ? ` <span style="font-weight:400;color:var(--text-3);font-size:11px;">(${esc(sn)})</span>` : ''}</div>
           ${showUuid ? `<div style="font-family:monospace;font-size:10px;color:var(--text-3);margin-top:2px;">${esc(uuid)}</div>` : ''}
@@ -3872,6 +4194,7 @@ function renderPoolExists(el, pool) {
         <div class="stat-row"><span class="stat-label">Dedup</span><span class="stat-value">${esc(pool.dedup||'—')}</span></div>
         <div class="stat-row"><span class="stat-label">Sync</span><span class="stat-value">${esc(pool.sync||'—')}</span></div>
         <div class="stat-row"><span class="stat-label">Access time</span><span class="stat-value">${esc(pool.atime||'—')}</span></div>
+        <div class="stat-row"><span class="stat-label">Encryption</span><span class="stat-value">${pool.encrypted ? `${esc(pool.encryption_algorithm||'on')} ${pool.key_locked ? '<span style="color:#ff9f0a;font-size:11px;">🔓 key not loaded</span>' : '<span style="color:var(--accent-3);font-size:11px;">🔒 unlocked</span>'}` : '<span style="color:var(--text-3);">off</span>'}</span></div>
         ${currentUser.role==='admin' ? `
         <button class="btn btn-ghost btn-sm" style="margin-top:16px;width:100%;" onclick="openPoolSettingsModal()">⚙ Edit Pool Settings</button>` : ''}
       </div>
@@ -3891,12 +4214,27 @@ function renderPoolExists(el, pool) {
         </div>
       </div>
       <div id="scrub-status-body"><div style="color:var(--text-3);font-size:13px;">Loading scrub status…</div></div>
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-          <input type="checkbox" id="scrub-weekly-toggle" style="width:15px;height:15px;accent-color:var(--accent-2);"
-            onchange="setScrubSchedule(this.checked)">
-          Auto-scrub weekly (Sunday 02:00) <i class="info-tip tip-down" style="margin-left:4px;" data-tip="When enabled, a scrub is scheduled via cron every Sunday at 02:00 local time. A scrub typically takes minutes to hours depending on pool size, and runs at low I/O priority."></i>
-        </label>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <span style="font-size:13px;font-weight:600;color:var(--text-1);">Auto-Scrub Schedule</span>
+          <i class="info-tip tip-down" style="cursor:pointer;" onclick="openScrubScheduleHelp()"></i>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <select id="scrub-schedule-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-1);padding:5px 10px;font-size:13px;cursor:pointer;" onchange="setScrubSchedule()">
+            <option value="">Off</option>
+            <option value="weekly">Weekly (every Sunday)</option>
+            <option value="biweekly">Bi-Weekly (1st &amp; 3rd Sunday)</option>
+            <option value="monthly">Monthly (1st of month)</option>
+            <option value="2months">Every 2 Months</option>
+            <option value="4months">Every 4 Months</option>
+          </select>
+          <div id="scrub-hour-wrap" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);">
+            at
+            <select id="scrub-hour-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-1);padding:5px 8px;font-size:13px;cursor:pointer;" onchange="setScrubSchedule()">
+            </select>
+            :00
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -3983,6 +4321,35 @@ function renderPoolCreate(el, options) {
         <label>Select Disks <span id="cp-disk-hint" class="text-3" style="font-size:12px;">(loading…)</span></label>
         <div id="cp-disks" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
           <div style="padding:16px;color:var(--text-3);text-align:center;">Loading available disks…</div>
+        </div>
+      </div>
+
+      <!-- Advanced Security (optional) -->
+      <div style="margin-top:16px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+        <button type="button" onclick="toggleCPSecurity()" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 16px;background:none;border:none;cursor:pointer;color:var(--text-2);font-size:13px;font-weight:600;">
+          <span>🔐 Advanced Security (optional)</span>
+          <span id="cp-security-chevron" style="transition:transform .15s;">▶</span>
+        </button>
+        <div id="cp-security-body" style="display:none;padding:0 16px 16px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px;">
+            <input type="checkbox" id="cp-encrypt-cb" onchange="onCPEncryptChange()" style="width:16px;height:16px;accent-color:var(--accent-2);">
+            <div>
+              <div style="font-weight:600;font-size:13px;">Enable Pool Encryption</div>
+              <div style="font-size:12px;color:var(--text-3);margin-top:2px;">ZFS native AES-256-GCM. Key is stored on this server and loaded automatically at startup.</div>
+            </div>
+          </label>
+          <div id="cp-encrypt-options" style="display:none;padding:12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;">
+                <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:6px;">Encryption Key</label>
+                <select id="cp-key-select" style="width:100%;">
+                  <option value="">— Select a key —</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openKeyMgmtModal('cp')" style="white-space:nowrap;margin-top:18px;">Manage Keys</button>
+            </div>
+            <div id="cp-key-alert" class="alert alert-error hidden" style="margin-top:8px;"></div>
+          </div>
         </div>
       </div>
 
@@ -4091,8 +4458,18 @@ function submitCreatePool() {
     alertEl.classList.remove('hidden'); return;
   }
 
+  // Encryption validation.
+  const encrypted = !!(document.getElementById('cp-encrypt-cb') && document.getElementById('cp-encrypt-cb').checked);
+  const keyFileId = encrypted ? (document.getElementById('cp-key-select')||{}).value || '' : '';
+  if (encrypted && !keyFileId) {
+    const ka = document.getElementById('cp-key-alert');
+    if (ka) { ka.textContent = 'Select an encryption key.'; ka.classList.remove('hidden'); }
+    alertEl.textContent = 'Select an encryption key in the Advanced Security section.';
+    alertEl.classList.remove('hidden'); return;
+  }
+
   // Show styled confirmation modal instead of browser confirm().
-  window._cpPending = { name, devices };
+  window._cpPending = { name, devices, encrypted, keyFileId };
   document.getElementById('cpc-pool-name').textContent = name;
   document.getElementById('cpc-disk-list').innerHTML = devices.map(d =>
     `<div style="display:flex;align-items:center;gap:8px;font-size:13px;">
@@ -4109,7 +4486,7 @@ function closeCreatePoolConfirm() {
 }
 
 async function _doCreatePool() {
-  const { name, devices } = window._cpPending || {};
+  const { name, devices, encrypted, keyFileId } = window._cpPending || {};
   if (!name || !devices) return;
   closeCreatePoolConfirm();
 
@@ -4123,7 +4500,8 @@ async function _doCreatePool() {
     const resp = await fetch('/api/pool', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ name, layout: window._cpLayout, ashift: window._cpAshift,
-        compression: window._cpCompression, dedup: window._cpDedup, devices }),
+        compression: window._cpCompression, dedup: window._cpDedup, devices,
+        encrypted: !!encrypted, key_file_id: keyFileId || '' }),
     });
     const data = await resp.json();
     if (!resp.ok) {
@@ -4269,8 +4647,21 @@ async function _fetchScrubStatus() {
     const s    = await sResp.json();
     const sched = schedResp.ok ? await schedResp.json() : {};
 
-    const tog = document.getElementById('scrub-weekly-toggle');
-    if (tog) tog.checked = !!sched.weekly_scrub;
+    // Populate schedule selects
+    const schedSel = document.getElementById('scrub-schedule-select');
+    const hourSel  = document.getElementById('scrub-hour-select');
+    const hourWrap = document.getElementById('scrub-hour-wrap');
+    if (hourSel && hourSel.options.length === 0) {
+      for (let h = 0; h < 24; h++) {
+        const opt = document.createElement('option');
+        opt.value = h;
+        opt.textContent = String(h).padStart(2, '0') + ':00';
+        hourSel.appendChild(opt);
+      }
+    }
+    if (schedSel) schedSel.value = sched.schedule || '';
+    if (hourSel)  hourSel.value  = sched.hour ?? 2;
+    if (hourWrap) hourWrap.style.display = sched.schedule ? 'flex' : 'none';
 
     // Actions bar
     const isAdmin = currentUser && currentUser.role === 'admin';
@@ -4334,12 +4725,94 @@ async function stopScrub() {
   _fetchScrubStatus();
 }
 
-async function setScrubSchedule(enabled) {
+async function setScrubSchedule() {
+  const schedule = document.getElementById('scrub-schedule-select')?.value ?? '';
+  const hour     = parseInt(document.getElementById('scrub-hour-select')?.value ?? '2', 10);
+  const hourWrap = document.getElementById('scrub-hour-wrap');
+  if (hourWrap) hourWrap.style.display = schedule ? 'flex' : 'none';
   await fetch('/api/pool/scrub/schedule', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ weekly_scrub: enabled }),
+    body: JSON.stringify({ schedule, hour }),
   });
+}
+
+function openScrubScheduleHelp() {
+  const existing = document.getElementById('scrub-help-modal');
+  if (existing) { existing.remove(); return; }
+  const overlay = document.createElement('div');
+  overlay.id = 'scrub-help-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = `
+    <div style="background:var(--surface1);border:1px solid var(--border);border-radius:12px;max-width:580px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.5);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px 0;">
+        <h3 style="margin:0;font-size:16px;">About ZFS Scrub Schedules</h3>
+        <button onclick="document.getElementById('scrub-help-modal').remove()" style="background:none;border:none;color:var(--text-3);font-size:20px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <div style="padding:16px 24px 24px;font-size:13px;line-height:1.7;color:var(--text-2);">
+        <p style="margin:0 0 14px;">A <strong style="color:var(--text-1);">scrub</strong> reads every block on the pool and verifies checksums. It catches silent data corruption before it spreads and, where redundancy exists (mirror, RAIDZ), repairs it automatically. It runs at low I/O priority and does not affect data availability.</p>
+
+        <div style="display:grid;gap:12px;">
+
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:16px;">📅</span>
+              <strong style="color:var(--text-1);">Weekly — Every Sunday</strong>
+              <span style="margin-left:auto;font-size:11px;background:var(--accent-2);color:#000;border-radius:4px;padding:1px 7px;font-weight:700;">RECOMMENDED</span>
+            </div>
+            <p style="margin:0 0 6px;">The gold standard for most NAS setups. Catches bit-rot quickly and gives you the fastest repair window.</p>
+            <p style="margin:0;color:var(--text-3);font-size:12px;"><strong>Best for:</strong> Home NAS, media archives, backup targets, any pool with important data, RAIDZ/mirror arrays.</p>
+          </div>
+
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:16px;">📆</span>
+              <strong style="color:var(--text-1);">Bi-Weekly — 1st &amp; 3rd Sunday</strong>
+            </div>
+            <p style="margin:0 0 6px;">A good middle ground for large pools (30 TB+) where a full scrub takes many hours and you want to avoid the I/O load every week.</p>
+            <p style="margin:0;color:var(--text-3);font-size:12px;"><strong>Best for:</strong> Large pools (&gt;20 TB) with redundancy, light-write workloads, pools with slow drives.</p>
+          </div>
+
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:16px;">🗓️</span>
+              <strong style="color:var(--text-1);">Monthly — 1st of each month</strong>
+            </div>
+            <p style="margin:0 0 6px;">Acceptable for very large pools or low-write archival storage where drives are rarely accessed and the environment is stable.</p>
+            <p style="margin:0;color:var(--text-3);font-size:12px;"><strong>Best for:</strong> Cold storage / archival pools (&gt;50 TB), stable temperature environments, pools behind UPS with no write activity.</p>
+          </div>
+
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:16px;">🕰️</span>
+              <strong style="color:var(--text-1);">Every 2 Months</strong>
+            </div>
+            <p style="margin:0 0 6px;">Runs in January, March, May, July, September, and November. Only suitable for extremely stable environments with very slow-changing data.</p>
+            <p style="margin:0;color:var(--text-3);font-size:12px;"><strong>Best for:</strong> Enormous archival pools (&gt;100 TB), tape-equivalent write-once data, environments where scrub I/O load is a concern.</p>
+          </div>
+
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:16px;">⏳</span>
+              <strong style="color:var(--text-1);">Every 4 Months</strong>
+            </div>
+            <p style="margin:0 0 6px;">Runs in January, May, and September. The minimum recommended frequency — going beyond 6 months without a scrub puts data integrity at risk even on healthy drives.</p>
+            <p style="margin:0;color:var(--text-3);font-size:12px;"><strong>Best for:</strong> Petabyte-scale archival, completely cold storage that is rarely powered on.</p>
+          </div>
+
+        </div>
+
+        <div style="margin-top:16px;padding:12px;background:rgba(255,160,0,.08);border:1px solid rgba(255,160,0,.25);border-radius:8px;font-size:12px;color:var(--text-2);">
+          <strong style="color:#ffa500;">⚠ Never disable scrubs entirely</strong> unless the pool is about to be decommissioned. Silent data corruption can accumulate undetected and even redundant pools cannot repair corrupted data if all copies are equally corrupted.
+        </div>
+
+        <div style="margin-top:14px;font-size:12px;color:var(--text-3);">
+          <strong>About the hour setting:</strong> Choose a time when I/O activity is at its lowest — typically late night or early morning. Scrubs run at low priority but will still compete with heavy workloads. The scrub will fire once at the chosen hour on the scheduled day(s).
+        </div>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 // ===== Add Disks to Pool =====
@@ -4522,7 +4995,7 @@ function _psSelect(containerId, v) {
   });
 }
 function openPoolSettingsModal() {
-  const pool = poolData;
+  const pool = allPoolsData.find(p => p.name === selectedPoolName) || poolData;
   if (!pool) return;
   document.getElementById('pool-settings-alert').classList.add('hidden');
   _psRadioGroup('ps-compression-btns', [
@@ -4546,7 +5019,29 @@ function openPoolSettingsModal() {
     ['off', 'Off', 'Recommended — no overhead on reads'],
     ['on',  'On',  'Update access time on every read'],
   ], pool.atime || 'off');
+
+  // Show encryption key section when pool key is locked.
+  const encSec = document.getElementById('ps-enc-section');
+  if (pool.encrypted && pool.key_locked) {
+    encSec.style.display = '';
+    refreshPSKeyDropdown();
+  } else {
+    encSec.style.display = 'none';
+    document.getElementById('ps-enc-key').value = '';
+  }
+
   document.getElementById('modal-pool-settings').classList.remove('hidden');
+}
+
+async function refreshPSKeyDropdown() {
+  const sel = document.getElementById('ps-enc-key');
+  const cur = sel.value;
+  try {
+    const r = await fetch('/api/encryption/keys'); const keys = await r.json();
+    sel.innerHTML = '<option value="">— select a key —</option>' +
+      (keys||[]).map(k => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
+    if (cur) sel.value = cur;
+  } catch(e) {}
 }
 function closePoolSettingsModal() {
   document.getElementById('modal-pool-settings').classList.add('hidden');
@@ -4555,6 +5050,27 @@ async function submitPoolSettings() {
   const alertEl = document.getElementById('pool-settings-alert');
   const btn     = document.getElementById('btn-pool-settings-save');
   alertEl.classList.add('hidden');
+
+  // Load encryption key first if one was selected.
+  const encKeyID = document.getElementById('ps-enc-key').value;
+  if (encKeyID) {
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Loading key…';
+    const kr = await fetch('/api/datasets/' + encodeURIComponent(selectedPoolName) + '/load-key', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({key_id: encKeyID}),
+    });
+    if (!kr.ok) {
+      const kd = await kr.json().catch(() => ({}));
+      btn.disabled = false; btn.innerHTML = 'Save Settings';
+      alertEl.textContent = kd.error || 'Failed to load encryption key.';
+      alertEl.classList.remove('hidden');
+      return;
+    }
+    // Hide enc section — key is now loaded.
+    document.getElementById('ps-enc-section').style.display = 'none';
+    // Refresh dataset dot now that children may have been mounted.
+    updateDatasetNavDot();
+  }
 
   const val = id => {
     const el = document.querySelector(`#${id} input[type=radio]:checked`);
@@ -4586,6 +5102,7 @@ async function submitPoolSettings() {
   const el = document.getElementById('pool-content');
   if (el) renderPoolExists(el, data);
   refreshActivityBar();
+  loadDatasets();
 }
 
 // ===== Pool Cache Config =====
@@ -4850,7 +5367,7 @@ function openPoolFixerWizard() {
     }).join('');
     document.getElementById('pool-fixer-content').innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:rgba(247,181,0,0.07);border:1px solid rgba(247,181,0,0.35);border-radius:var(--radius-sm);">
-        <span style="font-size:28px;line-height:1;flex-shrink:0;">💿</span>
+        <span style="flex-shrink:0;color:var(--text-2);">${diskSVG(28)}</span>
         <div>
           <div style="font-weight:600;font-size:14px;color:var(--text-1);margin-bottom:4px;">Disks detected — pool can be recovered</div>
           <div style="font-size:13px;color:var(--text-2);line-height:1.55;">Your pool is currently <strong style="color:var(--accent-danger);">SUSPENDED</strong> — all I/O has been paused to protect your data. The wizard has found <strong>${recoverable.length}</strong> disk${recoverable.length > 1 ? 's' : ''} that ZFS still considers offline but that are now physically visible on this system.</div>
@@ -5107,7 +5624,11 @@ function openPowerModal(action) {
   document.getElementById('power-modal-alert').classList.add('hidden');
   const btn = document.getElementById('btn-power-confirm');
   btn.disabled = false;
-  if (action === 'reboot') {
+  if (action === 'restart-portal') {
+    document.getElementById('power-modal-title').textContent = '↻ Restart Portal';
+    document.getElementById('power-modal-body').textContent = 'The ZFS NAS portal service will restart. Active sessions will be briefly disconnected. The page will reconnect automatically.';
+    btn.textContent = 'Restart Portal';
+  } else if (action === 'reboot') {
     document.getElementById('power-modal-title').textContent = '↺ Reboot Server';
     document.getElementById('power-modal-body').textContent = 'The server will reboot immediately. All active sessions will be disconnected. Are you sure?';
     btn.textContent = 'Reboot Now';
@@ -5131,13 +5652,22 @@ async function submitPowerAction() {
   if (!resp.ok) {
     const data = await resp.json().catch(() => ({}));
     btn.disabled = false;
-    btn.textContent = _powerAction === 'reboot' ? 'Reboot Now' : 'Shut Down Now';
+    btn.textContent = _powerAction === 'restart-portal' ? 'Restart Portal'
+                    : _powerAction === 'reboot'         ? 'Reboot Now'
+                    :                                     'Shut Down Now';
     alertEl.textContent = data.error || 'Command failed.';
     alertEl.classList.remove('hidden');
     return;
   }
   closePowerModal();
-  if (_powerAction === 'reboot') {
+  if (_powerAction === 'restart-portal') {
+    document.getElementById('reboot-wait-icon').textContent  = '↻';
+    document.getElementById('reboot-wait-title').textContent = 'Restarting Portal…';
+    document.getElementById('reboot-wait-body').textContent  = 'The portal service is restarting. This page will reconnect automatically.';
+    document.getElementById('reboot-wait-status').textContent = 'Waiting for portal…';
+    document.getElementById('modal-reboot-wait').classList.remove('hidden');
+    _startRebootWait();
+  } else if (_powerAction === 'reboot') {
     _startRebootWait();
   } else {
     document.getElementById('modal-shutdown-done').classList.remove('hidden');
@@ -5210,6 +5740,8 @@ async function loadDatasets() {
     datasetCache = await resp.json() || [];
   } catch { datasetCache = []; }
 
+  _applyDatasetNavDot();
+
   renderDatasets(el);
 }
 
@@ -5222,7 +5754,7 @@ function _datasetRow(d, showComment) {
         <div style="display:flex;align-items:center;gap:8px;padding-left:${indent}px;cursor:pointer;" onclick="openDatasetDetail('${esc(d.name)}')">
           <span style="opacity:.5;font-size:13px;">${isRoot ? '🗄' : '📁'}</span>
           <div>
-            <div style="font-weight:600;">${esc(d.short_name)}</div>
+            <div style="font-weight:600;display:flex;align-items:center;gap:4px;">${esc(d.short_name)}${d.encrypted ? lockSVG(d.key_locked) : ''}</div>
             ${d.depth>0 ? `<div class="text-3 text-xs">${esc(d.name)}</div>` : ''}
           </div>
         </div>
@@ -5286,7 +5818,7 @@ function renderDatasets(el) {
              style="color:var(--text-3);transition:transform .15s;transform:rotate(${collapsed ? '-90' : '0'}deg)">
           <polyline points="6 9 12 15 18 9"/>
         </svg>
-        <span style="font-size:14px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;">🗄 ${esc(poolName)}</span>
+        <span style="font-size:14px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:4px;">🗄 ${esc(poolName)}${(()=>{ const p=allPoolsData.find(x=>x.name===poolName); return p&&p.encrypted?lockSVG(p.key_locked):''; })()}</span>
       </div>` : '';
     const tableContent = rows
       ? `<table><thead><tr><th>Dataset</th><th>Used</th><th>Quota</th><th>Compression</th>${showComment ? '<th>Comment</th>' : ''}<th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -5301,13 +5833,16 @@ function openCreateDataset() {
   document.getElementById('modal-create-dataset').classList.remove('hidden');
   const allDs = datasetCache || [];
   const poolNames = [...new Set(allDs.map(d => d.name.split('/')[0]))];
-  document.getElementById('cds-parent').innerHTML = poolNames.length > 1
+  const parentSel = document.getElementById('cds-parent');
+  parentSel.innerHTML = poolNames.length > 1
     ? poolNames.map(pn => {
         const opts = allDs.filter(d => d.name.split('/')[0] === pn)
           .map(d => `<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');
         return `<optgroup label="${esc(pn)}">${opts}</optgroup>`;
       }).join('')
     : allDs.map(d => `<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');
+  parentSel.onchange = _updateCDSEncVisibility;
+  _updateCDSEncVisibility();
   document.getElementById('cds-alert').classList.add('hidden');
   document.getElementById('cds-name').value = '';
   document.getElementById('cds-quota-amount').value = '0';
@@ -5321,8 +5856,57 @@ function openCreateDataset() {
   document.getElementById('cds-dedup').value = 'inherit';
   document.getElementById('cds-casesensitivity').value = 'sensitive';
   document.getElementById('cds-comment').value = '';
+  // Reset encryption section
+  document.getElementById('cds-enc-body').style.display = 'none';
+  document.getElementById('cds-enc-chevron').textContent = '▶';
+  document.getElementById('cds-enc-enable').checked = false;
+  document.getElementById('cds-enc-key-row').style.display = 'none';
+  document.getElementById('cds-enc-badge').textContent = 'Off';
+  _updateCDSEncVisibility();
 }
 function closeCreateDataset() { document.getElementById('modal-create-dataset').classList.add('hidden'); }
+
+function _updateCDSEncVisibility() {
+  const parent = document.getElementById('cds-parent').value;
+  const poolName = parent ? parent.split('/')[0] : '';
+  const poolEncrypted = (allPoolsData || []).some(p => p.name === poolName && p.encrypted);
+  const encSection = document.getElementById('cds-enc-section');
+  if (poolEncrypted) {
+    encSection.style.display = 'none';
+    // Reset encryption state when hidden
+    document.getElementById('cds-enc-enable').checked = false;
+    document.getElementById('cds-enc-key-row').style.display = 'none';
+    document.getElementById('cds-enc-badge').textContent = 'Off';
+    document.getElementById('cds-enc-body').style.display = 'none';
+    document.getElementById('cds-enc-chevron').textContent = '▶';
+  } else {
+    encSection.style.display = '';
+  }
+}
+
+function toggleCDSEncryption() {
+  const body = document.getElementById('cds-enc-body');
+  const chev = document.getElementById('cds-enc-chevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  chev.textContent = open ? '▶' : '▼';
+  if (!open) refreshCDSKeyDropdown();
+}
+
+function onCDSEncChange() {
+  const enabled = document.getElementById('cds-enc-enable').checked;
+  document.getElementById('cds-enc-key-row').style.display = enabled ? 'block' : 'none';
+  document.getElementById('cds-enc-badge').textContent = enabled ? 'AES-256-GCM' : 'Off';
+}
+
+async function refreshCDSKeyDropdown() {
+  const sel = document.getElementById('cds-enc-key');
+  try {
+    const r = await fetch('/api/encryption/keys'); const keys = await r.json();
+    sel.innerHTML = '<option value="">— select a key —</option>' +
+      (keys||[]).map(k => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
+  } catch(e) {}
+}
 
 async function submitCreateDataset(e) {
   e.preventDefault();
@@ -5342,8 +5926,11 @@ async function submitCreateDataset(e) {
   const dedup         = document.getElementById('cds-dedup').value;
   const casesens      = document.getElementById('cds-casesensitivity').value;
   const comment       = document.getElementById('cds-comment').value.trim();
+  const encEnabled    = document.getElementById('cds-enc-enable').checked;
+  const keyID         = encEnabled ? document.getElementById('cds-enc-key').value : '';
 
   if (!name) { alertEl.textContent = 'Dataset name is required.'; alertEl.classList.remove('hidden'); return; }
+  if (encEnabled && !keyID) { alertEl.textContent = 'Please select an encryption key.'; alertEl.classList.remove('hidden'); return; }
 
   const fullName        = parent + '/' + name;
   const unitMap         = {'MB':1024**2,'GB':1024**3,'TB':1024**4};
@@ -5361,6 +5948,7 @@ async function submitCreateDataset(e) {
       refreservation: refreservBytes,
       compression: comp, record_size: recordsize,
       sync, dedup, case_sensitivity: casesens, comment,
+      key_id: keyID || undefined,
     }),
   });
   const data = await resp.json();
@@ -5463,8 +6051,32 @@ function openEditDataset(name) {
   document.getElementById('eds-sync').value         = d.sync || 'inherit';
   document.getElementById('eds-dedup').value        = d.dedup || 'inherit';
   document.getElementById('eds-comment').value      = d.comment || '';
+
+  // Show encryption key section only when the dataset itself has a locked key
+  // AND the pool is not the one carrying the encryption (pool-level enc is handled in pool settings).
+  const encSection = document.getElementById('eds-enc-section');
+  const poolName = name.split('/')[0];
+  const poolEncrypted = (allPoolsData || []).some(p => p.name === poolName && p.encrypted);
+  if (d.encrypted && d.key_locked && !poolEncrypted) {
+    encSection.style.display = '';
+    refreshEDSKeyDropdown();
+  } else {
+    encSection.style.display = 'none';
+    document.getElementById('eds-enc-key').value = '';
+  }
 }
 function closeEditDataset() { document.getElementById('modal-edit-dataset').classList.add('hidden'); }
+
+async function refreshEDSKeyDropdown() {
+  const sel = document.getElementById('eds-enc-key');
+  const cur = sel.value;
+  try {
+    const r = await fetch('/api/encryption/keys'); const keys = await r.json();
+    sel.innerHTML = '<option value="">— select a key —</option>' +
+      (keys||[]).map(k => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
+    if (cur) sel.value = cur;
+  } catch(e) {}
+}
 
 async function submitEditDataset(e) {
   e.preventDefault();
@@ -5481,9 +6093,25 @@ async function submitEditDataset(e) {
   const sync      = document.getElementById('eds-sync').value;
   const dedup     = document.getElementById('eds-dedup').value;
   const comment   = document.getElementById('eds-comment').value;
+  const encKeyID  = document.getElementById('eds-enc-key').value;
   const unitMap   = {'MB':1024**2,'GB':1024**3,'TB':1024**4};
   const quotaBytes      = amount > 0 ? Math.round(amount * unitMap[unit]) : 0;
   const refreservBytes  = rAmount > 0 ? Math.round(rAmount * unitMap[rUnit]) : 0;
+
+  // If a key was selected, load it before saving other properties.
+  if (encKeyID) {
+    const alertEl = document.getElementById('eds-alert');
+    const kr = await fetch('/api/datasets/' + encodeURIComponent(name) + '/load-key', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({key_id: encKeyID}),
+    });
+    if (!kr.ok) {
+      const kd = await kr.json().catch(() => ({}));
+      alertEl.textContent = kd.error || 'Failed to load encryption key.';
+      alertEl.classList.remove('hidden');
+      return;
+    }
+  }
 
   const jobId = 'dataset-edit-' + name;
   closeEditDataset();
@@ -5887,6 +6515,16 @@ function openDatasetDetail(name) {
   document.getElementById('dsd-sync').textContent       = d.sync || '—';
   document.getElementById('dsd-dedup').textContent      = d.dedup || '—';
   document.getElementById('dsd-case').textContent       = d.case_sensitivity || '—';
+  const encEl = document.getElementById('dsd-enc');
+  if (d.encrypted) {
+    const algo = d.encryption_algorithm || 'on';
+    const keyInfo = d.key_locked
+      ? ' <span style="color:#ff9f0a;font-size:11px;">🔓 key not loaded</span>'
+      : ' <span style="color:var(--accent-3);font-size:11px;">🔒 unlocked</span>';
+    encEl.innerHTML = esc(algo) + keyInfo;
+  } else {
+    encEl.innerHTML = '<span style="color:var(--text-3);">off</span>';
+  }
   document.getElementById('dsd-mount').textContent      = d.mountpoint || '—';
   const commentRow = document.getElementById('dsd-comment-row');
   if (d.comment) {
@@ -5915,6 +6553,8 @@ async function _silentRefreshDisks() {
   } catch { /* silent */ }
 }
 
+let _diskCache = [];
+
 async function loadDisks() {
   const el = document.getElementById('disks-content');
   el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px;">Loading disk info…</div>';
@@ -5923,9 +6563,28 @@ async function loadDisks() {
     if (!poolData) await refreshPoolBar();
     const resp  = await fetch('/api/disks');
     const disks = await resp.json();
-    renderDisks(el, disks || []);
+    _diskCache = disks || [];
+    _applyDiskNavDot(_diskCache);
+    renderDisks(el, _diskCache);
   } catch {
     el.innerHTML = '<div style="color:var(--accent-danger);padding:24px;">Failed to load disk info.</div>';
+  }
+}
+
+function _applyDiskNavDot(disks) {
+  const dot = document.getElementById('nav-disks-dot');
+  if (!dot) return;
+  if (!disks || !disks.length) { dot.style.display = 'none'; return; }
+  const hasData  = disks.some(d => !!d.smart_msg && d.smart_msg !== 'Not supported');
+  if (!hasData) { dot.style.display = 'none'; return; }
+  const anyFail  = disks.some(d => d.smart_msg && d.smart_msg !== 'Not supported' && !d.smart_ok);
+  dot.style.display = 'block';
+  if (anyFail) {
+    dot.style.background = '#ff3b30';
+    dot.style.boxShadow  = '0 0 4px rgba(255,59,48,0.6)';
+  } else {
+    dot.style.background = '#30d158';
+    dot.style.boxShadow  = '0 0 4px rgba(48,209,88,0.6)';
   }
 }
 
@@ -5937,7 +6596,9 @@ async function refreshDisks() {
   try {
     const resp  = await fetch('/api/disks/refresh', { method: 'POST' });
     const disks = await resp.json();
-    renderDisks(document.getElementById('disks-content'), disks || []);
+    _diskCache = disks || [];
+    _applyDiskNavDot(_diskCache);
+    renderDisks(document.getElementById('disks-content'), _diskCache);
   } catch {
     alert('SMART refresh failed.');
   }
@@ -5954,7 +6615,9 @@ async function scanDisks() {
   try {
     const resp  = await fetch('/api/disks/scan', { method: 'POST' });
     const disks = await resp.json();
-    renderDisks(document.getElementById('disks-content'), disks || []);
+    _diskCache = disks || [];
+    _applyDiskNavDot(_diskCache);
+    renderDisks(document.getElementById('disks-content'), _diskCache);
   } catch {
     alert('Disk scan failed.');
   }
@@ -5967,7 +6630,7 @@ function renderDisks(el, disks) {
   if (!disks.length) {
     el.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">💿</div>
+        <div class="empty-state-icon" style="color:var(--text-3);">${diskSVG(64)}</div>
         <h3>No disks detected</h3>
         <p>No physical disks found on this system.</p>
       </div>`;
@@ -6020,8 +6683,8 @@ function renderDisks(el, disks) {
   if (available.length) {
     html += `<h3 style="margin-bottom:12px;color:var(--text-2);">Available for ZFS (${available.length})</h3>`;
     html += '<div class="table-wrap" style="margin-bottom:28px;"><table>';
-    html += diskTableHeader();
-    html += '<tbody>' + available.map(d => diskRow(d, false)).join('') + '</tbody></table></div>';
+    html += diskTableHeader(true);
+    html += '<tbody>' + available.map(d => diskRow(d, false, true)).join('') + '</tbody></table></div>';
   } else if (!zfsAssigned.length && !cacheDiskList.length) {
     html += `<div style="color:var(--text-3);font-size:14px;margin-bottom:24px;">No disks available for ZFS pool creation.</div>`;
   }
@@ -6040,8 +6703,8 @@ function renderDisks(el, disks) {
   if (inUse.length) {
     html += `<h3 style="margin-bottom:12px;color:var(--text-3);">In Use / System (${inUse.length})</h3>`;
     html += '<div class="table-wrap"><table>';
-    html += diskTableHeader();
-    html += '<tbody>' + inUse.map(d => diskRow(d, true)).join('') + '</tbody></table></div>';
+    html += diskTableHeader(false);
+    html += '<tbody>' + inUse.map(d => diskRow(d, true, false)).join('') + '</tbody></table></div>';
   }
 
   // Show cache timestamp.
@@ -6053,13 +6716,14 @@ function renderDisks(el, disks) {
   el.innerHTML = html;
 }
 
-function diskTableHeader() {
+function diskTableHeader(withActions) {
   return `<thead><tr>
     <th>Device</th><th>Vendor / Model</th><th>Serial</th><th>Size</th>
     <th>Type</th>
     <th>Wearout <i class="info-tip tip-left tip-down" data-tip="Drive endurance consumed (% of rated P/E cycles or TBW used). From SMART attribute 177 (SSD wear levelling) or 231 (SSD life left). N/A for HDDs without an endurance rating."></i></th>
     <th>Temp <i class="info-tip tip-left tip-down" data-tip="Current drive temperature from SMART data. Read from smartctl JSON (temperature.current field for ATA/NVMe, or attribute IDs 194/190 for older drives). Updated on each SMART refresh."></i></th>
     <th>SMART <i class="info-tip tip-left tip-down" data-tip="Overall drive health from smartctl self-assessment. PASSED: drive reports no critical errors. FAILED: one or more SMART thresholds exceeded — consider replacing the drive. Unknown: SMART data not yet collected (click ↻ Refresh SMART)."></i></th>
+    ${withActions && currentUser && currentUser.role==='admin' ? '<th></th>' : ''}
   </tr></thead>`;
 }
 
@@ -6074,8 +6738,14 @@ function diskTableHeaderWithPool() {
   </tr></thead>`;
 }
 
-function diskRow(d, dimmed) {
+function diskRow(d, dimmed, withActions) {
   const tc  = dimmed ? 'color:var(--text-3);' : 'color:var(--text);';
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const actionCell = (withActions && isAdmin) ? `
+    <td style="text-align:right;">
+      <button onclick="event.stopPropagation();openAvailDiskMenu(this,'${esc(d.device)}')"
+              style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:18px;line-height:1;padding:2px 6px;border-radius:4px;" title="Disk actions">⋮</button>
+    </td>` : (withActions && isAdmin ? '<td></td>' : '');
   return `<tr>
     <td style="font-family:monospace;font-size:13px;${tc}">${esc(d.device)}</td>
     <td style="font-weight:600;${tc}">${esc(d.vendor||'—')} ${esc(d.model||'—')}</td>
@@ -6085,6 +6755,7 @@ function diskRow(d, dimmed) {
     <td>${wearoutBar(d, dimmed)}</td>
     <td>${tempBadge(d)}</td>
     <td>${smartBadge(d)}</td>
+    ${actionCell}
   </tr>`;
 }
 
@@ -6132,7 +6803,58 @@ function smartBadge(d) {
   if (d.smart_msg === 'Not supported') {
     return `<span class="text-3" style="font-size:12px;">Not supported</span>`;
   }
-  return `<span class="badge badge-${d.smart_ok?'ok':'error'}">${esc(d.smart_msg)}</span>`;
+  const dev = esc(d.device || d.name);
+  return `<span class="badge badge-${d.smart_ok?'ok':'error'}" style="cursor:pointer;" onclick="openSmartDetail('${dev}')" title="Click for SMART details">${esc(d.smart_msg)}</span>`;
+}
+
+function openSmartDetail(device) {
+  const d = _diskCache.find(x => x.device === device || x.name === device);
+  if (!d) return;
+
+  const title = `SMART — ${esc(d.vendor || '')} ${esc(d.model || d.name)} (${esc(d.device)})`;
+  document.getElementById('smart-detail-title').textContent = title;
+
+  const attrs = d.smart_attrs || [];
+  let html = '';
+
+  // Summary row
+  const statusColor = !d.smart_msg ? 'var(--text-3)' : d.smart_ok ? 'var(--accent-ok,#30d158)' : 'var(--accent-danger)';
+  html += `<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;padding:12px;background:var(--surface-2);border-radius:8px;">`;
+  html += `<div><div class="text-3 text-xs" style="margin-bottom:2px;">Status</div><span style="font-weight:600;color:${statusColor};">${esc(d.smart_msg || '—')}</span></div>`;
+  if (d.temp_c !== null && d.temp_c !== undefined) {
+    html += `<div><div class="text-3 text-xs" style="margin-bottom:2px;">Temperature</div><span style="font-weight:600;">${d.temp_c} °C</span></div>`;
+  }
+  if (d.serial) {
+    html += `<div><div class="text-3 text-xs" style="margin-bottom:2px;">Serial</div><span style="font-family:monospace;font-size:13px;">${esc(d.serial)}</span></div>`;
+  }
+  if (d.wearout_pct !== null && d.wearout_pct !== undefined) {
+    html += `<div><div class="text-3 text-xs" style="margin-bottom:2px;">Wearout</div><span style="font-weight:600;">${d.wearout_pct}%</span></div>`;
+  }
+  html += `</div>`;
+
+  if (attrs.length) {
+    html += `<div class="table-wrap"><table>
+      <thead><tr><th style="width:48px;">ID</th><th>Attribute</th><th style="width:72px;text-align:right;">Value</th><th style="width:140px;text-align:right;">Raw</th></tr></thead>
+      <tbody>`;
+    for (const a of attrs) {
+      html += `<tr>
+        <td style="font-family:monospace;color:var(--text-3);font-size:12px;">${a.id}</td>
+        <td style="font-size:13px;">${esc(a.name.replace(/_/g,' '))}</td>
+        <td style="text-align:right;font-family:monospace;font-size:13px;">${a.value}</td>
+        <td style="text-align:right;font-family:monospace;font-size:12px;color:var(--text-2);">${esc(a.raw)}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+  } else {
+    html += `<div class="text-3" style="padding:16px;text-align:center;">No detailed SMART attributes available.<br>Click ↻ Refresh SMART to query the drive.</div>`;
+  }
+
+  document.getElementById('smart-detail-body').innerHTML = html;
+  document.getElementById('modal-smart-detail').classList.remove('hidden');
+}
+
+function closeSmartDetail() {
+  document.getElementById('modal-smart-detail').classList.add('hidden');
 }
 
 function tempBadge(d) {
@@ -6671,6 +7393,21 @@ function deleteNFSShare(id) {
 function esc(s) {
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// Returns a hard-drive/SSD SVG icon string at the given pixel size.
+function diskSVG(size) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>`;
+}
+
+// Returns a lock SVG icon. locked=true (orange, key not loaded) vs locked=false (green, fully encrypted).
+function lockSVG(locked) {
+  const color = locked ? '#ff9f0a' : 'var(--accent-3)';
+  const title = locked ? 'Encrypted — key not loaded' : 'Encrypted';
+  const body  = locked
+    ? `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>`
+    : `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex-shrink:0;margin-left:4px;" title="${title}">${body}</svg>`;
+}
 function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString(undefined,{dateStyle:'short',timeStyle:'short'});
@@ -6732,8 +7469,10 @@ async function _sidebarVersionCheck() {
     } catch {}
   }
 
-  if (data && data.update_available && badge) {
-    badge.classList.remove('hidden');
+  if (data && data.update_available) {
+    if (badge) badge.classList.remove('hidden');
+    const dot = document.getElementById('nav-updates-dot');
+    if (dot) dot.style.display = 'inline-block';
   }
 }
 
@@ -6752,16 +7491,19 @@ async function _autoBinaryVersionCheck() {
   function _applyVerData(data) {
     currentEl.textContent = 'v' + data.current;
     latestEl.textContent  = 'v' + data.latest;
+    const dot = document.getElementById('nav-updates-dot');
     if (data.update_available) {
       latestEl.style.color = 'var(--accent-warn)';
       if (appSettings.live_update_enabled) applyWrap.classList.remove('hidden');
       const badge = document.getElementById('sidebar-update-badge');
       if (badge) badge.classList.remove('hidden');
+      if (dot) dot.style.display = 'inline-block';
     } else {
       latestEl.style.color = '';
       uptodateEl.classList.remove('hidden');
       const badge = document.getElementById('sidebar-update-badge');
       if (badge) badge.classList.add('hidden');
+      if (dot) dot.style.display = 'none';
     }
   }
 
@@ -7665,6 +8407,432 @@ function toggleTheme() {
   applyTheme(next);
 }
 applyTheme(localStorage.getItem('theme') || 'dark');
+
+// ── Wipe Disk ─────────────────────────────────────────────────────────────────
+let _wipeDiskDevice = '';
+
+// ── Available-disk action menu (fixed-position so it escapes table overflow) ──
+(function() {
+  const menu = document.createElement('div');
+  menu.id = 'avail-disk-shared-menu';
+  menu.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);min-width:160px;overflow:hidden;';
+  document.body.appendChild(menu);
+})();
+
+function openAvailDiskMenu(btn, device) {
+  const menu = document.getElementById('avail-disk-shared-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none' && menu.dataset.device === device;
+  menu.style.display = 'none';
+  if (isOpen) return;
+
+  menu.dataset.device = device;
+  menu.innerHTML = `<button style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:#ff9f0a;"
+    onclick="menu_closeAvailDisk();openWipeDiskModal('${device.replace(/'/g,"\\'")}')">⚠ Wipe Disk</button>`;
+
+  const r = btn.getBoundingClientRect();
+  menu.style.display = 'block';
+  const mw = menu.offsetWidth;
+  // Align right edge to button right, flip left if it would overflow viewport.
+  let left = r.right - mw;
+  if (left < 4) left = r.left;
+  menu.style.left = left + 'px';
+  menu.style.top  = (r.bottom + 4) + 'px';
+}
+function menu_closeAvailDisk() {
+  const menu = document.getElementById('avail-disk-shared-menu');
+  if (menu) { menu.style.display = 'none'; menu.dataset.device = ''; }
+}
+document.addEventListener('click', menu_closeAvailDisk);
+
+function openWipeDiskModal(device) {
+  _wipeDiskDevice = device;
+  document.getElementById('wipe-disk-device-name').textContent = device;
+  document.getElementById('wipe-disk-confirm-input').value = '';
+  document.getElementById('wipe-disk-alert').classList.add('hidden');
+  document.getElementById('btn-wipe-disk-confirm').disabled = true;
+  document.getElementById('modal-wipe-disk').classList.remove('hidden');
+  setTimeout(() => document.getElementById('wipe-disk-confirm-input').focus(), 50);
+}
+function closeWipeDiskModal() {
+  document.getElementById('modal-wipe-disk').classList.add('hidden');
+  _wipeDiskDevice = '';
+}
+function onWipeDiskInput() {
+  const val = document.getElementById('wipe-disk-confirm-input').value.trim();
+  document.getElementById('btn-wipe-disk-confirm').disabled = val !== _wipeDiskDevice;
+}
+async function confirmWipeDisk() {
+  const alertEl = document.getElementById('wipe-disk-alert');
+  const btn     = document.getElementById('btn-wipe-disk-confirm');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Wiping…';
+  alertEl.classList.add('hidden');
+  try {
+    const resp = await fetch('/api/disks/wipe', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ device: _wipeDiskDevice }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      alertEl.textContent = data.error || 'Wipe failed.';
+      alertEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Wipe Disk';
+      return;
+    }
+    closeWipeDiskModal();
+    // Refresh disk list.
+    const disksResp = await fetch('/api/disks');
+    const disks = await disksResp.json();
+    renderDisks(document.getElementById('disks-content'), disks || []);
+  } catch {
+    alertEl.textContent = 'Network error.';
+    alertEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Wipe Disk';
+  }
+}
+
+// ── Pool Encryption (pool creation) ───────────────────────────────────────────
+let _cpSecurityOpen = false;
+
+function toggleCPSecurity() {
+  _cpSecurityOpen = !_cpSecurityOpen;
+  const body    = document.getElementById('cp-security-body');
+  const chevron = document.getElementById('cp-security-chevron');
+  if (body)    body.style.display    = _cpSecurityOpen ? 'block' : 'none';
+  if (chevron) chevron.style.transform = _cpSecurityOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+  if (_cpSecurityOpen) refreshCPKeyDropdown();
+}
+function onCPEncryptChange() {
+  const cb   = document.getElementById('cp-encrypt-cb');
+  const opts = document.getElementById('cp-encrypt-options');
+  if (opts) opts.style.display = (cb && cb.checked) ? 'block' : 'none';
+}
+async function refreshCPKeyDropdown() {
+  const sel = document.getElementById('cp-key-select');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— Select a key —</option>';
+  try {
+    const resp = await fetch('/api/encryption/keys');
+    const keys = await resp.json() || [];
+    keys.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k.id; opt.textContent = k.name;
+      sel.appendChild(opt);
+    });
+    if (prev) sel.value = prev;
+  } catch {}
+}
+
+// ── Key Management Modal ───────────────────────────────────────────────────────
+let _keyMgmtContext = ''; // 'cp' = pool creation, 'settings' = settings tab
+let _keyMgmtUsage  = {};
+let _keyMgmtKeys   = [];
+
+async function openKeyMgmtModal(context) {
+  _keyMgmtContext = context || '';
+  document.getElementById('modal-key-mgmt').classList.remove('hidden');
+  document.getElementById('key-mgmt-generate-name').value = '';
+  document.getElementById('km-import-name').value = '';
+  document.getElementById('km-import-file').value = '';
+  document.getElementById('key-mgmt-alert').classList.add('hidden');
+  await refreshKeyMgmtTable();
+}
+function closeKeyMgmtModal() {
+  document.getElementById('modal-key-mgmt').classList.add('hidden');
+  if (_keyMgmtContext === 'cp')       refreshCPKeyDropdown();
+  if (_keyMgmtContext === 'cds')      refreshCDSKeyDropdown();
+  if (_keyMgmtContext === 'eds')      refreshEDSKeyDropdown();
+  if (_keyMgmtContext === 'ps')       refreshPSKeyDropdown();
+  if (_keyMgmtContext === 'settings') loadKeyMgmtSettings();
+}
+async function refreshKeyMgmtTable() {
+  const tbody = document.getElementById('key-mgmt-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-3);text-align:center;padding:16px;">Loading…</td></tr>';
+  try {
+    const [keysR, usageR] = await Promise.all([
+      fetch('/api/encryption/keys'),
+      fetch('/api/encryption/keys/usage'),
+    ]);
+    _keyMgmtKeys  = await keysR.json() || [];
+    _keyMgmtUsage = await usageR.json() || {};
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--accent-danger);text-align:center;padding:16px;">Failed to load keys.</td></tr>';
+    return;
+  }
+  if (!_keyMgmtKeys.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-3);text-align:center;padding:16px;">No keys yet. Generate or import one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _keyMgmtKeys.map(k => {
+    const users = (_keyMgmtUsage[k.id] || []);
+    const inUse = users.length > 0;
+    const usedBy = inUse ? users.join(', ') : '<span style="color:var(--text-3);">(unused)</span>';
+    return `<tr>
+      <td style="font-weight:600;">${esc(k.name)}</td>
+      <td style="font-size:12px;color:var(--text-3);">${new Date(k.created_at).toLocaleDateString()}</td>
+      <td style="font-size:12px;">${usedBy}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-ghost btn-sm" onclick="exportKey('${esc(k.id)}','${esc(k.name)}')">Export</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteKey('${esc(k.id)}')" ${inUse ? 'disabled title="In use — cannot delete"' : ''} style="${inUse ? 'opacity:.4;cursor:not-allowed;' : 'color:var(--accent-danger);'}">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function generateKey() {
+  const name = document.getElementById('key-mgmt-generate-name').value.trim();
+  const alertEl = document.getElementById('key-mgmt-alert');
+  if (!name) { alertEl.textContent = 'Enter a key name.'; alertEl.classList.remove('hidden'); return; }
+  alertEl.classList.add('hidden');
+  const resp = await fetch('/api/encryption/keys', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) { alertEl.textContent = data.error || 'Failed.'; alertEl.classList.remove('hidden'); return; }
+  document.getElementById('key-mgmt-generate-name').value = '';
+  await refreshKeyMgmtTable();
+}
+async function importKey() {
+  const name    = document.getElementById('km-import-name').value.trim();
+  const fileEl  = document.getElementById('km-import-file');
+  const alertEl = document.getElementById('key-mgmt-alert');
+  if (!name) { alertEl.textContent = 'Enter a key name.'; alertEl.classList.remove('hidden'); return; }
+  if (!fileEl.files.length) { alertEl.textContent = 'Select a .json key file.'; alertEl.classList.remove('hidden'); return; }
+  alertEl.classList.add('hidden');
+  let key_hex;
+  try {
+    const text = await fileEl.files[0].text();
+    const obj  = JSON.parse(text);
+    key_hex = Object.values(obj)[0];
+    if (!key_hex) throw new Error('empty');
+  } catch {
+    alertEl.textContent = 'Invalid key file — expected JSON format {"name": "hex"}.';
+    alertEl.classList.remove('hidden'); return;
+  }
+  const resp = await fetch('/api/encryption/keys/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name, key_hex }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) { alertEl.textContent = data.error || 'Failed.'; alertEl.classList.remove('hidden'); return; }
+  document.getElementById('km-import-name').value = '';
+  fileEl.value = '';
+  await refreshKeyMgmtTable();
+}
+async function exportKey(id, name) {
+  // Show warning first, then trigger download.
+  if (!confirm(`⚠ Export key "${name}"?\n\nKeep this file safe. Anyone with the key file can decrypt your pool data. If lost, encrypted data cannot be recovered.`)) return;
+  window.location.href = `/api/encryption/keys/${encodeURIComponent(id)}/export`;
+}
+async function deleteKey(id) {
+  const alertEl = document.getElementById('key-mgmt-alert');
+  alertEl.classList.add('hidden');
+  const resp = await fetch('/api/encryption/keys/' + encodeURIComponent(id), { method: 'DELETE' });
+  const data = await resp.json();
+  if (!resp.ok) { alertEl.textContent = data.error || 'Failed to delete.'; alertEl.classList.remove('hidden'); return; }
+  await refreshKeyMgmtTable();
+}
+
+// ── Key Management — Settings tab ─────────────────────────────────────────────
+async function loadKeyMgmtSettings() {
+  const el = document.getElementById('key-mgmt-settings-list');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text-3);font-size:13px;">Loading…</div>';
+  try {
+    const [keysR, usageR] = await Promise.all([
+      fetch('/api/encryption/keys'),
+      fetch('/api/encryption/keys/usage'),
+    ]);
+    const keys  = await keysR.json() || [];
+    const usage = await usageR.json() || {};
+    if (!keys.length) {
+      el.innerHTML = '<div style="color:var(--text-3);font-size:13px;">No encryption keys stored. Generate or import a key to get started.</div>';
+      return;
+    }
+    el.innerHTML = `<table style="width:100%;"><thead><tr>
+      <th>Name</th><th>Created</th><th>Used By</th><th></th>
+    </tr></thead><tbody>` +
+    keys.map(k => {
+      const users = usage[k.id] || [];
+      const inUse = users.length > 0;
+      return `<tr>
+        <td style="font-weight:600;">${esc(k.name)}</td>
+        <td style="font-size:12px;color:var(--text-3);">${new Date(k.created_at).toLocaleDateString()}</td>
+        <td style="font-size:12px;">${inUse ? users.map(u=>`<span style="font-family:monospace;background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:11px;">${esc(u)}</span>`).join(' ') : '<span style="color:var(--text-3);">(unused)</span>'}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" onclick="exportKey('${esc(k.id)}','${esc(k.name)}')">Export</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteKeySettings('${esc(k.id)}')" ${inUse?'disabled title="In use"':''}
+            style="${inUse?'opacity:.4;cursor:not-allowed;':'color:var(--accent-danger);'}">Delete</button>
+        </td>
+      </tr>`;
+    }).join('') + '</tbody></table>';
+  } catch {
+    el.innerHTML = '<div style="color:var(--accent-danger);font-size:13px;">Failed to load keys.</div>';
+  }
+}
+async function deleteKeySettings(id) {
+  const resp = await fetch('/api/encryption/keys/' + encodeURIComponent(id), { method: 'DELETE' });
+  const data = await resp.json();
+  if (!resp.ok) { alert(data.error || 'Failed to delete key.'); return; }
+  await loadKeyMgmtSettings();
+}
+function showGenerateKeySettings() {
+  document.getElementById('key-mgmt-gen-wrap').classList.remove('hidden');
+  document.getElementById('key-mgmt-import-wrap').classList.add('hidden');
+  document.getElementById('key-mgmt-gen-name').value = '';
+  document.getElementById('btn-key-mgmt-gen').disabled = true;
+  document.getElementById('key-mgmt-gen-name').focus();
+}
+function showImportKeySettings() {
+  document.getElementById('key-mgmt-import-wrap').classList.remove('hidden');
+  document.getElementById('key-mgmt-gen-wrap').classList.add('hidden');
+  document.getElementById('key-mgmt-import-name').value = '';
+  document.getElementById('key-mgmt-import-file').value = '';
+}
+async function doGenerateKeySettings() {
+  const name = document.getElementById('key-mgmt-gen-name').value.trim();
+  if (!name) return;
+  const resp = await fetch('/api/encryption/keys', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name}),
+  });
+  const data = await resp.json();
+  if (!resp.ok) { alert(data.error || 'Failed to generate key.'); return; }
+  document.getElementById('key-mgmt-gen-wrap').classList.add('hidden');
+  await loadKeyMgmtSettings();
+}
+async function doImportKeySettings() {
+  const name = document.getElementById('key-mgmt-import-name').value.trim();
+  const file = document.getElementById('key-mgmt-import-file').files[0];
+  if (!name || !file) { alert('Provide a name and a .json key file.'); return; }
+  let key_hex;
+  try {
+    const text = await file.text();
+    const obj  = JSON.parse(text);
+    key_hex = Object.values(obj)[0];
+    if (!key_hex) throw new Error('empty');
+  } catch {
+    alert('Invalid key file — expected JSON format {"name": "hex"}.'); return;
+  }
+  const resp = await fetch('/api/encryption/keys/import', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, key_hex}),
+  });
+  const data = await resp.json();
+  if (!resp.ok) { alert(data.error || 'Failed to import key.'); return; }
+  document.getElementById('key-mgmt-import-wrap').classList.add('hidden');
+  await loadKeyMgmtSettings();
+}
+// ── 2FA / TOTP (user edit modal) ──────────────────────────────────────────────
+let _2faSecret = '';  // ephemeral secret generated server-side, not yet saved
+let _2faVerified = false;
+let _2faCurrentlyEnabled = false;
+
+function init2FASection(user) {
+  const section = document.getElementById('eu-2fa-section');
+  const isSelf  = currentUser && currentUser.user_id === user.id;
+  // Only show 2FA section for own account (non-SMB).
+  if (!isSelf || user.role === 'smb-only') { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  _2faCurrentlyEnabled = !!user.totp_enabled;
+  _2faSecret   = '';
+  _2faVerified = false;
+  document.getElementById('eu-2fa-setup').classList.add('hidden');
+  const statusLabel = document.getElementById('eu-2fa-status-label');
+  const toggleBtn   = document.getElementById('eu-2fa-toggle-btn');
+  if (_2faCurrentlyEnabled) {
+    statusLabel.textContent = '2FA is enabled on this account';
+    statusLabel.style.color = 'var(--accent-3)';
+    toggleBtn.textContent = 'Disable 2FA';
+    toggleBtn.className = 'btn btn-sm btn-ghost';
+    toggleBtn.style.color = 'var(--accent-danger)';
+  } else {
+    statusLabel.textContent = 'Not enabled';
+    statusLabel.style.color = 'var(--text-3)';
+    toggleBtn.textContent = 'Enable 2FA';
+    toggleBtn.className = 'btn btn-sm btn-ghost';
+    toggleBtn.style.color = 'var(--accent-3)';
+  }
+}
+
+async function toggle2FA() {
+  if (_2faCurrentlyEnabled) {
+    // Disable flow: just mark for deletion on save.
+    if (!confirm('Disable two-factor authentication on your account?')) return;
+    const resp = await fetch('/api/users/' + _editUserId + '/totp', { method: 'DELETE' });
+    if (!resp.ok) { const d = await resp.json(); alert(d.error || 'Failed.'); return; }
+    _2faCurrentlyEnabled = false;
+    _2faVerified = false;
+    // Re-init display.
+    const u = (_usersCache||[]).find(x=>x.id===_editUserId) || {};
+    u.totp_enabled = false;
+    init2FASection(u);
+  } else {
+    // Enable flow: fetch setup from server.
+    try {
+      const resp = await fetch('/api/auth/totp/setup', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok) { alert(data.error || 'Failed to generate TOTP secret.'); return; }
+      _2faSecret   = data.secret;
+      _2faVerified = false;
+      document.getElementById('eu-2fa-secret-display').textContent = data.secret.match(/.{1,4}/g).join(' ');
+      document.getElementById('eu-2fa-verify-code').value = '';
+      document.getElementById('eu-2fa-verify-alert').classList.add('hidden');
+      document.getElementById('eu-2fa-verify-ok').classList.add('hidden');
+      // Render QR code.
+      const qrEl = document.getElementById('eu-2fa-qr');
+      qrEl.innerHTML = '';
+      if (typeof qrcode !== 'undefined') {
+        const qr = qrcode(0, 'M');
+        qr.addData(data.uri);
+        qr.make();
+        qrEl.innerHTML = qr.createImgTag(4);
+      } else {
+        qrEl.innerHTML = `<div style="font-size:11px;color:var(--text-3);word-break:break-all;max-width:220px;">${esc(data.uri)}</div>`;
+      }
+      document.getElementById('eu-2fa-setup').classList.remove('hidden');
+      document.getElementById('eu-2fa-toggle-btn').style.display = 'none';
+    } catch { alert('Network error.'); }
+  }
+}
+
+function onTOTPCodeInput() {
+  const code = document.getElementById('eu-2fa-verify-code').value.trim();
+  if (code.length === 6) {
+    verifyTOTPSetup();
+  }
+}
+
+async function verifyTOTPSetup() {
+  const code    = document.getElementById('eu-2fa-verify-code').value.trim();
+  const alertEl = document.getElementById('eu-2fa-verify-alert');
+  const okEl    = document.getElementById('eu-2fa-verify-ok');
+  alertEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  const resp = await fetch('/api/auth/totp/confirm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ secret: _2faSecret, code }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    alertEl.textContent = data.error || 'Invalid code. Try again.';
+    alertEl.classList.remove('hidden');
+    _2faVerified = false;
+  } else {
+    _2faVerified = true;
+    okEl.classList.remove('hidden');
+  }
+}
+
+// Patch submitEditUser to block save when 2FA setup started but not verified.
+const _origSubmitEditUser = typeof submitEditUser === 'function' ? submitEditUser : null;
+
+// ── Login TOTP step ───────────────────────────────────────────────────────────
+// (handled in login.html — index.html has no login form)
+
 </script>
 </body>
 </html>

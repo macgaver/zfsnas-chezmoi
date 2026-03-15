@@ -18,9 +18,10 @@ import (
 	"zfsnas/handlers"
 	"zfsnas/internal/alerts"
 	"zfsnas/internal/audit"
-	"zfsnas/internal/scheduler"
 	"zfsnas/internal/certgen"
 	"zfsnas/internal/config"
+	"zfsnas/internal/keystore"
+	"zfsnas/internal/scheduler"
 	"zfsnas/internal/session"
 	"zfsnas/system"
 )
@@ -65,6 +66,11 @@ func main() {
 	}
 	log.Printf("Config directory: %s", absConfig)
 
+	// ===== Encryption keystore =====
+	if err := keystore.Init(absConfig); err != nil {
+		log.Fatalf("failed to init keystore: %v", err)
+	}
+
 	// ===== Audit log =====
 	audit.Init(absConfig)
 
@@ -107,6 +113,9 @@ func main() {
 
 	// ===== Health alert poller =====
 	handlers.StartHealthPoller(absConfig)
+
+	// ===== Auto-load encryption keys for encrypted pools =====
+	autoLoadEncryptionKeys(absConfig)
 
 	// ===== Snapshot scheduler =====
 	handlers.StartScheduler()
@@ -191,6 +200,69 @@ func main() {
 	defer cancel()
 	srv.Shutdown(ctx)
 	log.Println("Server stopped.")
+}
+
+// autoLoadEncryptionKeys scans all pools and datasets, loads any managed
+// encryption key whose keystatus is "unavailable", then mounts the dataset.
+// It also mounts any encrypted dataset whose key is already available but not yet mounted.
+func autoLoadEncryptionKeys(configDir string) {
+	// --- Pass 1: load managed keys for locked datasets ---
+	keys, _ := config.LoadEncryptionKeys()
+	if len(keys) > 0 {
+		keyMap := make(map[string]string, len(keys))
+		for _, k := range keys {
+			keyMap[k.ID] = keystore.KeyFilePath(k.ID)
+		}
+
+		type target struct{ name string }
+		var targets []target
+		pools, _ := system.GetAllPools()
+		for _, p := range pools {
+			if p.Encrypted && p.KeyLocked {
+				targets = append(targets, target{p.Name})
+			}
+		}
+		datasets, _ := system.ListAllDatasets()
+		for _, d := range datasets {
+			if d.Encrypted && d.KeyLocked {
+				targets = append(targets, target{d.Name})
+			}
+		}
+		for _, t := range targets {
+			loc := system.GetKeyLocation(t.name)
+			if !strings.HasPrefix(loc, "file://") {
+				continue
+			}
+			base := filepath.Base(strings.TrimPrefix(loc, "file://"))
+			id := strings.TrimSuffix(base, ".key")
+			keyPath, ok := keyMap[id]
+			if !ok || !keystore.Exists(id) {
+				log.Printf("encryption: key %s for %s not found — will remain locked", id, t.name)
+				continue
+			}
+			if err := system.LoadPoolKey(t.name, keyPath); err != nil {
+				log.Printf("encryption: failed to load key for %s: %v", t.name, err)
+				continue
+			}
+			log.Printf("encryption: loaded key for %s", t.name)
+			if err := system.MountDataset(t.name); err != nil {
+				log.Printf("encryption: mount %s: %v", t.name, err)
+			}
+		}
+	}
+
+	// --- Pass 2: mount any encrypted dataset whose key is available but not yet mounted ---
+	// Runs regardless of managed keys — handles pools imported with their own keylocation.
+	datasets, _ := system.ListAllDatasets()
+	for _, d := range datasets {
+		if d.Encrypted && !d.KeyLocked && !d.Mounted &&
+			d.Mountpoint != "none" && d.Mountpoint != "legacy" && d.CanMount != "off" {
+			log.Printf("encryption: mounting unlocked-but-unmounted dataset %s", d.Name)
+			if err := system.MountDataset(d.Name); err != nil {
+				log.Printf("encryption: mount %s: %v", d.Name, err)
+			}
+		}
+	}
 }
 
 // localIP returns the primary non-loopback IPv4 address of the host.

@@ -37,3 +37,16 @@ func HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, map[string]string{"message": "shutting down"})
 }
+
+func HandleRestartPortal(w http.ResponseWriter, r *http.Request) {
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:   sess.Username,
+		Role:   sess.Role,
+		Action: audit.ActionSystemReboot,
+		Target: "zfsnas-portal",
+		Result: audit.ResultOK,
+	})
+	jsonOK(w, map[string]string{"message": "restarting portal"})
+	system.RestartPortal()
+}

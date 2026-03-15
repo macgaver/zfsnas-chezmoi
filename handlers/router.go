@@ -42,9 +42,16 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// --- Auth API ---
 	r.HandleFunc("/api/auth/setup", HandleSetup).Methods("POST")
 	r.HandleFunc("/api/auth/login", HandleLogin).Methods("POST")
+	r.HandleFunc("/api/auth/totp", HandleTOTPLogin).Methods("POST")
 	r.HandleFunc("/api/auth/logout", HandleLogout).Methods("POST")
 	r.Handle("/api/auth/me", RequireAuth(http.HandlerFunc(HandleMe))).Methods("GET")
 	r.Handle("/api/prefs", RequireAuth(http.HandlerFunc(HandleUpdatePrefs))).Methods("PUT")
+
+	// --- TOTP setup (own account) ---
+	r.Handle("/api/auth/totp/setup",
+		RequireAuth(http.HandlerFunc(HandleTOTPSetup))).Methods("POST")
+	r.Handle("/api/auth/totp/confirm",
+		RequireAuth(http.HandlerFunc(HandleTOTPConfirm))).Methods("POST")
 
 	// Sessions (admin only)
 	r.Handle("/api/auth/sessions",
@@ -61,6 +68,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleUpdateUser)))).Methods("PUT")
 	r.Handle("/api/users/{id}",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDeleteUser)))).Methods("DELETE")
+	r.Handle("/api/users/{id}/totp",
+		RequireAuth(http.HandlerFunc(HandleDisableTOTP))).Methods("DELETE")
 
 	// --- Audit log ---
 	r.Handle("/api/audit",
@@ -103,12 +112,32 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDiskOnline)))).Methods("POST")
 	r.Handle("/api/pool/settings",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetPoolProperties)))).Methods("PUT")
+	r.Handle("/api/pool/load-key",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleLoadPoolKey)))).Methods("POST")
+	r.Handle("/api/pool/unload-key",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleUnloadPoolKey)))).Methods("POST")
+
+	// --- Encryption key management (admin only) ---
+	r.Handle("/api/encryption/keys",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleListKeys)))).Methods("GET")
+	r.Handle("/api/encryption/keys",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleGenerateKey)))).Methods("POST")
+	r.Handle("/api/encryption/keys/import",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleImportKey)))).Methods("POST")
+	r.Handle("/api/encryption/keys/usage",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleKeyUsage)))).Methods("GET")
+	r.Handle("/api/encryption/keys/{id}/export",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleExportKey)))).Methods("GET")
+	r.Handle("/api/encryption/keys/{id}",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDeleteKey)))).Methods("DELETE")
 
 	// --- Datasets ---
 	r.Handle("/api/datasets",
 		RequireAuth(http.HandlerFunc(HandleListDatasets))).Methods("GET")
 	r.Handle("/api/datasets",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleCreateDataset)))).Methods("POST")
+	r.Handle("/api/datasets/{path:.+}/load-key",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleLoadDatasetKey)))).Methods("POST")
 	r.Handle("/api/datasets/{path:.+}",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleUpdateDataset)))).Methods("PUT")
 	r.Handle("/api/datasets/{path:.+}",
@@ -133,6 +162,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleScanDisks)))).Methods("POST")
 	r.Handle("/api/disks/refresh",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleRefreshDisks)))).Methods("POST")
+	r.Handle("/api/disks/wipe",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleWipeDisk)))).Methods("POST")
 
 	// --- SMB Shares ---
 	r.Handle("/api/shares/status",
@@ -251,6 +282,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleReboot)))).Methods("POST")
 	r.Handle("/api/system/shutdown",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleShutdown)))).Methods("POST")
+	r.Handle("/api/system/restart-portal",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleRestartPortal)))).Methods("POST")
 
 	// --- Binary self-update (admin only) ---
 	r.Handle("/api/binary-update/check",

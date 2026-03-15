@@ -12,6 +12,48 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// HandleDisableTOTP removes 2FA from a user.
+// Admins can disable 2FA for any user; non-admins can only disable their own.
+func HandleDisableTOTP(w http.ResponseWriter, r *http.Request) {
+	id   := mux.Vars(r)["id"]
+	sess := MustSession(r)
+
+	// Non-admins may only affect their own account.
+	if sess.Role != config.RoleAdmin && sess.UserID != id {
+		jsonErr(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	users, err := config.LoadUsers()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load users")
+		return
+	}
+	user := config.FindUserByID(users, id)
+	if user == nil {
+		jsonErr(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	user.TOTPEnabled = false
+	user.TOTPSecret  = ""
+
+	if err := config.SaveUsers(users); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save user")
+		return
+	}
+
+	audit.Log(audit.Entry{
+		User:   sess.Username,
+		Role:   sess.Role,
+		Action: audit.Action2FADisabled,
+		Target: user.Username,
+		Result: audit.ResultOK,
+	})
+
+	jsonOK(w, map[string]string{"message": "2FA disabled"})
+}
+
 // HandleListUsers returns all users (admin: all fields; others: sanitized).
 func HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := config.LoadUsers()
@@ -21,21 +63,23 @@ func HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type safeUser struct {
-		ID        string    `json:"id"`
-		Username  string    `json:"username"`
-		Email     string    `json:"email"`
-		Role      string    `json:"role"`
-		CreatedAt time.Time `json:"created_at"`
+		ID          string    `json:"id"`
+		Username    string    `json:"username"`
+		Email       string    `json:"email"`
+		Role        string    `json:"role"`
+		CreatedAt   time.Time `json:"created_at"`
+		TOTPEnabled bool      `json:"totp_enabled"`
 	}
 
 	out := make([]safeUser, len(users))
 	for i, u := range users {
 		out[i] = safeUser{
-			ID:        u.ID,
-			Username:  u.Username,
-			Email:     u.Email,
-			Role:      u.Role,
-			CreatedAt: u.CreatedAt,
+			ID:          u.ID,
+			Username:    u.Username,
+			Email:       u.Email,
+			Role:        u.Role,
+			CreatedAt:   u.CreatedAt,
+			TOTPEnabled: u.TOTPEnabled,
 		}
 	}
 	jsonOK(w, out)

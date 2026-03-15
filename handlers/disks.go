@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
+	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/system"
 )
@@ -74,6 +77,53 @@ func HandleRefreshDisks(w http.ResponseWriter, r *http.Request) {
 	diskCacheStale = false
 
 	jsonOK(w, diskCache)
+}
+
+// HandleWipeDisk destroys all partition tables and filesystem signatures on a disk.
+// The disk must not be in use by any ZFS pool or mounted.
+// Body: {"device": "/dev/sdb"}
+func HandleWipeDisk(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Device string `json:"device"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Device = strings.TrimSpace(req.Device)
+	if req.Device == "" {
+		jsonErr(w, http.StatusBadRequest, "device is required")
+		return
+	}
+	// Safety check: block wiping a disk that is part of any ZFS pool.
+	pools, _ := system.GetAllPools()
+	for _, p := range pools {
+		for _, m := range append(p.Members, p.MemberDevices...) {
+			if strings.HasPrefix(m, req.Device) || strings.HasPrefix(req.Device, m) {
+				jsonErr(w, http.StatusConflict, "disk is part of ZFS pool "+p.Name+" — remove it from the pool first")
+				return
+			}
+		}
+	}
+
+	if err := system.WipeDisk(req.Device); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "wipe failed: "+err.Error())
+		return
+	}
+
+	diskCacheStale = true
+
+	sess := MustSession(r)
+	audit.Log(audit.Entry{
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  "wipe_disk",
+		Target:  req.Device,
+		Result:  audit.ResultOK,
+		Details: "partition table and filesystem signatures destroyed",
+	})
+
+	jsonOK(w, map[string]string{"message": "disk wiped"})
 }
 
 // StartDailySmartRefresh launches a background goroutine that refreshes SMART

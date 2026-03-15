@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -9,12 +11,10 @@ import (
 	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/internal/session"
+	"zfsnas/internal/totp"
 
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
-
-	"crypto/rand"
-	"encoding/hex"
 )
 
 // HandleSetupPage serves the first-run setup HTML page.
@@ -169,6 +169,21 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If TOTP is enabled, return a short-lived pending token instead of a full session.
+	if user.TOTPEnabled {
+		pendingToken, err := session.CreatePendingTOTP(user.ID, user.Username, user.Role)
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, "failed to create pending session")
+			return
+		}
+		alerts.ResetFailedLogins()
+		jsonOK(w, map[string]interface{}{
+			"totp_required": true,
+			"pending_token": pendingToken,
+		})
+		return
+	}
+
 	sess, err := session.Default.Create(user.ID, user.Username, user.Role)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "failed to create session")
@@ -189,6 +204,138 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		"username": user.Username,
 		"role":     user.Role,
 	})
+}
+
+// HandleTOTPLogin completes two-step login by verifying a TOTP code.
+func HandleTOTPLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PendingToken string `json:"pending_token"`
+		Code         string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	pending, ok := session.ConsumePendingTOTP(req.PendingToken)
+	if !ok {
+		jsonErr(w, http.StatusUnauthorized, "invalid or expired session")
+		return
+	}
+
+	// Load user to get TOTP secret.
+	users, err := config.LoadUsers()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load users")
+		return
+	}
+	user := config.FindUserByID(users, pending.UserID)
+	if user == nil || !user.TOTPEnabled {
+		jsonErr(w, http.StatusUnauthorized, "invalid session")
+		return
+	}
+
+	if !totp.Verify(user.TOTPSecret, strings.TrimSpace(req.Code)) {
+		audit.Log(audit.Entry{
+			User:    pending.Username,
+			Role:    pending.Role,
+			Action:  audit.ActionLoginFailed,
+			Result:  audit.ResultError,
+			Details: "invalid TOTP code (from " + clientIP(r) + ")",
+		})
+		jsonErr(w, http.StatusUnauthorized, "invalid authentication code")
+		return
+	}
+
+	sess, err := session.Default.Create(user.ID, user.Username, user.Role)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to create session")
+		return
+	}
+
+	audit.Log(audit.Entry{
+		User:    user.Username,
+		Role:    user.Role,
+		Action:  audit.ActionLogin,
+		Result:  audit.ResultOK,
+		Details: "2FA verified, from " + clientIP(r),
+	})
+
+	SetSessionCookie(w, sess.Token)
+	jsonOK(w, map[string]interface{}{
+		"username": user.Username,
+		"role":     user.Role,
+	})
+}
+
+// HandleTOTPSetup generates a new TOTP secret and URI for setup — does NOT save yet.
+// The user must confirm with HandleTOTPConfirm before the secret is persisted.
+func HandleTOTPSetup(w http.ResponseWriter, r *http.Request) {
+	sess := MustSession(r)
+	secret, err := totp.GenerateSecret()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to generate TOTP secret")
+		return
+	}
+	uri := totp.OTPAuthURI(secret, sess.Username, "ZFS NAS")
+	jsonOK(w, map[string]string{
+		"secret": secret,
+		"uri":    uri,
+	})
+}
+
+// HandleTOTPConfirm verifies the user's TOTP code and saves the secret if correct.
+// Body: {"secret": "BASE32...", "code": "123456"}
+func HandleTOTPConfirm(w http.ResponseWriter, r *http.Request) {
+	sess := MustSession(r)
+	var req struct {
+		Secret string `json:"secret"`
+		Code   string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Secret = strings.TrimSpace(req.Secret)
+	req.Code   = strings.TrimSpace(req.Code)
+	if req.Secret == "" || req.Code == "" {
+		jsonErr(w, http.StatusBadRequest, "secret and code are required")
+		return
+	}
+
+	if !totp.Verify(req.Secret, req.Code) {
+		jsonErr(w, http.StatusBadRequest, "invalid code — please try again")
+		return
+	}
+
+	users, err := config.LoadUsers()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to load users")
+		return
+	}
+	user := config.FindUserByID(users, sess.UserID)
+	if user == nil {
+		jsonErr(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	user.TOTPSecret  = req.Secret
+	user.TOTPEnabled = true
+
+	if err := config.SaveUsers(users); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save user")
+		return
+	}
+
+	audit.Log(audit.Entry{
+		User:   sess.Username,
+		Role:   sess.Role,
+		Action: audit.Action2FAEnabled,
+		Target: sess.Username,
+		Result: audit.ResultOK,
+	})
+
+	jsonOK(w, map[string]string{"message": "2FA enabled"})
 }
 
 // HandleLogout invalidates the current session.

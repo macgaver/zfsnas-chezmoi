@@ -42,10 +42,32 @@
         </button>
       </form>
 
+      <!-- TOTP second-step (hidden until server requests it) -->
+      <div id="totp-form" style="display:none;">
+        <p style="color:var(--text-2);margin-bottom:20px;font-size:14px;text-align:center;">
+          Enter the 6-digit code from your authenticator app.
+        </p>
+        <div class="form-group">
+          <label for="totp-code">Authentication Code</label>
+          <input type="text" id="totp-code" name="totp-code" inputmode="numeric"
+                 maxlength="6" placeholder="000000" autocomplete="one-time-code"
+                 style="text-align:center;font-size:22px;letter-spacing:6px;"
+                 oninput="onTotpInput()">
+        </div>
+        <button class="btn btn-primary btn-lg" id="totp-btn" onclick="handleTOTP()" disabled>
+          Verify
+        </button>
+        <button class="btn btn-ghost btn-lg" style="margin-top:8px;" onclick="cancelTOTP()">
+          Back
+        </button>
+      </div>
+
     </div>
   </div>
 
   <script>
+    let _pendingTotpToken = '';
+
     // Auto-redirect if already logged in.
     (async () => {
       try {
@@ -56,9 +78,9 @@
 
     async function handleLogin(e) {
       e.preventDefault();
-      const btn    = document.getElementById('submit-btn');
-      const alert  = document.getElementById('alert');
-      alert.classList.add('hidden');
+      const btn   = document.getElementById('submit-btn');
+      const alertEl = document.getElementById('alert');
+      alertEl.classList.add('hidden');
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Signing in…';
@@ -83,6 +105,16 @@
           return;
         }
 
+        if (data.totp_required) {
+          _pendingTotpToken = data.pending_token;
+          document.getElementById('login-form').style.display = 'none';
+          document.getElementById('totp-form').style.display = '';
+          document.getElementById('totp-code').focus();
+          btn.disabled = false;
+          btn.innerHTML = 'Sign In';
+          return;
+        }
+
         btn.innerHTML = '✓ Success — loading portal…';
         window.location.href = '/';
 
@@ -91,6 +123,61 @@
         btn.disabled = false;
         btn.innerHTML = 'Sign In';
       }
+    }
+
+    function onTotpInput() {
+      const code = document.getElementById('totp-code').value.trim();
+      document.getElementById('totp-btn').disabled = code.length !== 6;
+      if (code.length === 6) handleTOTP();
+    }
+
+    async function handleTOTP() {
+      const btn     = document.getElementById('totp-btn');
+      const alertEl = document.getElementById('alert');
+      const code    = document.getElementById('totp-code').value.trim();
+      alertEl.classList.add('hidden');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Verifying…';
+
+      try {
+        const resp = await fetch('/api/auth/totp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pending_token: _pendingTotpToken, code }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          showAlert(data.error || 'Invalid code. Please try again.');
+          document.getElementById('totp-code').value = '';
+          btn.disabled = false;
+          btn.innerHTML = 'Verify';
+          document.getElementById('totp-code').focus();
+          return;
+        }
+
+        btn.innerHTML = '✓ Success — loading portal…';
+        window.location.href = '/';
+
+      } catch (err) {
+        showAlert('Network error. Is the server reachable?');
+        btn.disabled = false;
+        btn.innerHTML = 'Verify';
+      }
+    }
+
+    function cancelTOTP() {
+      _pendingTotpToken = '';
+      document.getElementById('totp-form').style.display = 'none';
+      document.getElementById('login-form').style.display = '';
+      document.getElementById('alert').classList.add('hidden');
+      document.getElementById('totp-code').value = '';
+      document.getElementById('totp-btn').disabled = true;
+      document.getElementById('submit-btn').disabled = false;
+      document.getElementById('submit-btn').innerHTML = 'Sign In';
+      document.getElementById('username').focus();
     }
 
     function showAlert(msg) {

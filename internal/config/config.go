@@ -19,7 +19,9 @@ type AppConfig struct {
 	Port              int       `json:"port"`
 	StorageUnit       string    `json:"storage_unit,omitempty"`        // "gb" (1000-based) or "gib" (1024-based)
 	SMARTLastRefresh  time.Time `json:"smart_last_refresh,omitempty"`
-	WeeklyScrub       bool      `json:"weekly_scrub"`                  // auto-scrub every Sunday at 02:00 (default: true)
+	WeeklyScrub       bool      `json:"weekly_scrub"`                  // deprecated: migrated to ScrubSchedule
+	ScrubSchedule     string    `json:"scrub_schedule,omitempty"`      // weekly | biweekly | monthly | 2months | 4months | "" (off)
+	ScrubHour         int       `json:"scrub_hour"`                    // hour of day to run scrub (0-23), default 2
 	LiveUpdateEnabled bool      `json:"live_update_enabled,omitempty"` // enable in-place binary self-update
 	MaxSmbdProcesses  int       `json:"max_smbd_processes,omitempty"`  // Samba max smbd processes (0 = use default 100)
 }
@@ -40,6 +42,33 @@ type User struct {
 	Role         string          `json:"role"` // admin, read-only, smb-only
 	CreatedAt    time.Time       `json:"created_at"`
 	Preferences  UserPreferences `json:"preferences,omitempty"`
+	TOTPSecret   string          `json:"totp_secret,omitempty"`  // base32-encoded TOTP secret
+	TOTPEnabled  bool            `json:"totp_enabled,omitempty"` // 2FA active
+}
+
+// EncryptionKey is metadata for a stored ZFS encryption key file.
+// The raw 32-byte key is stored separately in config/keys/<ID>.key.
+type EncryptionKey struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// LoadEncryptionKeys loads all encryption key metadata from disk.
+func LoadEncryptionKeys() ([]EncryptionKey, error) {
+	var keys []EncryptionKey
+	if err := loadJSON("encryption_keys.json", &keys); err != nil {
+		return nil, err
+	}
+	if keys == nil {
+		keys = []EncryptionKey{}
+	}
+	return keys, nil
+}
+
+// SaveEncryptionKeys persists encryption key metadata to disk.
+func SaveEncryptionKeys(keys []EncryptionKey) error {
+	return saveJSON("encryption_keys.json", keys)
 }
 
 var (
@@ -104,10 +133,18 @@ func LoadAppConfig() (*AppConfig, error) {
 	if cfg.MaxSmbdProcesses == 0 {
 		cfg.MaxSmbdProcesses = 100
 	}
-	// Default weekly scrub to enabled on fresh installs. Existing configs that
-	// have WeeklyScrub explicitly saved (true or false) are left untouched.
-	if fresh {
-		cfg.WeeklyScrub = true
+	// Migrate legacy WeeklyScrub bool to ScrubSchedule string.
+	if cfg.ScrubSchedule == "" {
+		if fresh {
+			// Fresh install: default to weekly at 02:00
+			cfg.ScrubSchedule = "weekly"
+			cfg.ScrubHour = 2
+		} else if cfg.WeeklyScrub {
+			// Existing config with weekly scrub enabled → migrate
+			cfg.ScrubSchedule = "weekly"
+			cfg.ScrubHour = 2
+		}
+		// If WeeklyScrub was false, ScrubSchedule stays "" (off)
 	}
 	return cfg, nil
 }

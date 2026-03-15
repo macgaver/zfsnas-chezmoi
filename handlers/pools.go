@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 	"zfsnas/internal/audit"
+	"zfsnas/internal/config"
+	"zfsnas/internal/keystore"
 	"zfsnas/system"
 )
 
@@ -59,6 +61,8 @@ func HandleCreatePool(w http.ResponseWriter, r *http.Request) {
 		Compression string   `json:"compression"`
 		Dedup       string   `json:"dedup"`
 		Devices     []string `json:"devices"`
+		Encrypted   bool     `json:"encrypted"`    // enable ZFS native encryption
+		KeyFileID   string   `json:"key_file_id"`  // EncryptionKey.ID to use
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -97,13 +101,44 @@ func HandleCreatePool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve encryption key file path.
+	var keyFilePath string
+	if req.Encrypted {
+		req.KeyFileID = strings.TrimSpace(req.KeyFileID)
+		if req.KeyFileID == "" {
+			jsonErr(w, http.StatusBadRequest, "key_file_id is required when encrypted is true")
+			return
+		}
+		keys, err := config.LoadEncryptionKeys()
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, "failed to load encryption keys")
+			return
+		}
+		var found bool
+		for _, k := range keys {
+			if k.ID == req.KeyFileID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			jsonErr(w, http.StatusBadRequest, "encryption key not found")
+			return
+		}
+		if !keystore.Exists(req.KeyFileID) {
+			jsonErr(w, http.StatusBadRequest, "encryption key file missing from disk")
+			return
+		}
+		keyFilePath = keystore.KeyFilePath(req.KeyFileID)
+	}
+
 	sess := MustSession(r)
 	jobID := fmt.Sprintf("%d", time.Now().UnixNano())
 	job := &poolCreateJob{Status: "running"}
 	poolCreateJobs.Store(jobID, job)
 
 	go func() {
-		err := system.CreatePool(req.Name, req.Layout, req.Ashift, req.Compression, req.Dedup, req.Devices)
+		err := system.CreatePool(req.Name, req.Layout, req.Ashift, req.Compression, req.Dedup, req.Devices, keyFilePath)
 		job.mu.Lock()
 		defer job.mu.Unlock()
 		if err != nil {
@@ -120,12 +155,16 @@ func HandleCreatePool(w http.ResponseWriter, r *http.Request) {
 		pool, _ := system.GetPoolByName(req.Name)
 		job.Pool = pool
 		job.Status = "done"
+		encDetails := ""
+		if req.Encrypted {
+			encDetails = " encrypted=aes-256-gcm"
+		}
 		audit.Log(audit.Entry{
 			User: sess.Username, Role: sess.Role,
 			Action:  audit.ActionCreatePool,
 			Target:  req.Name,
 			Result:  audit.ResultOK,
-			Details: req.Layout + " ashift=" + string(rune('0'+req.Ashift)) + " compression=" + req.Compression + " dedup=" + req.Dedup,
+			Details: req.Layout + " ashift=" + string(rune('0'+req.Ashift)) + " compression=" + req.Compression + " dedup=" + req.Dedup + encDetails,
 		})
 	}()
 

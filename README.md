@@ -36,7 +36,9 @@ Most NAS management software are slow to install, slow to load, and buried under
 - **Datasets** — full nested hierarchy with quota, refquota, reservation, record size, compression, sync, dedup, case sensitivity, and a free-text comment stored as a ZFS user property (`zfsnas:comment`)
 - **Snapshots** — create, restore, clone, and delete; visual tree per dataset; snapshot list spans all pools
 - **Scheduled Snapshots** — automated policies (hourly / daily / weekly / monthly) with configurable retention counts
-- **ZFS Scrub** — trigger, monitor progress, stop, and optionally schedule weekly auto-scrubs
+- **ZFS Scrub** — trigger, monitor progress, stop, and schedule auto-scrubs (weekly / bi-weekly / monthly / every 2 or 4 months) at a configurable hour
+- **ZFS Native Encryption** — create AES-256-GCM encrypted pools and datasets; keys are loaded automatically at startup so encrypted volumes mount without manual intervention
+- **Encryption Key Management** — generate, import, export, and delete encryption keys from the Settings tab; export format is compatible with TrueNAS key exports, making migration between platforms straightforward; lock icons throughout the UI identify which pools and datasets are encrypted
 
 ### File Sharing
 - **SMB Shares** — create and manage Samba shares with per-user read/write or read-only permissions
