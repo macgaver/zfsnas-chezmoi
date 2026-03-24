@@ -263,7 +263,7 @@
     <div class="sidebar-section">Storage</div>
     <button class="nav-item" onclick="showPage('disks')"     id="nav-disks">    <span class="nav-icon"><svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98.96 122.88" width="18" height="18" fill="currentColor" style="vertical-align:middle;display:inline-block;"><path d="M5.44,0h88.09c1.49,0,2.85,0.61,3.83,1.59l0.01,0.01c0.98,0.98,1.59,2.34,1.59,3.83v89.92v22.09c0,1.49-0.61,2.85-1.59,3.83l-0.01,0.01c-0.98,0.98-2.34,1.59-3.83,1.59H5.44c-1.5,0-2.86-0.61-3.84-1.59C0.61,120.3,0,118.94,0,117.44V95.36V5.44c0-1.49,0.61-2.85,1.59-3.83l0.01-0.01C2.59,0.61,3.95,0,5.44,0L5.44,0z M64.96,21.3h6.63c4.28,0,7.17,0.19,8.68,0.59c1.51,0.4,2.66,1.04,3.44,1.94c0.78,0.9,1.28,1.9,1.47,3c0.19,1.11,0.29,3.27,0.29,6.5v11.94c0,3.06-0.14,5.11-0.43,6.14c-0.29,1.03-0.79,1.85-1.5,2.43c-0.72,0.58-1.6,0.98-2.66,1.22c-1.05,0.23-2.64,0.35-4.76,0.35H64.96V21.3L64.96,21.3z M73.84,27.12v22.46c1.26,0,2.03-0.26,2.32-0.77c0.29-0.52,0.44-1.91,0.44-4.19V31.36c0-1.54-0.05-2.54-0.14-2.97c-0.1-0.44-0.32-0.75-0.67-0.96C75.45,27.22,74.8,27.12,73.84,27.12L73.84,27.12z M41.14,21.3h6.63c4.28,0,7.17,0.19,8.68,0.59c1.51,0.4,2.66,1.04,3.44,1.94c0.78,0.9,1.28,1.9,1.47,3c0.19,1.11,0.29,3.27,0.29,6.5v11.94c0,3.06-0.14,5.11-0.43,6.14c-0.29,1.03-0.79,1.85-1.5,2.43c-0.72,0.58-1.6,0.98-2.66,1.22c-1.05,0.23-2.64,0.35-4.76,0.35H41.14V21.3L41.14,21.3z M50.02,27.12v22.46c1.26,0,2.03-0.26,2.32-0.77c0.29-0.52,0.44-1.91,0.44-4.19V31.36c0-1.54-0.05-2.54-0.14-2.97c-0.1-0.44-0.32-0.75-0.67-0.96C51.62,27.22,50.97,27.12,50.02,27.12L50.02,27.12z M37.55,21.3v34.1h-8.88V41.09h-2.59V55.4H17.2V21.3h8.88v12.2h2.59V21.3H37.55L37.55,21.3z M74.51,104.48h11.45c0.58,0,1.05,0.48,1.05,1.05v4.03c0,0.57-0.48,1.05-1.05,1.05H74.51c-0.57,0-1.05-0.47-1.05-1.05v-4.03C73.46,104.95,73.93,104.48,74.51,104.48L74.51,104.48z M5.62,92.55h87.72V5.62H5.62V92.55L5.62,92.55z M93.34,98.17H5.62v19.09h87.72V98.17L93.34,98.17z"/></svg></span><span class="nav-label"> Physical Disks</span><span id="nav-disks-dot" class="nav-dot" style="display:none;width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0;"></span></button>
     <button class="nav-item" onclick="showPage('pool')"      id="nav-pool">     <span class="nav-icon">🗄</span><span class="nav-label"> ZFS Pools</span><span id="nav-pool-dot" class="nav-dot" style="display:none;width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0;"></span></button>
-    <button class="nav-item" onclick="showPage('datasets')"  id="nav-datasets"> <span class="nav-icon">📁</span><span class="nav-label"> Datasets / ZVols</span><span id="nav-datasets-dot" class="nav-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#f0b429;margin-left:auto;flex-shrink:0;box-shadow:0 0 4px rgba(240,180,41,0.6);"></span></button>
+    <button class="nav-item" onclick="showPage('datasets')"  id="nav-datasets"> <span class="nav-icon">📁</span><span class="nav-label"> Dataset & ZVol</span><span id="nav-datasets-dot" class="nav-dot" style="display:none;width:8px;height:8px;border-radius:50%;background:#f0b429;margin-left:auto;flex-shrink:0;box-shadow:0 0 4px rgba(240,180,41,0.6);"></span></button>
     <button class="nav-item" onclick="showPage('snapshots')" id="nav-snapshots"><span class="nav-icon">🛡️</span><span class="nav-label"> Protection</span><span id="nav-snapshots-dot" class="nav-dot" style="display:none;width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0;"></span></button>
 
     <div class="sidebar-section">Sharing</div>
@@ -4827,7 +4827,15 @@ const dotFor      = i => COLORS[i%COLORS.length][0];
 let currentUser      = null;
 let abExpanded       = true;
 let abRefreshInt     = null;
-let activeJobs       = {};  // id -> { label, startedAt }
+let activeJobs       = {};  // id -> { label, startedAt, pending? }
+let _installRunning  = false;           // true while an install fetch is in flight
+let _pageUnloading   = false;
+window.addEventListener('pagehide', () => { _pageUnloading = true; });
+// Suppress "Failed to fetch" alerts that fire when the user navigates away
+// while a request is in flight.
+const _origAlert = window.alert.bind(window);
+window.alert = function(msg) { if (_pageUnloading) return; _origAlert(msg); };
+const _installQueue  = [];              // [{id, activeLabel, run}]
 let prereqData       = null;
 let appSettings      = { port: 8443, storage_unit: 'gb', max_smbd_processes: 100 };
 let _dashRefreshTimer = null;
@@ -4890,6 +4898,7 @@ let _upsPerfNominalW = null;    // nominal power (W) for power calc in UPS toolt
   initAlertsWebSocket();
   showPage('dashboard');
   startActivityBarRefresh();
+  _pollServerOpStatus();
   checkPrereqsBanner();
   loadISCSINavStatus();
   loadS3NavStatus();
@@ -5016,6 +5025,31 @@ function startActivityBarRefresh() {
   abRefreshInt = setInterval(refreshActivityBar, 10000);
 }
 
+// After a browser refresh, the in-memory activeJobs is empty but a server-side
+// install/uninstall may still be running (aptInstallMu held). Poll the status
+// endpoint until the lock is released, showing a spinner in the activity bar.
+async function _pollServerOpStatus() {
+  try {
+    const r = await fetch('/api/prereqs/op-status');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.running) return;
+    const jobId = 'server-op-running';
+    addActiveJob(jobId, 'Package operation in progress…');
+    const iv = setInterval(async () => {
+      try {
+        const r2 = await fetch('/api/prereqs/op-status');
+        if (!r2.ok) return;
+        const d2 = await r2.json();
+        if (!d2.running) {
+          clearInterval(iv);
+          removeActiveJob(jobId);
+        }
+      } catch { clearInterval(iv); removeActiveJob(jobId); }
+    }, 3000);
+  } catch {}
+}
+
 async function refreshActivityBar() {
   try {
     const resp = await fetch('/api/audit');
@@ -5031,11 +5065,17 @@ function renderActivityBar(entries) {
   const jobList = Object.values(activeJobs);
   const badge   = document.getElementById('ab-jobs-badge');
   if (jobList.length) {
-    badge.textContent = jobList.length + ' active';
+    const runningCount = jobList.filter(j => !j.pending).length;
+    const pendingCount = jobList.length - runningCount;
+    badge.textContent = runningCount > 0
+      ? (pendingCount > 0 ? `${runningCount} active, ${pendingCount} queued` : `${runningCount} active`)
+      : `${pendingCount} queued`;
     badge.classList.remove('hidden');
     jobsEl.innerHTML = jobList.map(j => `
       <div class="ab-job-row">
-        <span class="spinner" style="width:12px;height:12px;border-width:2px;"></span>
+        ${j.pending
+          ? `<span style="font-size:13px;line-height:1;flex-shrink:0;">⏳</span>`
+          : `<span class="spinner" style="width:12px;height:12px;border-width:2px;flex-shrink:0;"></span>`}
         <span>${esc(j.label)}</span>
         <span class="text-3" style="margin-left:auto;">${timeSince(j.startedAt)}</span>
       </div>
@@ -5046,7 +5086,9 @@ function renderActivityBar(entries) {
   }
 
   // Recent entries (newest first, last 15)
+  // entries===null means "jobs-only update — leave entries section as-is"
   const entriesEl = document.getElementById('ab-entries');
+  if (entries === null) return;
   if (!entries.length) {
     entriesEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:6px 0;">No activity yet.</div>';
     return;
@@ -5086,11 +5128,38 @@ function _auditEventMeta(e) {
 
 function addActiveJob(id, label) {
   activeJobs[id] = { label, startedAt: new Date() };
-  renderActivityBar([]);  // update jobs section immediately
+  renderActivityBar(null);  // update jobs section only
 }
 function removeActiveJob(id) {
   delete activeJobs[id];
   refreshActivityBar();
+}
+
+// ── Install queue ─────────────────────────────────────────────────────────────
+// Ensures only one optional-feature install runs at a time.
+// A second click shows immediately as "Queued" in the activity bar and starts
+// automatically when the running install finishes.
+
+function _nextInstall() {
+  if (_installRunning || _installQueue.length === 0) return;
+  _installRunning = true;
+  const { id, activeLabel, run } = _installQueue.shift();
+  activeJobs[id] = { label: activeLabel, startedAt: new Date() };
+  renderActivityBar(null);
+  Promise.resolve().then(() => run()).finally(() => {
+    removeActiveJob(id);
+    _installRunning = false;
+    _nextInstall();
+  });
+}
+
+// Queue a feature install. Shows instantly as "Queued: …" in the activity bar.
+// `run` must be an async function that performs the fetch and UI updates.
+function _queueInstall(id, pendingLabel, activeLabel, run) {
+  activeJobs[id] = { label: pendingLabel, startedAt: new Date(), pending: true };
+  renderActivityBar(null);
+  _installQueue.push({ id, activeLabel, run });
+  _nextInstall();
 }
 
 // ===== Prerequisites =====
@@ -5306,7 +5375,7 @@ async function _updateISCSIPrereqStatus() {
       statusEl.textContent = 'Not installed';
       statusEl.style.color = 'var(--text-3)';
       statusEl.style.fontWeight = '';
-      if (btnEl) btnEl.style.display = '';
+      if (btnEl) { btnEl.style.display = ''; btnEl.disabled = false; btnEl.textContent = 'Enable iSCSI Feature'; }
       if (menuWrap) {
         menuWrap.classList.remove('hidden');
         _renderOptFeatMenu('iscsi', false, s.hide_nav);
@@ -13306,7 +13375,7 @@ async function _updateMinIOPrereqStatus() {
       statusEl.textContent   = 'Not installed';
       statusEl.style.color   = 'var(--text-3)';
       statusEl.style.fontWeight = '';
-      if (btnEl) btnEl.style.display = '';
+      if (btnEl) { btnEl.style.display = ''; btnEl.disabled = false; btnEl.textContent = 'Enable S3 Object Server'; }
       if (menuWrap) {
         menuWrap.classList.remove('hidden');
         _renderOptFeatMenu('minio', false, s.hide_nav);
@@ -13418,68 +13487,68 @@ async function _executeUninstallFeature() {
 
 async function enableMinIOFeature() {
   const btn = document.getElementById('prereq-minio-btn');
-  const statusEl = document.getElementById('prereq-minio-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'Installing…'; }
+  if (btn) { btn.disabled = true; btn.textContent = _installRunning ? 'Queued…' : 'Installing…'; }
   const jobId = 'minio-install-' + Date.now();
-  addActiveJob(jobId, 'Installing MinIO and mc…');
-  try {
-    const r = await fetch('/api/prereqs/install', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ package: 'minio' }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
+  _queueInstall(jobId, 'Queued: Install MinIO and mc', 'Installing MinIO and mc…', async () => {
+    if (btn) btn.textContent = 'Installing…';
+    const statusEl = document.getElementById('prereq-minio-status');
+    try {
+      const r = await fetch('/api/prereqs/install', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ package: 'minio' }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Enable S3 Object Server'; }
+        alert('Installation failed: ' + (d.error || JSON.stringify(d)));
+        return;
+      }
+      if (statusEl) {
+        statusEl.textContent      = '✓ Installed';
+        statusEl.style.color      = '#30d158';
+        statusEl.style.fontWeight = '600';
+      }
+      if (btn) btn.style.display = 'none';
+      loadS3NavStatus();
+    } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Enable S3 Object Server'; }
-      alert('Installation failed: ' + (d.error || JSON.stringify(d)));
-      return;
+      alert('Error: ' + e.message);
     }
-    if (statusEl) {
-      statusEl.textContent      = '✓ Installed';
-      statusEl.style.color      = '#30d158';
-      statusEl.style.fontWeight = '600';
-    }
-    if (btn) btn.style.display = 'none';
-    loadS3NavStatus();
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Enable S3 Object Server'; }
-    alert('Error: ' + e.message);
-  } finally {
-    removeActiveJob(jobId);
-  }
+  });
 }
 
 async function enableISCSIFeature() {
   const btn = document.getElementById('prereq-iscsi-btn');
-  const statusEl = document.getElementById('prereq-iscsi-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'Installing…'; }
+  if (btn) { btn.disabled = true; btn.textContent = _installRunning ? 'Queued…' : 'Installing…'; }
   const jobId = 'iscsi-install-' + Date.now();
-  addActiveJob(jobId, 'Installing targetcli-fb…');
-  try {
-    const r = await fetch('/api/prereqs/install', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ package: 'targetcli-fb' }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
+  _queueInstall(jobId, 'Queued: Install targetcli-fb', 'Installing targetcli-fb…', async () => {
+    if (btn) btn.textContent = 'Installing…';
+    try {
+      const r = await fetch('/api/prereqs/install', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ package: 'targetcli-fb' }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Enable iSCSI Feature'; }
+        alert('Installation failed: ' + (d.error || JSON.stringify(d)));
+        return;
+      }
+      const statusEl = document.getElementById('prereq-iscsi-status');
+      if (statusEl) {
+        statusEl.textContent = 'Installed';
+        statusEl.style.color = '#30d158';
+        statusEl.style.fontWeight = '600';
+      }
+      if (btn) btn.style.display = 'none';
+      loadISCSINavStatus();
+    } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Enable iSCSI Feature'; }
-      alert('Installation failed: ' + (d.error || JSON.stringify(d)));
-      return;
+      alert('Error: ' + e.message);
     }
-    if (statusEl) {
-      statusEl.textContent = 'Installed';
-      statusEl.style.color = '#30d158';
-      statusEl.style.fontWeight = '600';
-    }
-    if (btn) btn.style.display = 'none';
-    loadISCSINavStatus();
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Enable iSCSI Feature'; }
-    alert('Error: ' + e.message);
-  } finally {
-    removeActiveJob(jobId);
-  }
+  });
 }
 
 // ── UPS Prereq Status ──────────────────────────────────────────────────────────
@@ -13506,7 +13575,7 @@ async function _updateUPSPrereqStatus() {
       statusEl.textContent = 'Not installed';
       statusEl.style.color = 'var(--text-3)';
       statusEl.style.fontWeight = '';
-      if (btnEl) btnEl.style.display = '';
+      if (btnEl) { btnEl.style.display = ''; btnEl.disabled = false; btnEl.innerHTML = 'Enable UPS Feature <span style="margin-left:6px;font-size:10px;font-weight:700;background:#f5a623;color:#000;border-radius:4px;padding:1px 6px;vertical-align:middle;letter-spacing:.04em;">BETA</span>'; }
       if (menuWrap) menuWrap.classList.add('hidden');
     }
   } catch (_) {}
@@ -13514,45 +13583,50 @@ async function _updateUPSPrereqStatus() {
 
 async function enableUPSFeature() {
   const btn = document.getElementById('prereq-ups-btn');
-  const statusEl = document.getElementById('prereq-ups-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'Installing…'; }
+  if (btn) { btn.disabled = true; btn.textContent = _installRunning ? 'Queued…' : 'Installing…'; }
   const jobId = 'ups-install-' + Date.now();
-  addActiveJob(jobId, 'Installing nut and nut-client… (scanning for UPS, please wait)');
-  try {
-    const r = await fetch('/api/prereqs/install', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ package: 'nut' }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Enable UPS Feature'; }
-      alert('Installation failed: ' + (d.error || JSON.stringify(d)));
-      return;
+  _queueInstall(
+    jobId,
+    'Queued: Install nut and nut-client',
+    'Installing nut and nut-client… (scanning for UPS, please wait)',
+    async () => {
+      if (btn) btn.textContent = 'Installing…';
+      try {
+        const r = await fetch('/api/prereqs/install', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ package: 'nut' }),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Enable UPS Feature'; }
+          alert('Installation failed: ' + (d.error || JSON.stringify(d)));
+          return;
+        }
+        const statusEl = document.getElementById('prereq-ups-status');
+        if (statusEl) {
+          statusEl.textContent = '✓ Installed';
+          statusEl.style.color = '#30d158';
+          statusEl.style.fontWeight = '600';
+        }
+        if (btn) btn.style.display = 'none';
+        const menuWrap = document.getElementById('prereq-ups-menu-wrap');
+        if (menuWrap) { menuWrap.classList.remove('hidden'); _renderOptFeatMenu('ups', true, false); }
+        // Show detection result
+        if (d.detected) {
+          const detId = 'ups-det-' + Date.now();
+          addActiveJob(detId, `UPS detected: ${d.detected.name} (${d.detected.driver} @ ${d.detected.port}) — battery widget active`);
+          setTimeout(() => removeActiveJob(detId), 6000);
+        }
+        // Refresh topbar widget — poll immediately then again after 3s to catch upsd binding
+        pollUPSTopbar();
+        setTimeout(pollUPSTopbar, 3000);
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Enable UPS Feature'; }
+        alert('Error: ' + e.message);
+      }
     }
-    if (statusEl) {
-      statusEl.textContent = '✓ Installed';
-      statusEl.style.color = '#30d158';
-      statusEl.style.fontWeight = '600';
-    }
-    if (btn) btn.style.display = 'none';
-    const menuWrap = document.getElementById('prereq-ups-menu-wrap');
-    if (menuWrap) { menuWrap.classList.remove('hidden'); _renderOptFeatMenu('ups', true, false); }
-    // Show detection result
-    if (d.detected) {
-      const detId = 'ups-det-' + Date.now();
-      addActiveJob(detId, `UPS detected: ${d.detected.name} (${d.detected.driver} @ ${d.detected.port}) — battery widget active`);
-      setTimeout(() => removeActiveJob(detId), 6000);
-    }
-    // Refresh topbar widget — poll immediately then again after 3s to catch upsd binding
-    pollUPSTopbar();
-    setTimeout(pollUPSTopbar, 3000);
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Enable UPS Feature'; }
-    alert('Error: ' + e.message);
-  } finally {
-    removeActiveJob(jobId);
-  }
+  );
 }
 
 // ── UPS Top-Bar Poller ────────────────────────────────────────────────────────

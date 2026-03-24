@@ -63,6 +63,16 @@
   <!-- TEXT -->
   <g font-family="Segoe UI, Roboto, Arial, sans-serif">
 
+    <!-- Solid-colour layer: always visible (Safari fallback — Safari ignores
+         fill="url(#gradient)" on text in external SVGs and renders transparent) -->
+    <text x="420" y="290"
+          font-size="240"
+          font-weight="700"
+          fill="#00eaff">
+      ZNAS
+    </text>
+    <!-- Gradient layer on top: shown in Chrome/Firefox; transparent in Safari
+         (the solid cyan above shows through) -->
     <text x="420" y="290"
           font-size="240"
           font-weight="700"

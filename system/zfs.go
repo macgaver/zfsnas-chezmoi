@@ -320,9 +320,12 @@ func poolMembers(poolName string) (raw, resolved, roles []string) {
 		if i < len(resolvedNames) {
 			res = resolvedNames[i]
 		}
-		// If ZFS returned an unresolved path (by-partuuid, by-id, or bare UUID string),
+		// If ZFS returned an unresolved path (by-partuuid, by-id, bare UUID, or
+		// the bare filename of a by-id entry such as "ata-MODEL_SERIAL" which
+		// `zpool status` without -P returns for pools created with by-id paths),
 		// fall back to our own resolution using the raw -P path.
-		if res == "" || strings.Contains(res, "/by-partuuid/") || strings.Contains(res, "/by-id/") || isPartuuidString(res) {
+		if res == "" || strings.Contains(res, "/by-partuuid/") || strings.Contains(res, "/by-id/") ||
+			isPartuuidString(res) || looksLikeByIDBasename(res) {
 			res = resolveDevPath(r)
 		}
 		// Ensure path has /dev/ prefix.
@@ -451,7 +454,8 @@ func poolCacheDevs(poolName string) (raw, resolved []string) {
 		if i < len(resolvedNames) {
 			res = resolvedNames[i]
 		}
-		if res == "" || strings.Contains(res, "/by-partuuid/") || strings.Contains(res, "/by-id/") {
+		if res == "" || strings.Contains(res, "/by-partuuid/") || strings.Contains(res, "/by-id/") ||
+			looksLikeByIDBasename(res) {
 			res = resolveDevPath(r)
 		}
 		if res != "" && !strings.HasPrefix(res, "/dev/") {
@@ -613,6 +617,7 @@ func RemovePoolCache(poolName, device string) error {
 // /dev/disk/by-uuid/...) to their canonical /dev/sdX path.
 // Returns the original path unchanged if resolution fails or the result
 // does not look like a block device.
+
 // isPartuuidString returns true if s is a bare PARTUUID (8-4-4-4-12 hex with dashes).
 func isPartuuidString(s string) bool {
 	if len(s) != 36 || strings.Count(s, "-") != 4 {
@@ -652,10 +657,42 @@ func blkidPartuuidMap() map[string]string {
 	return m
 }
 
+// looksLikeByIDBasename returns true when s looks like the bare filename
+// component of a /dev/disk/by-id/ entry (e.g. "ata-SAMSUNG_870_S5SVNG0N123456",
+// "wwn-0x5000cca2bc5e3e80").  These have recognisable prefixes and contain
+// hyphens but no path separators.  `zpool status` (without -P) returns them
+// when a pool was created using by-id paths.
+func looksLikeByIDBasename(s string) bool {
+	if strings.Contains(s, "/") {
+		return false
+	}
+	return strings.HasPrefix(s, "ata-") ||
+		strings.HasPrefix(s, "wwn-") ||
+		strings.HasPrefix(s, "scsi-") ||
+		strings.HasPrefix(s, "nvme-eui.") ||
+		strings.HasPrefix(s, "nvme-") ||
+		strings.HasPrefix(s, "dm-name-") ||
+		strings.HasPrefix(s, "dm-uuid-") ||
+		strings.HasPrefix(s, "usb-")
+}
+
 func resolveDevPath(p string) string {
 	// 1. Direct symlink resolution (works when udev created /dev/disk/by-partuuid/).
 	if real, err := filepath.EvalSymlinks(p); err == nil && strings.HasPrefix(real, "/dev/") {
 		return real
+	}
+
+	// 1b. For /dev/disk/by-* paths that EvalSymlinks couldn't resolve (e.g. udev
+	// not yet settled), ask lsblk which reads from sysfs and may still succeed.
+	if strings.HasPrefix(p, "/dev/disk/by-") {
+		if out, err := exec.Command("lsblk", "-ln", "-o", "NAME", p).Output(); err == nil {
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			if len(lines) > 0 {
+				if name := strings.TrimSpace(lines[0]); name != "" && !strings.Contains(name, " ") {
+					return "/dev/" + name
+				}
+			}
+		}
 	}
 
 	// Extract UUID from a /by-partuuid/ path or a bare UUID string.

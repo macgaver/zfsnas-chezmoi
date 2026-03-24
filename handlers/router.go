@@ -318,6 +318,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleRunReplicationTask)))).Methods("GET")
 
 	// --- Prerequisites: install optional packages (admin only) ---
+	r.Handle("/api/prereqs/op-status",
+		RequireAuth(http.HandlerFunc(HandleOpStatus))).Methods("GET")
 	r.Handle("/api/prereqs/install",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleInstallPackage(appCfg))))).Methods("POST")
 	r.Handle("/api/prereqs/uninstall",

@@ -9,12 +9,17 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/system"
 
 	"github.com/gorilla/websocket"
 )
+
+// aptInstallMu serialises all apt-get/binary installations so that two
+// concurrent requests cannot run package managers at the same time.
+var aptInstallMu sync.Mutex
 
 var wsUpgrader = websocket.Upgrader{
     CheckOrigin: func(r *http.Request) bool {
@@ -55,6 +60,16 @@ func HandleCheckPrereqs(w http.ResponseWriter, r *http.Request) {
 		"zfs_module_warn":   zfsModuleWarn,
 		"sudo_access":       system.CheckSudoAccess(),
 	})
+}
+
+// HandleOpStatus returns whether a package install/uninstall is currently running.
+// The frontend polls this after a page refresh to show a "running" indicator.
+func HandleOpStatus(w http.ResponseWriter, r *http.Request) {
+	locked := !aptInstallMu.TryLock()
+	if !locked {
+		aptInstallMu.Unlock()
+	}
+	jsonOK(w, map[string]bool{"running": locked})
 }
 
 // HandleInstallPrereqs upgrades the HTTP connection to WebSocket and streams
@@ -98,6 +113,9 @@ func HandleInstallPrereqs(w http.ResponseWriter, r *http.Request) {
 
 	send(fmt.Sprintf("Running: sudo apt-get install -y %s", strings.Join(missing, " ")))
 	send("─────────────────────────────────────────")
+
+	aptInstallMu.Lock()
+	defer aptInstallMu.Unlock()
 
 	args := append([]string{"env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-q"}, missing...)
 	cmd := exec.Command("sudo", args...)
@@ -278,6 +296,10 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 
 		sess := MustSession(r)
 
+		// Serialise all installs — prevents concurrent apt/binary operations.
+		aptInstallMu.Lock()
+		defer aptInstallMu.Unlock()
+
 		// MinIO uses a custom binary installation (not apt-get).
 		if req.Package == "minio" {
 			if err := system.InstallMinIO(); err != nil {
@@ -394,6 +416,10 @@ func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 		req.Package = strings.TrimSpace(req.Package)
 
 		sess := MustSession(r)
+
+		aptInstallMu.Lock()
+		defer aptInstallMu.Unlock()
+
 		switch req.Package {
 		case "minio":
 			if err := system.UninstallMinIO(); err != nil {
