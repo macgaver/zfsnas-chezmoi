@@ -174,11 +174,12 @@ type LXDNetwork struct {
 type LXDNetworkCreateRequest struct {
 	Name            string `json:"name"`
 	Description     string `json:"description"`
-	BridgeType      string `json:"bridge_type"`      // "nat" | "vlan" | "plain"
+	BridgeType      string `json:"bridge_type"`      // "nat" | "vlan" | "plain" | "isolated"
 	MTU             int    `json:"mtu"`              // 0 = default (1500)
-	// nat fields
+	// nat + isolated fields
 	IPv4Address     string `json:"ipv4_address"`     // e.g. "10.10.10.1/24"
 	IPv4NAT         bool   `json:"ipv4_nat"`
+	IPv4DHCP        bool   `json:"ipv4_dhcp"`        // isolated only: hand out IPs from the CIDR (no NAT either way)
 	IPv6Address     string `json:"ipv6_address"`     // e.g. "fd00::1/64" or "" for none
 	IPv6NAT         bool   `json:"ipv6_nat"`
 	// vlan/plain fields
@@ -576,6 +577,35 @@ func CreateLXDNetwork(req LXDNetworkCreateRequest) error {
 		}
 		if out, err := exec.Command("incus", args...).CombinedOutput(); err != nil {
 			removeVLANInterfaceStanza(vlanIface)
+			return fmt.Errorf("lxc network create: %s", strings.TrimSpace(string(out)))
+		}
+		if req.Description != "" {
+			if err := setLXDNetworkDescription(req.Name, req.Description); err != nil {
+				return err
+			}
+		}
+
+	case "isolated":
+		// Internal-only virtual switch for VMs/CTs: no uplink, no NAT, no
+		// physical interface. With a CIDR the host holds the bridge IP (and
+		// dnsmasq can hand out leases when ipv4_dhcp); with none it is a pure
+		// L2 segment — guests bring their own addressing.
+		ipv4 := req.IPv4Address
+		if ipv4 == "" {
+			ipv4 = "none"
+		}
+		args := []string{"network", "create", req.Name,
+			"ipv4.address=" + ipv4,
+			"ipv6.address=none",
+		}
+		if ipv4 != "none" {
+			args = append(args, "ipv4.nat=false")
+			args = append(args, fmt.Sprintf("ipv4.dhcp=%v", req.IPv4DHCP))
+		}
+		if mtuArg != "" {
+			args = append(args, mtuArg)
+		}
+		if out, err := exec.Command("incus", args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("lxc network create: %s", strings.TrimSpace(string(out)))
 		}
 		if req.Description != "" {

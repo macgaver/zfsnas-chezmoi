@@ -4164,9 +4164,29 @@
               <label class="form-label">Bridge Type</label>
               <select id="cb-type" class="input" onchange="updateCreateBridgeType()">
                 <option value="nat">NAT — LXC-managed (IPv4 NAT, like lxdbr0)</option>
+                <option value="isolated">Isolated — VMs/CTs only (no uplink, no NAT)</option>
                 <option value="plain">Plain — external bridge (physical interface)</option>
                 <option value="vlan">VLAN — external bridge with VLAN tag</option>
               </select>
+            </div>
+            <!-- Isolated sub-fields: a pure virtual switch — no physical NIC,
+                 no NAT, no route out. Optional CIDR only adds host-side
+                 addressing + DHCP convenience. -->
+            <div id="cb-isolated-fields" style="display:none;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label class="form-label">IPv4 CIDR <span style="color:var(--text-3);font-size:11px;">(optional)</span>
+                    <i class="info-tip tip-down" data-tip="Leave BLANK for a fully isolated Layer-2 segment: only the attached VMs/containers can talk to each other, and they must bring their own IPs (static, or a guest running its own DHCP — e.g. a router VM).&#10;Enter a private CIDR (e.g. 10.99.0.1/24) to give the bridge an address on the HOST: guests can then get IPs automatically via DHCP below — but note the host itself becomes reachable from this network. NAT stays OFF either way; there is never a route to the outside."></i>
+                  </label>
+                  <input type="text" id="cb-iso-ipv4" class="input" placeholder="blank = fully isolated" oninput="document.getElementById('cb-iso-dhcp-wrap').style.opacity=this.value.trim()?1:.45">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">DHCP</label>
+                  <label id="cb-iso-dhcp-wrap" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;opacity:.45;">
+                    <input type="checkbox" id="cb-iso-dhcp" checked> Hand out IPs from the CIDR
+                  </label>
+                </div>
+              </div>
             </div>
             <!-- NAT sub-fields -->
             <div id="cb-nat-fields">
@@ -4233,6 +4253,7 @@
         <div class="settings-tab-bar">
           <button class="settings-tab active" id="bridge-tab-btn-members" onclick="showBridgeTab('members',this)">VMs &amp; Containers</button>
           <button class="settings-tab" id="bridge-tab-btn-monitor" onclick="showBridgeTab('monitor',this)">Monitor</button>
+          <button class="settings-tab" id="bridge-tab-btn-topology" onclick="showBridgeTab('topology',this)">Topology</button>
         </div>
         <div id="bridge-tab-members">
           <div id="bridge-detail-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
@@ -4316,6 +4337,34 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- TAB: Topology — the Networking Layer map filtered to THIS bridge
+             (its instances + their docker). Networking only: no layer switch.
+             The legend deliberately uses the plain map-legend class so
+             _mapSyncLayerUI's storage/network toggling leaves it alone. -->
+        <div id="bridge-tab-topology" style="display:none;padding-top:4px;">
+          <div class="map-toolbar">
+            <div class="map-legend">
+              <span class="map-legend-item" data-layer="bridge"><i></i>Bridge</span>
+              <span class="map-legend-item" data-layer="netvm"><i></i>VMs / CT</span>
+              <span class="map-legend-item" data-layer="docker"><i></i>Containers &amp; Ports</span>
+            </div>
+            <div class="map-toolbar-right">
+              <span id="brtopo-status" class="map-status"></span>
+              <div class="map-zoom" role="group" aria-label="Zoom">
+                <button type="button" class="map-zoom-btn" onclick="mapZoom('brtopo-svg',-1)" title="Zoom out" aria-label="Zoom out">&minus;</button>
+                <button type="button" class="map-zoom-btn map-zoom-lvl" id="brtopo-zoom-lvl" onclick="mapZoom('brtopo-svg',0)" title="Reset zoom">100%</button>
+                <button type="button" class="map-zoom-btn" onclick="mapZoom('brtopo-svg',1)" title="Zoom in" aria-label="Zoom in">+</button>
+                <button type="button" class="map-zoom-btn map-fs-btn" onclick="mapFullscreen()" title="Full screen" aria-label="Full screen">&#x26F6;</button>
+              </div>
+            </div>
+          </div>
+          <div id="brtopo-viewport" class="map-viewport map-hud">
+            <svg id="brtopo-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet"></svg>
+            <div id="brtopo-empty" class="map-empty hidden">No VMs or containers attached to this bridge.</div>
+            <button type="button" class="map-fs-exit" onclick="mapFullscreen()" title="Exit full screen" aria-label="Exit full screen">&#x2715;</button>
           </div>
         </div>
       </div>
@@ -34632,7 +34681,7 @@ function runReplicationTask(id, name) {
     c.style.left=left+'px'; c.style.top=top+'px';
   }
   // Pick the hovercard HTML for the active layer.
-  function _hoverHTML(id){ return (_mapLayer==='network') ? netHoverHTML(id) : mapHoverHTML(id); }
+  function _hoverHTML(id){ return (_mapEffLayer()==='network') ? netHoverHTML(id) : mapHoverHTML(id); }
   function mapHoverShow(id, g){
     if(id===_mapHoverId) return;          // already showing this node
     _mapStopIo();                         // tear down any previous live iostat stream
@@ -34834,7 +34883,7 @@ function runReplicationTask(id, name) {
       menu.appendChild(it);
     };
     section('Placement');
-    if (_mapLayer==='network'){
+    if (_mapEffLayer()==='network'){
       [['radial','✷ Star / radial (default)'],['hierarchy','▤ Hierarchy (compact)'],['grid','▦ Grid']].forEach(([val,label])=>{
         item(label, _netLayout===val, ()=>{ if(val!==_netLayout){ _netLayout=val;
           try{ sessionStorage.setItem('znasNetLayout', val); }catch(e){}
@@ -34850,11 +34899,11 @@ function runReplicationTask(id, name) {
       });
     }
     // Star only: forget the dragged/pinned node positions and re-flow.
-    if ((_mapLayer==='network' ? _netLayout : _storeLayout) === 'radial'){
+    if ((_mapEffLayer()==='network' ? _netLayout : _storeLayout) === 'radial'){
       item('↺ Reset placement', false, ()=>{
         _mapSavePins(null);
         _mapSimDispose(_mapCtx.svg);
-        (_mapLayer==='network' ? _netFitted : _storeFitted)[_mapCtx.svg]=false;
+        (_mapEffLayer()==='network' ? _netFitted : _storeFitted)[_mapCtx.svg]=false;
         _mapSig=''; if(_mapData) renderMap(_mapData);
       });
     }
@@ -35042,7 +35091,8 @@ function runReplicationTask(id, name) {
     try { return localStorage.getItem('znasMapLayer') === 'network' ? 'network' : 'storage'; }
     catch(e){ return 'storage'; }
   })();
-  let _netFocusInst = null; // when on the per-instance Topology tab, focus this id
+  let _netFocusInst = null;   // when on the per-instance Topology tab, focus this id
+  let _netFocusBridge = null; // when on the bridge page's Topology tab, focus this bridge id
   window.setMapLayer = function(layer){
     layer = (layer === 'network') ? 'network' : 'storage';
     _mapLayer = layer;
@@ -35056,6 +35106,11 @@ function runReplicationTask(id, name) {
     _mapSig = ''; // force a full relayout on the next render
     if (_mapData) renderMap(_mapData);
   };
+  // Effective topology layer: surfaces flagged netOnly (the bridge page's
+  // Topology tab) always render the Networking Layer, regardless of the
+  // storage/network toggle the user picked on the main map.
+  function _mapEffLayer(){ return (_mapCtx && _mapCtx.netOnly) ? 'network' : _mapLayer; }
+
   // Reflect the persisted layer on the toolbar as soon as the DOM is ready.
   function _mapSyncLayerUI(){
     document.querySelectorAll('.map-layer-btn').forEach(b => b.classList.toggle('active', b.dataset.ml === _mapLayer));
@@ -35301,6 +35356,32 @@ function runReplicationTask(id, name) {
                 } });
     startMapPoll();
   };
+  // ---- bridge Topology tab (bridge detail page) ----
+  // The Networking Layer map filtered to one bridge. netOnly ⇒ the layer
+  // toggle is ignored and the storage layer never renders here. The object
+  // set is pinned on first paint like every other surface.
+  let _brTopoPinned = null;
+  const _MAP_CTX_BR = { svg:'brtopo-svg', viewport:'brtopo-viewport', netOnly:true,
+                        empty:'brtopo-empty', status:'brtopo-status', panel:'bridge-tab-topology',
+                        filter:(d)=>{
+                          if (!_brTopoPinned){
+                            if (d && d.net && (d.net.bridges||[]).length) _brTopoPinned = d;
+                            return d;
+                          }
+                          return projectPinnedMetrics(_brTopoPinned, d);
+                        } };
+  window.startBridgeTopology = function(bridgeName){
+    _brTopoPinned = null;
+    _netFocusBridge = bridgeName ? ('br:'+bridgeName) : null;
+    _netFitted['brtopo-svg'] = false; // re-fit when hopping between bridges
+    _mapSig = '';
+    setMapCtx(_MAP_CTX_BR);
+    startMapPoll();
+  };
+  window.stopBridgeTopology = function(){
+    if (_mapCtx === _MAP_CTX_BR) stopMapPoll();
+  };
+
   window.stopVmTopology = function(){
     stopMapPoll();
     if (_vmTopoDockerTimer){ clearInterval(_vmTopoDockerTimer); _vmTopoDockerTimer = null; }
@@ -35610,7 +35691,7 @@ function runReplicationTask(id, name) {
     _mapApplyVirtGate(data);
 
     // ── Networking Layer takes a completely different (radial) layout ────────
-    if (_mapLayer === 'network'){
+    if (_mapEffLayer() === 'network'){
       renderNetMap(svg, empty, status, data);
       return;
     }
@@ -35680,8 +35761,9 @@ function runReplicationTask(id, name) {
   // its own remembered arrangement.
   function _mapPinsKey(){
     const host = (typeof _relayActive!=='undefined' && _relayActive && _relayHostname) ? _relayHostname : 'local';
-    const focus = (_mapCtx.svg==='vmtopo-svg' && _netFocusInst) ? (':'+_netFocusInst) : '';
-    return host + ':' + _mapLayer + focus;
+    const focus = (_mapCtx.svg==='vmtopo-svg' && _netFocusInst) ? (':'+_netFocusInst)
+                : (_mapCtx.svg==='brtopo-svg' && _netFocusBridge) ? (':'+_netFocusBridge) : '';
+    return host + ':' + _mapEffLayer() + focus;
   }
   function _mapGetPins(){
     const mp = (typeof currentUser!=='undefined' && currentUser && currentUser.preferences && currentUser.preferences.map_pins) || {};
@@ -36300,6 +36382,23 @@ function runReplicationTask(id, name) {
             nics:(net.nics||[]).filter(n=>n.instance_id===focus),
             instances:(net.instances||[]).filter(i=>i.id===focus),
             docker:(net.docker||[]).filter(d=>d.instance_id===focus) };
+    }
+    // Bridge page Topology tab: THIS bridge, the instances attached to it and
+    // their docker — the bridge's own network segment, nothing else.
+    const bfocus = (_mapCtx.svg === 'brtopo-svg') ? _netFocusBridge : null;
+    if (bfocus){
+      const keep = new Set((net.nics||[]).filter(n=>n.bridge_id===bfocus).map(n=>n.instance_id));
+      net={ bridges:(net.bridges||[]).filter(b=>b.id===bfocus),
+            nics:(net.nics||[]).filter(n=>n.bridge_id===bfocus),
+            instances:(net.instances||[]).filter(i=>keep.has(i.id)),
+            docker:(net.docker||[]).filter(d=>keep.has(d.instance_id)) };
+      // A memberless bridge (e.g. a freshly created isolated one) would render
+      // a blank canvas — netFullRender drops hub-less bridges. Say so instead.
+      if (!net.instances.length){
+        if (empty){ empty.textContent='No VMs or containers attached to this bridge.'; empty.classList.remove('hidden'); }
+        svg.innerHTML=''; _mapSig=''; if(status) status.textContent='';
+        return;
+      }
     }
     if (!net.bridges || !net.bridges.length){
       if (empty){ empty.textContent='No bridges detected for this layer.'; empty.classList.remove('hidden'); }
@@ -57363,10 +57462,13 @@ let _bmHistOldestTs    = 0;
 function showBridgeTab(tab, btn) {
   document.querySelectorAll('#page-bridge-detail .settings-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('bridge-tab-members').style.display = tab === 'members' ? '' : 'none';
-  document.getElementById('bridge-tab-monitor').style.display = tab === 'monitor' ? '' : 'none';
+  document.getElementById('bridge-tab-members').style.display  = tab === 'members'  ? '' : 'none';
+  document.getElementById('bridge-tab-monitor').style.display  = tab === 'monitor'  ? '' : 'none';
+  document.getElementById('bridge-tab-topology').style.display = tab === 'topology' ? '' : 'none';
   if (tab === 'monitor') _bmStart();
   else                   _bmStop();
+  if (tab === 'topology') startBridgeTopology(_currentBridgeName);
+  else if (typeof stopBridgeTopology === 'function') stopBridgeTopology();
 }
 
 function _bmStart() {
@@ -57844,9 +57946,10 @@ async function submitDeleteVLANIface() {
 
 function updateCreateBridgeType() {
   const t = document.getElementById('cb-type').value;
-  document.getElementById('cb-nat-fields').style.display  = t === 'nat'  ? '' : 'none';
-  document.getElementById('cb-ext-fields').style.display  = t !== 'nat'  ? '' : 'none';
-  document.getElementById('cb-vlan-row').style.display    = t === 'vlan' ? '' : 'none';
+  document.getElementById('cb-nat-fields').style.display      = t === 'nat'      ? '' : 'none';
+  document.getElementById('cb-isolated-fields').style.display = t === 'isolated' ? '' : 'none';
+  document.getElementById('cb-ext-fields').style.display      = (t === 'plain' || t === 'vlan') ? '' : 'none';
+  document.getElementById('cb-vlan-row').style.display        = t === 'vlan' ? '' : 'none';
   if (t !== 'vlan') document.getElementById('cb-vlan-iface-row').style.display = 'none';
   _cbRenderParentOptions();
   _updateVLANNameSuggestion();
@@ -57862,7 +57965,7 @@ function _cbRenderParentOptions() {
   const sel = document.getElementById('cb-parent');
   const hint = document.getElementById('cb-parent-hint');
   const t = document.getElementById('cb-type').value;
-  if (t === 'nat') { hint.style.display = 'none'; return; }
+  if (t === 'nat' || t === 'isolated') { hint.style.display = 'none'; return; } // no physical parent
   if (!_cbIfaces.length) {
     hint.style.display = 'none';
     return; // keep the Loading…/error/empty placeholder set by the loader
@@ -57941,6 +58044,9 @@ async function openCreateBridgeModal() {
   document.getElementById('cb-ipv4').value = '';
   document.getElementById('cb-ipv6').value = '';
   document.getElementById('cb-ipv4-nat').checked = true;
+  document.getElementById('cb-iso-ipv4').value = '';
+  document.getElementById('cb-iso-dhcp').checked = true;
+  document.getElementById('cb-iso-dhcp-wrap').style.opacity = .45;
   document.getElementById('cb-vlan-tag').value = '';
   document.getElementById('cb-vlan-iface-name').value = '';
   document.getElementById('cb-vlan-iface-row').style.display = 'none';
@@ -57982,6 +58088,9 @@ async function submitCreateBridge() {
     req.ipv4_nat = document.getElementById('cb-ipv4-nat').checked;
     const ipv6 = document.getElementById('cb-ipv6').value.trim();
     req.ipv6_address = ipv6 || 'none';
+  } else if (bridgeType === 'isolated') {
+    req.ipv4_address = document.getElementById('cb-iso-ipv4').value.trim() || '';
+    req.ipv4_dhcp = document.getElementById('cb-iso-dhcp').checked;
   } else {
     req.parent_interface = document.getElementById('cb-parent').value;
     if (!req.parent_interface) {
