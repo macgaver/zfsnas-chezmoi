@@ -286,8 +286,12 @@ Cmnd_Alias ZFSNAS_NTP = \
 # since v3.0.0 — OS package updates (apt-get upgrade) from the Settings page
 # since v6.1.0 — apt-get remove / autoremove for optional feature uninstall
 #   (e.g. targetcli-fb removal when iSCSI feature is disabled)
+# since v6.6.27 — tee /etc/apt/apt.conf.d/20auto-upgrades toggles the OS
+#   automatic-background-upgrade service (unattended-upgrades) on/off from the
+#   OS Packages card
 Cmnd_Alias ZFSNAS_APT = \
     /usr/bin/apt-get *, \
+    /usr/bin/tee /etc/apt/apt.conf.d/20auto-upgrades, \
     /usr/bin/tee /etc/systemd/system/zfsnas.service, \
     /usr/bin/systemctl daemon-reload, \
     /usr/bin/systemctl enable zfsnas
@@ -364,6 +368,7 @@ ExecStart=/opt/zfsnas/zfsnas
 - **`cat /etc/sudoers.d/zfsnas`** — used by the Sudoers Review diff (v6.3.32+) to read the portal's own sudoers file so the review always shows the accurate current state, including manual edits. Without this, the portal can only compare against the last content it wrote.
 - **`chmod 0440 /etc/sudoers.d/zfsnas`** — corrects file permissions after each write (v6.4.25+). `sudo tee` creates new files with umask-derived permissions (typically 0644); this restores the recommended 0440 so the file has no write bits beyond the owner. If you do not use the Sudoers Hardening feature you can omit the entire `ZFSNAS_SECURITY` alias.
 - **`find *`, `chown *`, `chown -R *`, `chmod *`, `chmod -R *`** (in `ZFSNAS_FILES`) — used by the File Browser (v6.4.3+/v6.4.4+) for directory listing, ownership changes, and permission changes. sudo-rs (Ubuntu 26.04+) does not allow wildcards in non-trailing argument positions, so the previous `chown * /mnt/*` style is no longer expressible. The portal now enforces path scoping itself: every File Browser request is validated against known dataset mountpoints and share roots before any of these commands run; arbitrary paths cannot be targeted from the UI.
+- **`tee /etc/apt/apt.conf.d/20auto-upgrades`** — used by the Automatic OS Updates toggle on the OS Packages card (v6.6.27+) to enable or disable the distribution's `unattended-upgrades` background service. The portal writes only this fixed apt periodic config (the same file `dpkg-reconfigure unattended-upgrades` manages), setting `APT::Periodic::Update-Package-Lists` and `APT::Periodic::Unattended-Upgrade` to `"0"` or `"1"`. Reading the current state needs no sudo (`apt-config dump`). A NAS is best served with this **disabled** so updates install only during a chosen maintenance window, since an unattended upgrade can restart Samba/NFS/iSCSI and other services without warning.
 - **`tee /etc/modprobe.d/zfs.conf` and sysfs tee entries** — used by the ARC Level 1 tuning feature (v6.3.22+) to persist ZFS ARC size limits across reboots and to apply them immediately via kernel sysfs. These are write-only paths; the portal only ever pipes well-formed `options zfs ...` lines or numeric byte values through `tee`.
 - **`zfs send *` / `zfs recv *` / `zfs receive *`** — used by the remote replication feature (snapshot policies and standalone replication tasks) and the local dataset-to-dataset replication feature. `zfs send` streams a snapshot to stdout; `zfs recv`/`zfs receive` reads a stream from stdin. Both are required locally for local replication (`zfs send | zfs recv` piped on the same host). For remote replication and InterLink push, only `zfs send` is run locally — the remote side runs `zfs recv` via SSH under its own service account (no local sudo required for that side). Including both forms (`recv` and `receive`) is necessary because OpenZFS accepts either spelling.
 - **`zfs allow *`** — used by the InterLink push feature and scheduled replication via InterLink servers to delegate ZFS permissions (`snapshot,send,receive,create,mount`) to the service account on every pool. This is required so that `zfs send` / `zfs recv` can be invoked without sudo when the remote side accepts the SSH connection as the non-root service user. The portal always restricts delegation to the service account's own username and to the specific permission set shown above.

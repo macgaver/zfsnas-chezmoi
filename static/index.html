@@ -23,6 +23,14 @@
   <script src="/static/vendor/xterm.min.js"></script>
   <script src="/static/vendor/xterm-addon-fit.min.js"></script>
   <script src="/static/vendor/chart.umd.min.js"></script>
+  <!-- d3-force (ISC) + its three micro-deps — the physics engine behind the
+       Topology "Star / radial" placement (draggable, remembered positions).
+       Vendored + go:embed'ded like everything else; order matters (d3-force
+       expects the others on the shared window.d3 namespace). -->
+  <script src="/static/vendor/d3-dispatch.min.js"></script>
+  <script src="/static/vendor/d3-quadtree.min.js"></script>
+  <script src="/static/vendor/d3-timer.min.js"></script>
+  <script src="/static/vendor/d3-force.min.js"></script>
   <script src="/static/vendor/qrcode.min.js"></script>
   <script src="/static/vendor/codemirror.min.js"></script>
   <script src="/static/vendor/codemirror-yaml.min.js"></script>
@@ -348,6 +356,8 @@
     }
     .cs-opt:hover { background:var(--surface3,rgba(255,255,255,.07)); }
     .cs-opt.cs-selected { color:var(--accent); font-weight:600; }
+    .cs-opt.cs-disabled { color:var(--text-3); opacity:.55; cursor:not-allowed; }
+    .cs-opt.cs-disabled:hover { background:none; }
     .cs-rich-header {
       display:grid; gap:0 12px; padding:5px 12px;
       font-size:11px; font-weight:700; color:var(--text-3);
@@ -1470,13 +1480,14 @@
                 <button type="button" class="map-zoom-btn" onclick="mapZoom('map-svg',-1)" title="Zoom out" aria-label="Zoom out">&minus;</button>
                 <button type="button" class="map-zoom-btn map-zoom-lvl" id="map-zoom-lvl" onclick="mapZoom('map-svg',0)" title="Reset zoom">100%</button>
                 <button type="button" class="map-zoom-btn" onclick="mapZoom('map-svg',1)" title="Zoom in" aria-label="Zoom in">+</button>
+                <button type="button" class="map-zoom-btn map-fs-btn" onclick="mapFullscreen()" title="Full screen" aria-label="Full screen">&#x26F6;</button>
               </div>
-              <button id="map-style-toggle" class="map-style-toggle" onclick="toggleMapStyle()">HUD</button>
             </div>
           </div>
           <div id="map-viewport" class="map-viewport map-hud">
             <svg id="map-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet"></svg>
             <div id="map-empty" class="map-empty hidden">No pools detected on this server.</div>
+            <button type="button" class="map-fs-exit" onclick="mapFullscreen()" title="Exit full screen" aria-label="Exit full screen">&#x2715;</button>
           </div>
         </div><!-- end cap-tab-map -->
       </div>
@@ -4179,6 +4190,7 @@
                 <select id="cb-parent" class="input" onchange="_updateVLANNameSuggestion()">
                   <option value="">Loading…</option>
                 </select>
+                <div id="cb-parent-hint" style="display:none;font-size:11px;margin-top:4px;"></div>
               </div>
               <div id="cb-vlan-row" style="display:none;">
                 <div class="form-group" style="margin-bottom:14px;">
@@ -5130,13 +5142,14 @@ Select the Console tab to load.</pre>
                 <button type="button" class="map-zoom-btn" onclick="mapZoom('vmtopo-svg',-1)" title="Zoom out" aria-label="Zoom out">&minus;</button>
                 <button type="button" class="map-zoom-btn map-zoom-lvl" id="vmtopo-zoom-lvl" onclick="mapZoom('vmtopo-svg',0)" title="Reset zoom">100%</button>
                 <button type="button" class="map-zoom-btn" onclick="mapZoom('vmtopo-svg',1)" title="Zoom in" aria-label="Zoom in">+</button>
+                <button type="button" class="map-zoom-btn map-fs-btn" onclick="mapFullscreen()" title="Full screen" aria-label="Full screen">&#x26F6;</button>
               </div>
-              <button id="vmtopo-style-toggle" class="map-style-toggle" onclick="toggleMapStyle()">HUD</button>
             </div>
           </div>
           <div id="vmtopo-viewport" class="map-viewport map-hud">
             <svg id="vmtopo-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet"></svg>
             <div id="vmtopo-empty" class="map-empty hidden">No related storage found for this instance.</div>
+            <button type="button" class="map-fs-exit" onclick="mapFullscreen()" title="Exit full screen" aria-label="Exit full screen">&#x2715;</button>
           </div>
         </div><!-- /ci-tab-content-topology -->
 
@@ -16005,13 +16018,19 @@ function _journalStopLive() {
         }
         div.dataset.val = opt.value;
         div.dataset.search = opt.dataset.search || opt.textContent.toLowerCase();
-        div.addEventListener('mousedown', function(e) {
-          e.preventDefault();
-          sel.value = div.dataset.val;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          _refreshTrigger();
-          _csClose();
-        });
+        if (opt.disabled) {
+          // Mirror native <option disabled>: visibly greyed, not selectable.
+          div.classList.add('cs-disabled');
+          div.addEventListener('mousedown', function(e) { e.preventDefault(); e.stopPropagation(); });
+        } else {
+          div.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            sel.value = div.dataset.val;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            _refreshTrigger();
+            _csClose();
+          });
+        }
         list.appendChild(div);
       });
     }
@@ -34412,12 +34431,20 @@ function runReplicationTask(id, name) {
     }
     return projectPinnedMetrics(_capTopoPinned, data);
   }
-  const _MAP_CTX_CAP = { svg:'map-svg', viewport:'map-viewport', styleBtn:'map-style-toggle',
+  const _MAP_CTX_CAP = { svg:'map-svg', viewport:'map-viewport',
                          empty:'map-empty', status:'map-status', panel:'cap-tab-map', filter:pinFullTopology };
   let _mapCtx = _MAP_CTX_CAP;
   function setMapCtx(ctx){ if(ctx!==_mapCtx){ _mapCtx=ctx; _mapSig=''; } }
 
-  function startMapPoll(){ stopMapPoll(); _mapSyncLayerUI(); _mapEnsureZoom(_mapCtx.svg, _mapCtx.viewport); mapWireClicks(); pollMap(); _mapTimer = setInterval(pollMap, 3000); }
+  function startMapPoll(){
+    stopMapPoll(); _mapSyncLayerUI(); _mapApplyStyle();
+    // Size the viewport NOW (not only on window resize): the CSS fallback
+    // height ignores the docked Activity bar and would tuck the lower part of
+    // the map underneath it — invisible AND eating background right-clicks.
+    _mapSizeViewport(document.getElementById(_mapCtx.viewport));
+    _mapEnsureZoom(_mapCtx.svg, _mapCtx.viewport); mapWireClicks(); pollMap();
+    _mapTimer = setInterval(pollMap, 3000);
+  }
   function stopMapPoll(){ if (_mapTimer){ clearInterval(_mapTimer); _mapTimer = null; } mapHoverHide(); }
 
   // Called on an InterLink server switch. The full Topology is "pinned" to the
@@ -34443,8 +34470,53 @@ function runReplicationTask(id, name) {
     if (!svg || svg.__wired) return;
     svg.__wired = true;
     svg.addEventListener('click', e=>{
+      const st = _mapSims[svg.id];
+      if (st && Date.now() < st.suppressUntil) return; // that "click" was a drag
       const g = e.target.closest && e.target.closest('.map-node');
       if (g) mapNodeClick(g.getAttribute('data-id'));
+    });
+    // ── Star placement: drag any node, the simulation re-flows live around it.
+    // A dragged node stays pinned where dropped (fx/fy) and the pins persist
+    // in user prefs. A plain click (movement <3px) is left to the click
+    // handler above. Pointer Events cover mouse, touch and pen alike.
+    svg.addEventListener('pointerdown', e=>{
+      const st = _mapSims[svg.id]; if (!st) return;      // only while Star is live
+      if (e.pointerType==='mouse' && e.button!==0) return;
+      const g = e.target.closest && e.target.closest('.map-node, .net-node'); if (!g) return;
+      const nd = st.byId[g.getAttribute('data-id')]; if (!nd) return;
+      e.preventDefault(); e.stopPropagation();
+      const rect = svg.getBoundingClientRect();
+      const toUser = ev=>({ x:(ev.clientX-rect.left)*st.W/rect.width,
+                            y:(ev.clientY-rect.top )*st.H/rect.height });
+      const p0 = toUser(e), ox = nd.x-p0.x, oy = nd.y-p0.y;
+      const wasPinned = nd.fx!=null;
+      let moved = false;
+      nd.fx = nd.x; nd.fy = nd.y;
+      st.sim.alphaTarget(0.3).restart();
+      try{ svg.setPointerCapture(e.pointerId); }catch(err){}
+      const mv = ev=>{
+        const p = toUser(ev);
+        const nx = p.x+ox, ny = p.y+oy;
+        if (!moved && Math.hypot(nx-p0.x-ox, ny-p0.y-oy) > 3) moved = true;
+        nd.fx = Math.max(nd.w/2+10, Math.min(st.W-nd.w/2-10, nx));
+        nd.fy = Math.max(nd.h/2+10, Math.min(st.H-nd.h/2-10, ny));
+      };
+      const up = ()=>{
+        svg.removeEventListener('pointermove', mv);
+        svg.removeEventListener('pointerup', up);
+        svg.removeEventListener('pointercancel', up);
+        st.sim.alphaTarget(0);
+        if (moved){
+          st.suppressUntil = Date.now()+400;   // swallow the click that follows
+          nd.__autoPin = false;                // this pin is now the USER's
+          const pins = {};
+          st.nodes.forEach(n=>{ if (n.fx!=null && !n.__autoPin) pins[n.id]=[Math.round(n.fx), Math.round(n.fy)]; });
+          _mapSavePins(pins);
+        } else if (!wasPinned){ nd.fx=null; nd.fy=null; } // plain click: don't pin
+      };
+      svg.addEventListener('pointermove', mv);
+      svg.addEventListener('pointerup', up);
+      svg.addEventListener('pointercancel', up);
     });
     // Hover hovercard (delegated; SVG element persists across re-renders). Works
     // for both the storage (.map-node) and network (.net-node) layers.
@@ -34458,17 +34530,16 @@ function runReplicationTask(id, name) {
       if (e.relatedTarget && g.contains(e.relatedTarget)) return; // moving within same node
       mapHoverHide(); mapClearHighlight();
     });
-    // Right-click anywhere in the network frame → switch the placement
-    // algorithm. Bound to the VIEWPORT (the whole right pane), not just the SVG,
+    // Right-click anywhere in the map background → shared options menu (both
+    // layers). Bound to the VIEWPORT (the whole right pane), not just the SVG,
     // so the empty space around a fitted/smaller map still opens the menu.
     const vp = svg.closest('.map-viewport') || document.getElementById(_mapCtx.viewport);
     if (vp && !vp.dataset.netCtxWired){
       vp.dataset.netCtxWired = '1';
       vp.addEventListener('contextmenu', e=>{
-        if (_mapLayer !== 'network') return;                       // only the network layer has layouts
-        if (e.target.closest && e.target.closest('.net-node')) return; // not on a node — background only
+        if (e.target.closest && e.target.closest('.net-node, .map-node')) return; // background only
         e.preventDefault();
-        _netShowLayoutMenu(e.clientX, e.clientY);
+        _mapShowBgMenu(e.clientX, e.clientY);
       });
     }
     // Re-measure & relayout when the theme (body class) changes — a different
@@ -34729,36 +34800,72 @@ function runReplicationTask(id, name) {
     return '';
   }
 
-  // Right-click background menu to switch the network placement algorithm.
-  function _netShowLayoutMenu(x, y){
-    const old=document.getElementById('net-layout-menu'); if(old) old.remove();
+  // Background right-click menu — shared by BOTH topology layers (v6.7.4).
+  // Sections: Placement (networking layer only) · Style (Flat default / HUD,
+  // replaces the old toolbar HUD button) · View (fit / reset zoom / fullscreen).
+  function _mapShowBgMenu(x, y){
+    const old=document.getElementById('map-bg-menu'); if(old) old.remove();
     const menu=document.createElement('div');
-    menu.id='net-layout-menu';
+    menu.id='map-bg-menu';
     menu.style.cssText='position:fixed;z-index:99999;min-width:188px;background:var(--surface,#1a1a1f);'
       +'border:1px solid var(--border,#333);border-radius:8px;padding:5px;'
       +'box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:13px;user-select:none;';
     const close=()=>{ menu.remove(); document.removeEventListener('click', close, true); document.removeEventListener('contextmenu', close, true); };
-    const head=document.createElement('div');
-    head.textContent='Placement';
-    head.style.cssText='padding:4px 10px 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3,#888);';
-    menu.appendChild(head);
-    [['hierarchy','▤ Hierarchy (compact)'],['radial','✷ Star / radial'],['grid','▦ Grid']].forEach(([val,label])=>{
+    const section=(label)=>{
+      const head=document.createElement('div');
+      head.textContent=label;
+      head.style.cssText='padding:4px 10px 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3,#888);';
+      if (menu.childElementCount){ head.style.borderTop='1px solid var(--border,#333)'; head.style.marginTop='5px'; head.style.paddingTop='9px'; }
+      menu.appendChild(head);
+    };
+    // Use --text (the real primary-text var) — --text-1 is undefined in the SPA
+    // so a dark fallback would be unreadable on the white theme's surface.
+    const item=(label, selected, fn)=>{
       const it=document.createElement('div');
-      it.textContent=(_netLayout===val?'● ':'   ')+label;
-      // Use --text (the real primary-text var) — --text-1 is undefined in the SPA
-      // so the old dark fallback (#e2e2e6) rendered light-grey on the white
-      // theme's white surface, making the menu unreadable. --text is dark on
-      // light themes, light on dark themes.
-      it.style.cssText='padding:6px 12px;border-radius:5px;white-space:nowrap;cursor:pointer;color:var(--text,#e2e2e6);';
+      it.textContent=(selected?'● ':' ')+label;
+      it.style.cssText='padding:6px 12px;border-radius:5px;white-space:pre;cursor:pointer;color:var(--text,#e2e2e6);';
       it.onmouseenter=()=>{ it.style.background='rgba(124,124,255,0.18)'; };
       it.onmouseleave=()=>{ it.style.background='transparent'; };
-      it.onclick=()=>{ close(); if(val!==_netLayout){ _netLayout=val;
-        try{ sessionStorage.setItem('znasNetLayout', val); }catch(e){}
-        _netFitted['map-svg']=false; _netFitted['vmtopo-svg']=false; // re-fit the new layout
-        _mapSig=''; if(_mapData) renderMap(_mapData); } };
+      it.onclick=()=>{ close(); fn(); };
       menu.appendChild(it);
-    });
-    document.body.appendChild(menu);
+    };
+    section('Placement');
+    if (_mapLayer==='network'){
+      [['radial','✷ Star / radial (default)'],['hierarchy','▤ Hierarchy (compact)'],['grid','▦ Grid']].forEach(([val,label])=>{
+        item(label, _netLayout===val, ()=>{ if(val!==_netLayout){ _netLayout=val;
+          try{ sessionStorage.setItem('znasNetLayout', val); }catch(e){}
+          _netFitted['map-svg']=false; _netFitted['vmtopo-svg']=false; // re-fit the new layout
+          _mapSig=''; if(_mapData) renderMap(_mapData); } });
+      });
+    } else {
+      [['layers','▤ Layers (default)'],['radial','✷ Star / radial'],['grid','▦ Grid']].forEach(([val,label])=>{
+        item(label, _storeLayout===val, ()=>{ if(val!==_storeLayout){ _storeLayout=val;
+          try{ sessionStorage.setItem('znasStoreLayout', val); }catch(e){}
+          _storeFitted['map-svg']=false; _storeFitted['vmtopo-svg']=false; // re-fit the new layout
+          _mapSig=''; if(_mapData) renderMap(_mapData); } });
+      });
+    }
+    // Star only: forget the dragged/pinned node positions and re-flow.
+    if ((_mapLayer==='network' ? _netLayout : _storeLayout) === 'radial'){
+      item('↺ Reset placement', false, ()=>{
+        _mapSavePins(null);
+        _mapSimDispose(_mapCtx.svg);
+        (_mapLayer==='network' ? _netFitted : _storeFitted)[_mapCtx.svg]=false;
+        _mapSig=''; if(_mapData) renderMap(_mapData);
+      });
+    }
+    section('Style');
+    item('✨ HUD (glow)', _mapStyle==='hud', ()=>setMapStyle('hud'));
+    item('▢ Flat', _mapStyle!=='hud', ()=>setMapStyle('flat'));
+    section('View');
+    item('Fit to window', false, ()=>{
+      _netFitted[_mapCtx.svg]=false; _storeFitted[_mapCtx.svg]=false;
+      _mapSig=''; if(_mapData) renderMap(_mapData); });
+    item('Reset zoom (100%)', false, ()=>_mapZoomTo(_mapCtx.svg, 1));
+    item(_mapIsFull(document.getElementById(_mapCtx.viewport))?'Exit full screen':'Full screen', false, ()=>mapFullscreen());
+    // Inside fullscreen only descendants of the fullscreen element render —
+    // body-appended menus would be invisible there.
+    (_mapFsElement()||document.body).appendChild(menu);
     let px=x, py=y; const w=menu.offsetWidth, h=menu.offsetHeight;
     if(px+w>window.innerWidth)  px=Math.max(6, window.innerWidth-w-6);
     if(py+h>window.innerHeight) py=Math.max(6, window.innerHeight-h-6);
@@ -34864,16 +34971,65 @@ function runReplicationTask(id, name) {
     } catch(e){ /* best-effort: ignore loader/edit errors */ }
   }
 
-  // Global so the inline onclick on the toolbar button resolves (this script
-  // block runs inside a closure; only window.* leaks to inline handlers).
-  window.toggleMapStyle = function(){
-    const vp = document.getElementById(_mapCtx.viewport);
-    const btn = document.getElementById(_mapCtx.styleBtn);
-    if (!vp) return;
-    const hud = vp.classList.toggle('map-hud');
-    vp.classList.toggle('map-flat', !hud);
-    if (btn) btn.textContent = hud ? 'HUD' : 'Flat';
+  // ── Map style (v6.7.4): HUD (glow) is the default; Flat is selectable via
+  // the background right-click menu. Persisted so the choice survives reloads.
+  // Applied to BOTH viewports (Capacity Topology + per-instance tab) so they
+  // always match.
+  let _mapStyle = (function(){
+    try { return localStorage.getItem('znasMapStyle')==='flat' ? 'flat' : 'hud'; }
+    catch(e){ return 'hud'; }
+  })();
+  function _mapApplyStyle(){
+    document.querySelectorAll('.map-viewport').forEach(vp=>{
+      vp.classList.toggle('map-hud',  _mapStyle==='hud');
+      vp.classList.toggle('map-flat', _mapStyle!=='hud');
+    });
+  }
+  window.setMapStyle = function(style){
+    _mapStyle = (style==='hud') ? 'hud' : 'flat';
+    try { localStorage.setItem('znasMapStyle', _mapStyle); } catch(e){}
+    _mapApplyStyle();
   };
+
+  // ── Fullscreen (v6.7.4): the ⛶ button in the zoom group puts the map viewport
+  // itself into browser fullscreen. On enter/exit the fit locks are cleared and
+  // the map re-fits the new canvas size.
+  //
+  // Browser reality check: Chromium/Firefox expose Element.requestFullscreen,
+  // older desktop Safari only the webkit-prefixed variants, and iOS Safari has
+  // NO element-fullscreen API at all — an unguarded feature test there means
+  // the button silently does nothing. Fall back to a CSS "fill the window"
+  // mode (position:fixed inset:0) which is what fullscreen means on a phone
+  // anyway.
+  function _mapFsElement(){ return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function _mapIsFull(vp){ return !!vp && (_mapFsElement()===vp || vp.classList.contains('map-vp-fullwindow')); }
+  function _mapFsRefit(){
+    const vp = document.getElementById(_mapCtx.viewport); if (!vp) return;
+    _mapSizeViewport(vp);          // fullscreen-aware (100vh when full)
+    _netFitted[_mapCtx.svg] = false; _storeFitted[_mapCtx.svg] = false;
+    _mapSig = '';
+    if (_mapData) renderMap(_mapData);
+  }
+  window.mapFullscreen = function(){
+    const vp = document.getElementById(_mapCtx.viewport); if (!vp) return;
+    if (_mapIsFull(vp)){
+      if (vp.classList.contains('map-vp-fullwindow')){ vp.classList.remove('map-vp-fullwindow'); vp.style.height=''; _mapFsRefit(); }
+      else if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      return;
+    }
+    if (vp.requestFullscreen) vp.requestFullscreen();
+    else if (vp.webkitRequestFullscreen) vp.webkitRequestFullscreen();
+    else { vp.classList.add('map-vp-fullwindow'); _mapFsRefit(); } // no API (iOS): fill the window
+  };
+  document.addEventListener('fullscreenchange', _mapFsRefit);
+  document.addEventListener('webkitfullscreenchange', _mapFsRefit);
+  // Pseudo-fullscreen has no browser-native Esc-to-exit — provide it.
+  document.addEventListener('keydown', e=>{
+    if (e.key!=='Escape') return;
+    const vp = document.getElementById(_mapCtx.viewport);
+    if (vp && vp.classList.contains('map-vp-fullwindow')) mapFullscreen();
+  });
 
   // ── Topology layer switch (Storage & Compute ↔ Networking) ──────────────────
   // Persisted so a refresh keeps the chosen layer. setMapLayer updates the
@@ -34908,19 +35064,28 @@ function runReplicationTask(id, name) {
   // scrolling viewport. Zooming sets the SVG element's width/height to nat·z so the
   // viewport's scrollbars track the scaled content; the scroll offset is adjusted
   // to keep the focal point (cursor / pinch midpoint / viewport centre) anchored.
-  const MAP_ZMIN = 0.3, MAP_ZMAX = 4;
+  // ZMIN 0.1 (was 0.3): a big star/radial network canvas must be able to
+  // auto-fit fully inside the letterbox viewport instead of being clipped.
+  const MAP_ZMIN = 0.1, MAP_ZMAX = 4;
   const _mapZoomState = {}; // svgId → scale
   const _netFitted = {};    // svgId → true once the network layer has auto-fit it
   const _storeFitted = {};  // svgId → true once the storage layer has auto-fit it
   // Network placement algorithm (right-click the map background to switch).
   // Placement type is remembered only for the current session (sessionStorage):
-  // each new session starts on the default 'grid'; a change the user makes lasts
-  // until they close the tab, then it's forgotten. The legacy persistent key is
+  // each new session starts on the default 'radial' (the d3-force star, on the
+  // global map AND the per-instance tab); a change the user makes lasts until
+  // they close the tab, then it's forgotten. The legacy persistent key is
   // wiped so an old saved choice can't override the default.
   let _netLayout = (function(){ try {
     localStorage.removeItem('znasNetLayout');
     const v=sessionStorage.getItem('znasNetLayout');
-    return (v==='radial'||v==='hierarchy'||v==='grid')?v:'grid'; } catch(e){ return 'grid'; } })();
+    return (v==='radial'||v==='hierarchy'||v==='grid')?v:'radial'; } catch(e){ return 'radial'; } })();
+  // Storage-layer placement (same right-click menu). Default 'layers' = the
+  // classic disks→pool→datasets→shares stack; alternatives mirror the network
+  // layer. Session-scoped like the network choice.
+  let _storeLayout = (function(){ try {
+    const v=sessionStorage.getItem('znasStoreLayout');
+    return (v==='radial'||v==='grid')?v:'layers'; } catch(e){ return 'layers'; } })();
   function _mapGetZoom(svgId){ return _mapZoomState[svgId] || 1; }
   function _mapZoomLabelId(svgId){ return svgId.replace('-svg','') + '-zoom-lvl'; }
   function _mapUpdateZoomLabel(svgId){
@@ -34934,6 +35099,9 @@ function runReplicationTask(id, name) {
     const nw = parseFloat(svg.dataset.natW||'0'), nh = parseFloat(svg.dataset.natH||'0');
     const z = _mapGetZoom(svg.id);
     if (nw>0 && nh>0){ svg.setAttribute('width', Math.round(nw*z)); svg.setAttribute('height', Math.round(nh*z)); }
+    // Far zoomed out the 16px graph-paper squares collapse into noise — keep
+    // only the major lines there.
+    svg.classList.toggle('map-zoom-tiny', z < 0.5);
     _mapUpdateZoomLabel(svg.id);
   }
   // Zoom to a target scale, anchoring on a viewport-relative focal point. focalX/Y
@@ -34964,32 +35132,65 @@ function runReplicationTask(id, name) {
   // window bottom. The map area sits below a variable-height topbar/io-bar +
   // tab bar + toolbar, so a fixed "100vh − N" guess either clips or overflows;
   // measuring the live position is exact. Returns the height applied.
+  // Available height for a map viewport: from its real top edge down to the
+  // window bottom OR the top of a visible docked bottom panel (Activity &
+  // Events bar, bottom terminal) — whichever comes first. Sizing to
+  // innerHeight put the lower part of the viewport UNDERNEATH those panels:
+  // invisible, and it swallowed right-clicks meant for the map background.
+  // Every viewport sizer MUST go through here (renderMap's per-poll re-measure
+  // included) or one of them wins with an unclamped height.
+  function _mapAvailHeight(vp){
+    const top = vp.getBoundingClientRect().top;
+    let bottom = window.innerHeight;
+    document.querySelectorAll('.activity-bar, .term-panel').forEach(el=>{
+      const r = el.getBoundingClientRect();
+      if (r.width>0 && r.height>0 && r.top>top && r.top<bottom) bottom = r.top;
+    });
+    // Floor low enough that an expanded Activity bar still leaves the map
+    // fully visible (a floor above the free space would tuck the viewport
+    // back underneath the panel).
+    return Math.max(120, Math.floor(bottom - top - 14));
+  }
   function _mapSizeViewport(vp){
     if (!vp) return 0;
-    const top = vp.getBoundingClientRect().top;
-    const h = Math.max(320, Math.floor(window.innerHeight - top - 14));
+    if (_mapIsFull(vp)){
+      vp.style.height = '100vh';   // fullscreen: the viewport IS the screen
+      vp.style.height = '100dvh';  // dynamic-toolbar-aware where supported (iOS)
+      void vp.offsetHeight;
+      return window.innerHeight;
+    }
+    const h = _mapAvailHeight(vp);
+    vp._znAvail = h; // keep renderMap's change-detection cache coherent
     vp.style.height = h + 'px';
     void vp.offsetHeight; // flush layout so a subsequent clientHeight read is fresh
     return h;
   }
+  // Re-measure the viewport, clear the one-shot fit locks and re-render.
+  // Used by window resize, and exposed as window._mapPanelsChanged so the
+  // bottom Activity bar / terminal panel toggles (which change the space the
+  // map may use) can trigger the same refit.
+  window._mapPanelsChanged = function(){
+    const v = document.getElementById(_mapCtx.viewport);
+    if (!v || v.offsetParent === null) return;
+    _mapSizeViewport(v);
+    _netFitted[_mapCtx.svg] = false; _storeFitted[_mapCtx.svg] = false;
+    _mapSig = '';
+    if (_mapData) renderMap(_mapData);
+  };
   let _mapResizeWired = false;
   function _mapEnsureZoom(svgId, vpId){
-    // Re-fit the active map on window resize (debounced): re-measure the
-    // viewport, clear the one-shot fit lock, and re-render.
+    // Re-fit the active map on window resize (debounced), and whenever a
+    // docked bottom panel (Activity bar, terminal) changes size or opens/
+    // closes — the map viewport must stop above them.
     if (!_mapResizeWired){
       _mapResizeWired = true;
       let rt = null;
-      window.addEventListener('resize', ()=>{
-        clearTimeout(rt);
-        rt = setTimeout(()=>{
-          const v = document.getElementById(_mapCtx.viewport);
-          if (!v || v.offsetParent === null) return;
-          _mapSizeViewport(v);
-          _netFitted[_mapCtx.svg] = false; _storeFitted[_mapCtx.svg] = false;
-          _mapSig = '';
-          if (_mapData) renderMap(_mapData);
-        }, 150);
-      });
+      const refit = ()=>{ clearTimeout(rt); rt = setTimeout(()=>window._mapPanelsChanged(), 200); };
+      window.addEventListener('resize', refit);
+      if (window.ResizeObserver){
+        const ro = new ResizeObserver(refit);
+        document.querySelectorAll('.activity-bar, .term-panel').forEach(el=>ro.observe(el));
+      }
     }
     const vp = document.getElementById(vpId);
     if (!vp || vp.dataset.zoomWired) return;
@@ -35011,6 +35212,9 @@ function runReplicationTask(id, name) {
       if (e.touches.length === 2){
         pan=null; pinch={ d0:dist(e.touches), z0:_mapGetZoom(svgId) }; e.preventDefault();
       } else if (e.touches.length === 1){
+        // Star placement: a touch that starts ON a node drags that node (the
+        // pointerdown handler in mapWireClicks), not the viewport.
+        if (_mapSims[svgId] && e.target.closest && e.target.closest('.map-node, .net-node')) return;
         const t=e.touches[0]; pan={ x:t.clientX, y:t.clientY, sl:vp.scrollLeft, st:vp.scrollTop };
       }
     }, {passive:false});
@@ -35075,7 +35279,7 @@ function runReplicationTask(id, name) {
     // it on a slower 8s cadence — enough to keep the status dots current.
     _vmTopoFetchDocker(instName);
     _vmTopoDockerTimer = setInterval(()=>_vmTopoFetchDocker(instName), 8000);
-    setMapCtx({ svg:'vmtopo-svg', viewport:'vmtopo-viewport', styleBtn:'vmtopo-style-toggle',
+    setMapCtx({ svg:'vmtopo-svg', viewport:'vmtopo-viewport',
                 empty:'vmtopo-empty', status:'vmtopo-status', panel:'ci-tab-content-topology',
                 filter:(d)=>{
                   if (_vmTopoPinned){
@@ -35164,8 +35368,40 @@ function runReplicationTask(id, name) {
       datasets:  merge(pinned.datasets, ['used','avail','encrypted']),
       consumers: merge(pinned.consumers,['state','clients','rate_kbps']),
       remotes:   pinned.remotes,        // remotes carry no live metrics here
-      net:       fresh.net || pinned.net, // Networking Layer keeps its own relayout signature
+      net:       _projectPinnedNet(pinned.net, fresh.net),
       ts:        fresh.ts,
+    };
+  }
+
+  // Networking Layer projection (v6.7.4): the object set AND the relations
+  // (nic spokes, docker parents, published ports) are FROZEN at pin time —
+  // only live metrics flow through. This keeps the relayout signature
+  // constant, so the 3s poll can never reshuffle the map mid-view; new or
+  // removed objects appear when the user re-enters the Topology tab.
+  function _projectPinnedNet(pinnedNet, freshNet){
+    if (!pinnedNet) return freshNet;
+    if (!freshNet)  return pinnedNet;
+    const idx={};
+    ['bridges','instances','docker'].forEach(k=> (freshNet[k]||[]).forEach(n=> idx[n.id]=n));
+    const merge=(arr, fields)=> (arr||[]).map(p=>{
+      const f=idx[p.id]; if (!f) return p;    // gone from fresh → keep last-known
+      const out=Object.assign({}, p);
+      fields.forEach(k=>{ if (k in f) out[k]=f[k]; });
+      return out;
+    });
+    // Keep the PINNED nic pair set (= the spokes), refresh only their rates;
+    // a nic that disappeared reads 0 instead of a stale rate.
+    const rate={};
+    (freshNet.nics||[]).forEach(n=>{ rate[n.instance_id+'|'+n.bridge_id+':'+n.device]=n; });
+    const nics=(pinnedNet.nics||[]).map(p=>{
+      const f=rate[p.instance_id+'|'+p.bridge_id+':'+p.device];
+      return Object.assign({}, p, f ? {rx_mbps:f.rx_mbps, tx_mbps:f.tx_mbps} : {rx_mbps:0, tx_mbps:0});
+    });
+    return {
+      bridges:   merge(pinnedNet.bridges,   ['rx_mbps','tx_mbps']),
+      instances: merge(pinnedNet.instances, ['state']),
+      docker:    merge(pinnedNet.docker,    ['state','status']), // NOT ports — structural
+      nics,
     };
   }
 
@@ -35276,6 +35512,17 @@ function runReplicationTask(id, name) {
   let _mapFontFamily = 'system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
   const _mapMeasure = (()=>{ const c=document.createElement('canvas'); return c.getContext('2d'); })();
   function _tw(s,px,bold){ _mapMeasure.font=`${bold?'600 ':''}${px}px ${_mapFontFamily}`; return _mapMeasure.measureText(s||'').width; }
+  // Ellipsize s so it renders within maxW at the given font size. Box widths are
+  // clamped (MAP.MAX_W / net 210) but the TEXT was not, so long sub-lines (docker
+  // port lists, image names) used to spill outside their box.
+  function _fitLine(s, px, maxW, bold){
+    s = String(s==null?'':s);
+    if (_tw(s,px,bold) <= maxW) return s;
+    let lo=0, hi=s.length;
+    while (lo < hi){ const mid=(lo+hi+1)>>1;
+      if (_tw(s.slice(0,mid)+'…',px,bold) <= maxW) lo=mid; else hi=mid-1; }
+    return s.slice(0,lo)+'…';
+  }
   // Full text layout for a node: wrapped title lines, dynamic width, row count.
   const MAP_LINE = 14, MAP_BASE = 16, MAP_BOT = 9;
   function mapNodeLayout(n, layer){
@@ -35286,9 +35533,14 @@ function runReplicationTask(id, name) {
     w = Math.max(w, _tw(t.sub,9.5,false), _tw(t.sub2,9.5,false));
     if (n.kind==='docker') w += 12; // reserve top-right room for the status dot
     const rows = titleLines.length + (t.sub?1:0) + (t.sub2?1:0);
+    const boxW = Math.round(Math.max(MAP.MIN_W, Math.min(MAP.MAX_W, w + 18)));
+    // Box width is clamped at MAX_W but the text was not — ellipsize the sub
+    // lines to the inner width so text never renders outside the box.
     return {
-      txt: { icon:t.icon, titleLines, sub:t.sub, sub2:t.sub2 },
-      w: Math.round(Math.max(MAP.MIN_W, Math.min(MAP.MAX_W, w + 18))),
+      txt: { icon:t.icon, titleLines,
+             sub:  _fitLine(t.sub,  9.5, boxW-18, false),
+             sub2: _fitLine(t.sub2, 9.5, boxW-18, false) },
+      w: boxW,
       rows,
       needH: MAP_BASE + (rows-1)*MAP_LINE + MAP_BOT,
     };
@@ -35338,8 +35590,10 @@ function runReplicationTask(id, name) {
     // box and clear the one-shot fit so the map re-fits the new space. This
     // converges within a poll or two, then stays put (no constant re-fitting).
     { const vp = document.getElementById(_mapCtx.viewport);
-      if (vp && vp.offsetParent !== null){
-        const avail = Math.max(320, Math.floor(window.innerHeight - vp.getBoundingClientRect().top - 14));
+      if (vp && vp.offsetParent !== null && !_mapIsFull(vp)){
+        // Shared, bottom-panel-aware measure — an unclamped inline calc here
+        // silently overwrote _mapSizeViewport's height on every poll.
+        const avail = _mapAvailHeight(vp);
         if (Math.abs((vp._znAvail||0) - avail) > 4){
           vp._znAvail = avail; vp.style.height = avail + 'px';
           _netFitted[svg.id] = false; _storeFitted[svg.id] = false;
@@ -35402,6 +35656,189 @@ function runReplicationTask(id, name) {
   const NET = { INST_GAP:10, DOCK_GAP:6, CLUSTER_GAP:16 };
   const NET_HUES = [190, 280, 332, 45, 152, 14, 222, 96, 258, 168];
 
+  // ═══ d3-force engine for the "Star / radial" placement (v6.7.4) ═══════════
+  // Both layers' Star option runs a physics simulation (d3-force, ISC,
+  // vendored + embedded): hubs (bridges/pools) are pinned at deterministic
+  // seeds, members spring toward their hub and repel each other. Nodes are
+  // DRAGGABLE — while dragging the simulation re-flows live; a dragged node
+  // stays pinned where dropped and the pin is persisted in the user's server
+  // prefs (map_pins), keyed per server + layer, so the arrangement survives
+  // reloads and roams across browsers.
+  const _mapSims = {}; // svgId → live sim state (only while Star is active)
+  function _forceReady(){ return !!(window.d3 && window.d3.forceSimulation); }
+  function _mapSimDispose(svgId){
+    const st=_mapSims[svgId];
+    if (st){ try{ st.sim.stop(); }catch(e){} delete _mapSims[svgId]; }
+  }
+  // Pin persistence: {nodeId:[x,y]} per "<host>:<layer>" in user prefs. The
+  // per-instance Topology tab gets its own suffix — the same node ids exist
+  // on the full map but in a different coordinate space, and each VM deserves
+  // its own remembered arrangement.
+  function _mapPinsKey(){
+    const host = (typeof _relayActive!=='undefined' && _relayActive && _relayHostname) ? _relayHostname : 'local';
+    const focus = (_mapCtx.svg==='vmtopo-svg' && _netFocusInst) ? (':'+_netFocusInst) : '';
+    return host + ':' + _mapLayer + focus;
+  }
+  function _mapGetPins(){
+    const mp = (typeof currentUser!=='undefined' && currentUser && currentUser.preferences && currentUser.preferences.map_pins) || {};
+    return mp[_mapPinsKey()] || {};
+  }
+  function _mapSavePins(pins){ // null/empty ⇒ forget this layer's pins
+    if (typeof currentUser==='undefined' || !currentUser) return;
+    const prefs = Object.assign({}, currentUser.preferences || {});
+    const mp = Object.assign({}, prefs.map_pins || {});
+    if (pins && Object.keys(pins).length) mp[_mapPinsKey()] = pins;
+    else delete mp[_mapPinsKey()];
+    prefs.map_pins = mp;
+    currentUser.preferences = prefs;
+    fetch('/api/prefs', { method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(prefs) }).catch(()=>{});
+  }
+  // Workspace: a fixed canvas sized from the total node area, shaped to the
+  // viewport aspect. Fixed (instead of bounds-derived) so pin coordinates
+  // stay meaningful across renders.
+  function _forceWorkspace(svg, boxes){
+    const vp=svg.closest('.map-viewport');
+    const aspect=(vp && vp.clientWidth>40 && vp.clientHeight>40) ? Math.max(1.2, vp.clientWidth/vp.clientHeight) : 2.2;
+    let area=0; boxes.forEach(b=> area+=(b.w+26)*(b.h+26));
+    // Generous slack: the workspace must hold the settled clusters WITHOUT
+    // the boundary clamp squashing nodes into overlapping walls.
+    area*=4.5;
+    return { W: Math.max(900, Math.round(Math.sqrt(area*aspect))),
+             H: Math.max(520, Math.round(Math.sqrt(area/aspect))) };
+  }
+  // Hub seeds: chunk hubs into aspect-fitting rows, then divide each row's
+  // width proportionally to the SQRT of each hub's member area — a hub that
+  // owns 90% of the nodes gets most of the row instead of an equal slice its
+  // cluster can't physically fit into (which forced overlaps).
+  function _forceHubSeeds(W, H, hubs){ // hubs: [{id, area}]
+    const cols=Math.max(1, Math.ceil(Math.sqrt(hubs.length*W/H))||1);
+    const rows=Math.max(1, Math.ceil(hubs.length/cols));
+    const seeds={};
+    for (let r=0; r<rows; r++){
+      const rowHubs=hubs.slice(r*cols, (r+1)*cols);
+      const wts=rowHubs.map(h=>Math.sqrt(Math.max(1,h.area)));
+      const tot=wts.reduce((a,b)=>a+b,0);
+      let x=0;
+      rowHubs.forEach((h,i)=>{
+        const w=W*wts[i]/tot;
+        seeds[h.id]={ x:x+w/2, y:H*(r+0.5)/rows };
+        x+=w;
+      });
+    }
+    return seeds;
+  }
+  // Build + pre-roll the simulation. items: [{id,w,h,hub,seed:{x,y},ref}].
+  // Runs ~220 synchronous ticks to equilibrium (d3-force's default random
+  // source is a deterministic LCG, so the same topology lays out identically
+  // every time), then stays alive — stopped — for the drag interaction.
+  function _forceStarSim(svg, W, H, items, linksIn){
+    const pins=_mapGetPins();
+    const nodes=items.map(it=>{
+      const n={ id:it.id, w:it.w, h:it.h, r:Math.hypot(it.w,it.h)/2, ref:it.ref,
+                hub:!!it.hub, x:it.seed.x, y:it.seed.y };
+      const p=pins[it.id];
+      if (p){ n.fx=Math.max(n.w/2+10,Math.min(W-n.w/2-10,+p[0]||0)); n.fy=Math.max(n.h/2+10,Math.min(H-n.h/2-10,+p[1]||0)); }
+      else if (it.hub){ n.fx=it.seed.x; n.fy=it.seed.y; n.__autoPin=true; }
+      return n;
+    });
+    const byId={}; nodes.forEach(n=>byId[n.id]=n);
+    const links=linksIn.filter(l=>byId[l.a]&&byId[l.b]).map(l=>({source:l.a, target:l.b, tight:!!l.tight}));
+    const sim=d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(n=>n.id)
+        .distance(l=> l.source.r+l.target.r+(l.tight?16:30))
+        .strength(l=> l.tight?0.8:0.3))
+      .force('charge', d3.forceManyBody().strength(-160).distanceMax(380))
+      .force('collide', d3.forceCollide().radius(n=>n.r+8).iterations(3))
+      .force('cx', d3.forceX(W/2).strength(0.02))
+      .force('cy', d3.forceY(H/2).strength(0.04))
+      .stop();
+    // Box-aware boundary: the whole BOX stays inside the workspace. Applied
+    // INSIDE the pre-roll loop (manual sim.tick() doesn't dispatch events) so
+    // the walls are part of the physics — collide redistributes the pressure
+    // sideways while settling, instead of a final clamp compressing settled
+    // nodes into overlapping piles at the edges.
+    const cl=(n)=>{ n.x=Math.max(n.w/2+10, Math.min(W-n.w/2-10, n.x));
+                    n.y=Math.max(n.h/2+10, Math.min(H-n.h/2-10, n.y)); };
+    const clamp=()=>nodes.forEach(cl);
+    for (let i=0;i<300;i++){ sim.tick(); clamp(); }
+    const st={ sim, nodes, byId, W, H, clampNode:cl, nodeEls:[], linkEls:[], ringEls:[], suppressUntil:0 };
+    sim.on('tick', ()=>{ clamp(); _forceApplyTick(st); });
+    _mapSims[svg.id]=st;
+    return st;
+  }
+  // Per-tick DOM updater (drag re-flow): move node groups, hub rings and both
+  // layers' link elements. Bound after each full render.
+  function _forceApplyTick(st){
+    st.nodeEls.forEach(e=> e.el.setAttribute('transform',
+      `translate(${(e.nd.x-e.nd.w/2).toFixed(1)},${(e.nd.y-e.nd.h/2).toFixed(1)})`));
+    st.ringEls.forEach(e=>{ e.el.setAttribute('cx', e.nd.x.toFixed(1)); e.el.setAttribute('cy', e.nd.y.toFixed(1)); });
+    st.linkEls.forEach(L=>{
+      const x1=L.a.x, y1=L.a.y, x2=L.b.x, y2=L.b.y;
+      if (L.line){
+        [L.rail, L.flow].forEach(el=>{ if(!el) return;
+          el.setAttribute('x1',x1.toFixed(1)); el.setAttribute('y1',y1.toFixed(1));
+          el.setAttribute('x2',x2.toFixed(1)); el.setAttribute('y2',y2.toFixed(1)); });
+      } else {
+        const d=`M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+        if (L.rail) L.rail.setAttribute('d',d);
+        if (L.flow) L.flow.setAttribute('d',d);
+      }
+      if (L.lbl){ L.lbl.setAttribute('x',((x1+x2)/2).toFixed(1)); L.lbl.setAttribute('y',((y1+y2)/2-4).toFixed(1)); }
+    });
+  }
+  // Tight bounding box of the settled nodes — the workspace is deliberately
+  // oversized so the physics has room, so the auto-fit must frame the CONTENT,
+  // not the canvas, to fill the panel.
+  function _forceContentBounds(st){
+    let x1=Infinity, y1=Infinity, x2=-Infinity, y2=-Infinity;
+    st.nodes.forEach(n=>{ x1=Math.min(x1,n.x-n.w/2); y1=Math.min(y1,n.y-n.h/2);
+                          x2=Math.max(x2,n.x+n.w/2); y2=Math.max(y2,n.y+n.h/2); });
+    if (x1>x2) return {x:0, y:0, w:st.W, h:st.H};
+    const P=18;
+    return {x:x1-P, y:y1-P, w:(x2-x1)+2*P, h:(y2-y1)+2*P};
+  }
+  // Scroll the viewport so a freshly-fitted content rect sits centred.
+  function _forceFitScroll(svg){
+    const b=svg.__fitScroll; if (!b) return;
+    svg.__fitScroll=null;
+    const vp=svg.closest('.map-viewport'); if (!vp) return;
+    const z=_mapGetZoom(svg.id);
+    vp.scrollLeft = Math.max(0, b.x*z - (vp.clientWidth  - b.w*z)/2);
+    vp.scrollTop  = Math.max(0, b.y*z - (vp.clientHeight - b.h*z)/2);
+  }
+
+  // Collect the DOM elements the tick updater drives. Called after the SVG
+  // markup is (re)built. Also flags the svg so CSS can show grab cursors.
+  function _forceBindEls(svg){
+    const st=_mapSims[svg.id];
+    svg.classList.toggle('map-force', !!st);
+    if (!st) return;
+    st.nodeEls=[]; st.linkEls=[]; st.ringEls=[];
+    svg.querySelectorAll('.map-node, .net-node').forEach(g=>{
+      const nd=st.byId[g.getAttribute('data-id')];
+      if (nd) st.nodeEls.push({el:g, nd});
+    });
+    svg.querySelectorAll('.net-hub-ring[data-id]').forEach(c=>{
+      const nd=st.byId[c.getAttribute('data-id')];
+      if (nd) st.ringEls.push({el:c, nd});
+    });
+    svg.querySelectorAll('.net-spokeg').forEach(g=>{
+      const id=g.getAttribute('data-id')||''; let a,b;
+      if (id.indexOf('nic:')===0){ const p=id.slice(4).split('|'); a=st.byId[p[0]]; b=st.byId[p[1]]; }
+      else if (id.indexOf('dk:')===0){ b=st.byId[id.slice(3)]; a=b && b.ref && st.byId[b.ref.instance_id]; }
+      if (!a||!b) return;
+      st.linkEls.push({line:true, rail:g.querySelector('.net-spoke-rail'),
+        flow:g.querySelector('[data-role="flow"]'), lbl:g.querySelector('[data-role="rate"]'), a, b});
+    });
+    svg.querySelectorAll('.map-linkg').forEach(g=>{
+      const a=st.byId[g.getAttribute('data-lower')], b=st.byId[g.getAttribute('data-upper')];
+      if (!a||!b) return;
+      st.linkEls.push({line:false, rail:g.querySelector('.map-link-rail'),
+        flow:g.querySelector('[data-role="flow"]'), lbl:g.querySelector('[data-role="rate"]'), a, b});
+    });
+  }
+
   function netMbps(m){
     m = Number(m)||0;
     if (m >= 1000) return (m/1000).toFixed(1)+' Gb/s';
@@ -35413,9 +35850,13 @@ function runReplicationTask(id, name) {
     ports = ports || [];
     const tcp = ports.filter(p=>p.proto==='tcp').map(p=>p.port).sort((a,b)=>a-b);
     const udp = ports.filter(p=>p.proto==='udp').map(p=>p.port).sort((a,b)=>a-b);
+    // Show at most 3 ports per protocol ("+N" for the rest) so the line stays
+    // short; the full list lives in the hovercard + tooltip. _fitLine in
+    // netMeasure is the hard guarantee against box overflow.
+    const fmt = (label, arr)=> label+' '+arr.slice(0,3).join(',')+(arr.length>3?' +'+(arr.length-3):'');
     const parts = [];
-    if (tcp.length) parts.push('tcp '+tcp.slice(0,6).join(',')+(tcp.length>6?'…':''));
-    if (udp.length) parts.push('udp '+udp.slice(0,6).join(',')+(udp.length>6?'…':''));
+    if (tcp.length) parts.push(fmt('tcp', tcp));
+    if (udp.length) parts.push(fmt('udp', udp));
     return parts.join('  ');
   }
   // Generic box measurement reusing the storage layer's font-aware _tw/wrapName.
@@ -35424,10 +35865,14 @@ function runReplicationTask(id, name) {
     let w = 0;
     lines.forEach((ln,i)=> w = Math.max(w, _tw((i===0?icon+' ':'')+ln, 11, true)));
     (subs||[]).forEach(s=> w = Math.max(w, _tw(s, 9.5, false)));
-    const cleanSubs = (subs||[]).filter(Boolean);
+    let cleanSubs = (subs||[]).filter(Boolean);
     const rows = lines.length + cleanSubs.length;
+    const boxW = Math.round(Math.max(58, Math.min(210, w+14)));
+    // The box width is clamped but the text was not — ellipsize each sub-line
+    // to the box's inner width so text can never render outside the box.
+    cleanSubs = cleanSubs.map(s=>_fitLine(s, 9.5, boxW-14, false));
     return { lines, subs:cleanSubs,
-             w: Math.round(Math.max(58, Math.min(210, w+14))),
+             w: boxW,
              h: 16 + (rows-1)*14 + 7 };
   }
   function netNodeMarkup(o){
@@ -35487,67 +35932,48 @@ function runReplicationTask(id, name) {
   // Each receives the measured node sets and assigns __cx/__cy/__hue, returning
   // the content bounds {W,H}. Bridge hues are pre-assigned by the caller.
 
-  // Radial / "star": each bridge is a hub with its instances on a ring and the
-  // docker fanned around each instance. Clusters are shelf-packed.
-  function _netPlaceRadial(bridges, instances, docker, briBox, instBox, dockBox, dockByInst, instOnBridge, instById){
-    const cellInfo={};
-    instances.forEach(i=>{
-      const ib=instBox[i.id], instR=Math.hypot(ib.w,ib.h)/2;
-      const kids=dockByInst[i.id]||[];
-      if (!kids.length){ cellInfo[i.id]={r2:0, cellR:instR}; return; }
-      let maxKid=0; kids.forEach(k=> maxKid=Math.max(maxKid, Math.hypot(dockBox[k.id].w,dockBox[k.id].h)/2));
-      const need = kids.length*(2*maxKid+NET.DOCK_GAP);
-      const r2 = Math.max(instR+maxKid+8, need/(2*Math.PI));
-      cellInfo[i.id]={ r2, cellR:r2+maxKid };
+  // Radial / "star" (v6.7.4, d3-force): bridges are PINNED hubs seeded on an
+  // aspect-shaped grid; instances spring toward their home bridge, docker
+  // containers toward their instance, everything repels and collides. Nodes
+  // are draggable (see the pointerdown wiring in mapWireClicks); a dragged
+  // node stays pinned and the pin persists in user prefs. Falls back to the
+  // grid placement if the vendored d3-force somehow failed to load.
+  function _netPlaceRadial(svg, bridges, instances, docker, briBox, instBox, dockBox, dockByInst, instOnBridge, instById){
+    if (!_forceReady() || !svg)
+      return _netPlaceGrid(bridges, instances, docker, briBox, instBox, dockBox, dockByInst, instOnBridge, instById);
+    // Hue inheritance: instance <- home bridge, docker <- instance.
+    const homeHub={};
+    bridges.forEach(b=> (instOnBridge[b.id]||[]).forEach(id=>{
+      homeHub[id]=b; const i=instById[id]; if(i) i.__hue=b.__hue; }));
+    docker.forEach(d=>{ const i=instById[d.instance_id]; if(i && i.__hue!=null) d.__hue=i.__hue; });
+    const allBoxes=[].concat(bridges.map(b=>briBox[b.id]), instances.map(i=>instBox[i.id]), docker.map(d=>dockBox[d.id]));
+    const {W,H}=_forceWorkspace(svg, allBoxes);
+    // Deterministic seeds: hubs spaced by their cluster's area share, members
+    // spiralled around their hub (golden-angle steps).
+    const memArea={};
+    bridges.forEach(b=> memArea[b.id]=(briBox[b.id].w+26)*(briBox[b.id].h+26));
+    instances.forEach(inst=>{ const hub=homeHub[inst.id];
+      if (hub) memArea[hub.id]+=(instBox[inst.id].w+26)*(instBox[inst.id].h+26); });
+    docker.forEach(d=>{ const inst=instById[d.instance_id]; const hub=inst&&homeHub[inst.id];
+      if (hub) memArea[hub.id]+=(dockBox[d.id].w+26)*(dockBox[d.id].h+26); });
+    const hubSeed=_forceHubSeeds(W, H, bridges.map(b=>({id:b.id, area:memArea[b.id]})));
+    const seedAround=(c,i,r0)=>({ x:c.x+(r0+14*(i%5))*Math.cos(i*2.4), y:c.y+(r0+14*(i%5))*Math.sin(i*2.4) });
+    const items=[], linksIn=[];
+    bridges.forEach(b=> items.push({id:b.id, w:briBox[b.id].w, h:briBox[b.id].h, hub:true, seed:hubSeed[b.id], ref:b}));
+    instances.forEach((inst,i)=>{
+      const hub=homeHub[inst.id], c=hub?hubSeed[hub.id]:{x:W/2,y:H/2};
+      items.push({id:inst.id, w:instBox[inst.id].w, h:instBox[inst.id].h, seed:seedAround(c,i,120), ref:inst});
+      if (hub) linksIn.push({a:inst.id, b:hub.id});
     });
-    const clusterInfo={};
-    bridges.forEach(b=>{
-      const insts=instOnBridge[b.id], bb=briBox[b.id], hubR=Math.hypot(bb.w,bb.h)/2;
-      if (!insts.length){ clusterInfo[b.id]={hubR, riById:{}, clusterR:hubR+14}; return; }
-      const n=insts.length, sinStep=Math.sin(Math.PI/Math.max(2,n));
-      const riById={}; let clusterR=hubR+14;
-      insts.forEach(id=>{
-        const cr=cellInfo[id].cellR;
-        const ri=Math.max(hubR+cr+6, (cr+NET.INST_GAP/2)/sinStep);
-        riById[id]=ri; clusterR=Math.max(clusterR, ri+cr);
-      });
-      clusterInfo[b.id]={ hubR, riById, clusterR };
+    docker.forEach((d,i)=>{
+      const inst=instById[d.instance_id];
+      const hub=inst&&homeHub[inst.id], c=hub?hubSeed[hub.id]:{x:W/2,y:H/2};
+      items.push({id:d.id, w:dockBox[d.id].w, h:dockBox[d.id].h, seed:seedAround(c,i,190), ref:d});
+      if (inst) linksIn.push({a:d.id, b:inst.id, tight:true});
     });
-    const cellW = b => 2*clusterInfo[b.id].clusterR + NET.CLUSTER_GAP;
-    let sumArea=0, widest=0;
-    bridges.forEach(b=>{ const w=cellW(b); sumArea+=w*w; widest=Math.max(widest,w); });
-    const targetW = Math.max(widest, Math.sqrt(sumArea)*1.04);
-    const packRows=[]; let curRow=[], curW=0;
-    bridges.forEach(b=>{
-      const w=cellW(b);
-      if (curRow.length && curW+w>targetW){ packRows.push(curRow); curRow=[]; curW=0; }
-      curRow.push(b); curW+=w;
-    });
-    if (curRow.length) packRows.push(curRow);
-    const HEADER=34; let y=HEADER, W=300;
-    packRows.forEach(rw=>{
-      let rowH=0; rw.forEach(b=> rowH=Math.max(rowH, 2*clusterInfo[b.id].clusterR));
-      let x=NET.CLUSTER_GAP/2;
-      rw.forEach(b=>{ const cr=clusterInfo[b.id].clusterR;
-        b.__cx=x+cr; b.__cy=y+rowH/2; x += 2*cr + NET.CLUSTER_GAP; });
-      W=Math.max(W, x);
-      y += rowH + NET.CLUSTER_GAP;
-    });
-    bridges.forEach(b=>{
-      const insts=instOnBridge[b.id]; const ci=clusterInfo[b.id];
-      insts.forEach((id,k)=>{
-        const ang=(k/Math.max(1,insts.length))*2*Math.PI - Math.PI/2;
-        const i=instById[id]; const Ri=ci.riById[id];
-        i.__cx=b.__cx+Ri*Math.cos(ang); i.__cy=b.__cy+Ri*Math.sin(ang);
-        i.__hue=b.__hue; i.__ang=ang;
-        const kids=dockByInst[id]||[]; const r2=cellInfo[id].r2;
-        kids.forEach((d,j)=>{
-          const da=ang + (j - (kids.length-1)/2)*(2*Math.PI/Math.max(8,kids.length*1.6));
-          d.__cx=i.__cx+r2*Math.cos(da); d.__cy=i.__cy+r2*Math.sin(da); d.__hue=b.__hue;
-        });
-      });
-    });
-    return { W, H:y+8 };
+    const st=_forceStarSim(svg, W, H, items, linksIn);
+    st.nodes.forEach(n=>{ n.ref.__cx=n.x; n.ref.__cy=n.y; });
+    return { W:st.W, H:st.H };
   }
 
   // Hierarchy / layered: bridges on a top row, their instances on a middle row,
@@ -35606,7 +36032,9 @@ function runReplicationTask(id, name) {
     docker.forEach(d=> all.push({n:d, box:dockBox[d.id]}));
     const maxW = all.reduce((m,o)=>Math.max(m,o.box.w),0);
     const maxH = all.reduce((m,o)=>Math.max(m,o.box.h),0);
-    const cols = Math.max(1, Math.ceil(Math.sqrt(all.length* (maxH/maxW||1))));
+    // Column count shaped to the viewport aspect — the old square-ish formula
+    // built a portrait canvas that fit a landscape panel at a third of it.
+    const cols = Math.max(1, Math.ceil(Math.sqrt(all.length*_netVpAspect*(maxH+GAP)/(maxW+GAP))));
     let W=0;
     all.forEach((o,idx)=>{
       const r=Math.floor(idx/cols), c=idx%cols;
@@ -35618,75 +36046,50 @@ function runReplicationTask(id, name) {
     return { W: Math.max(300, W + PAD), H: HEADER + rows*(maxH+GAP) + PAD };
   }
 
-  // Focused single-VM view (the per-instance Topology tab): the instance sits
-  // dead-center, the bridges it attaches to FAN across a top arc (the uplinks,
-  // each a colored spoke), and its docker containers fill the COMPLEMENTARY
-  // lower arc on an inner ring. Separating the two fans means an uplink spoke
-  // never crosses a container box — "uplinks above, containers around below".
-  function _netPlaceFocus(bridges, instances, docker, briBox, instBox, dockBox, dockByInst, instOnBridge, instById){
-    const HEADER=44, PAD=30;
+  // Focused single-VM view (the per-instance Topology tab), d3-force edition
+  // (v6.7.4): the instance is PINNED centre-stage, its uplink bridges and
+  // docker containers settle organically around it — same physics, dragging
+  // and remembered pins as the full map's star (pins are keyed per VM, see
+  // _mapPinsKey). Bridges seed across a top arc, containers across the bottom,
+  // so the settled shape keeps "uplinks above, containers below".
+  function _netPlaceFocus(svg, bridges, instances, docker, briBox, instBox, dockBox, dockByInst, instOnBridge, instById){
     const vm = instances[0];
     if (!vm) return { W:320, H:220 };
-    const vb = instBox[vm.id];
-    const vmR = Math.hypot(vb.w, vb.h)/2;
+    if (!_forceReady() || !svg)
+      return _netPlaceGrid(bridges, instances, docker, briBox, instBox, dockBox, dockByInst, instOnBridge, instById);
     vm.__hue = bridges.length ? bridges[0].__hue : 210;
-
-    const kids = dockByInst[vm.id] || [];
-    const B = bridges.length, K = kids.length;
-    let maxKid=0; kids.forEach(k=> maxKid=Math.max(maxKid, Math.hypot(dockBox[k.id].w,dockBox[k.id].h)/2));
-    let maxBri=0; bridges.forEach(b=> maxBri=Math.max(maxBri, Math.hypot(briBox[b.id].w,briBox[b.id].h)/2));
-
-    // Bridge fan: a top arc that widens with bridge count but never wraps past
-    // the sides (cap ~153°), so bridges stay "above" and the bottom is free.
-    const bArc = (B<=1) ? 0 : Math.min(Math.PI*0.85, 0.5*(B-1)+0.7);
-    const kidNeed = K ? K*(2*maxKid+NET.DOCK_GAP+4) : 0;
-    const briNeed = B ? B*(2*maxBri+36) : 0;
-    // Half-angle a box of width w occupies at radius r (plus a little margin) —
-    // used to keep the first container clear of the bridge fan by a true box
-    // width, not a guessed constant.
-    const angHalf = (w,r)=> Math.atan2(w/2+12, Math.max(r,1));
-
-    // Radii + reserved top wedge are mutually dependent (the wedge needs the
-    // radii; the docker radius needs the leftover arc). Converge in a couple of
-    // cheap passes: size rings for the current arc, then recompute the wedge.
-    let dArc = (K<=0) ? 0 : (2*Math.PI - (B?1.2:0));
-    let innerR=0, outerR=0, reserve=0;
-    for (let it=0; it<3; it++){
-      innerR = K ? Math.max(vmR+maxKid+20, kidNeed/Math.max(dArc,1)) : 0;
-      outerR = Math.max(vmR+maxBri+24, innerR, (B>1) ? briNeed/Math.max(bArc,0.5) : 0);
-      const sideClear = (B?angHalf(2*maxBri,outerR):0) + (K?angHalf(2*maxKid,innerR):0);
-      reserve = (B===0) ? 0 : Math.min(Math.PI*1.45, bArc + 2*sideClear);
-      dArc = (K<=0) ? 0 : (2*Math.PI - reserve);
-    }
-
-    // Lay out relative to the VM at the origin, then normalize to tight bounds.
-    vm.__cx = 0; vm.__cy = 0;
-    bridges.forEach((b,k)=>{
-      const ang = (-Math.PI/2) + (B<=1 ? 0 : (k/(B-1)-0.5)*bArc);
-      b.__cx = outerR*Math.cos(ang); b.__cy = outerR*Math.sin(ang);
+    docker.forEach(d=> d.__hue = vm.__hue);
+    const allBoxes=[].concat(bridges.map(b=>briBox[b.id]), [instBox[vm.id]], docker.map(d=>dockBox[d.id]));
+    const {W,H}=_forceWorkspace(svg, allBoxes);
+    const ctr={x:W/2, y:H/2};
+    const items=[{id:vm.id, w:instBox[vm.id].w, h:instBox[vm.id].h, hub:true, seed:ctr, ref:vm}];
+    const linksIn=[];
+    bridges.forEach((b,i)=>{
+      const ang=-Math.PI/2 + (bridges.length<=1 ? 0 : (i/(bridges.length-1)-0.5)*Math.PI*0.9);
+      items.push({id:b.id, w:briBox[b.id].w, h:briBox[b.id].h,
+                  seed:{x:ctr.x+180*Math.cos(ang), y:ctr.y+180*Math.sin(ang)}, ref:b});
+      linksIn.push({a:b.id, b:vm.id});
     });
-    const dFrom = (-Math.PI/2) + reserve/2;
-    kids.forEach((d,j)=>{
-      const t = (K<=1) ? 0.5 : j/(K-1);
-      const ang = dFrom + t*dArc;
-      d.__cx = innerR*Math.cos(ang); d.__cy = innerR*Math.sin(ang); d.__hue = vm.__hue;
+    docker.forEach((d,i)=>{
+      const ang=Math.PI/2 + (i-(docker.length-1)/2)*0.5;
+      items.push({id:d.id, w:dockBox[d.id].w, h:dockBox[d.id].h,
+                  seed:{x:ctr.x+150*Math.cos(ang), y:ctr.y+150*Math.sin(ang)}, ref:d});
+      linksIn.push({a:d.id, b:vm.id, tight:true});
     });
-
-    // Tight bounds over every placed box, then shift so the content hugs PAD.
-    let minX=-vb.w/2, maxX=vb.w/2, minY=-vb.h/2, maxY=vb.h/2;
-    const acc=(n,box)=>{ minX=Math.min(minX,n.__cx-box.w/2); maxX=Math.max(maxX,n.__cx+box.w/2);
-                         minY=Math.min(minY,n.__cy-box.h/2); maxY=Math.max(maxY,n.__cy+box.h/2); };
-    bridges.forEach(b=>acc(b,briBox[b.id]));
-    kids.forEach(d=>acc(d,dockBox[d.id]));
-    const dx=PAD-minX, dy=HEADER-minY;
-    vm.__cx+=dx; vm.__cy+=dy;
-    bridges.forEach(b=>{ b.__cx+=dx; b.__cy+=dy; });
-    kids.forEach(d=>{ d.__cx+=dx; d.__cy+=dy; });
-    return { W:(maxX-minX)+2*PAD, H:(maxY-minY)+HEADER+PAD };
+    const st=_forceStarSim(svg, W, H, items, linksIn);
+    st.nodes.forEach(n=>{ n.ref.__cx=n.x; n.ref.__cy=n.y; });
+    return { W:st.W, H:st.H };
   }
 
+  // Viewport aspect ratio (w/h) sampled before each full render — the radial
+  // packer shapes the canvas to it so the auto-fit uses the panel fully.
+  let _netVpAspect = 2.2;
   function netFullRender(svg, net){
+    _mapSimDispose(svg.id); // full relayout: drop any live force simulation
     _mapFontFamily = getComputedStyle(document.body).fontFamily || _mapFontFamily;
+    const vp0 = svg.closest('.map-viewport');
+    if (vp0 && vp0.clientWidth > 40 && vp0.clientHeight > 40)
+      _netVpAspect = Math.max(1, vp0.clientWidth / vp0.clientHeight);
     const { pair, instBridges, instById } = netPairs(net);
     // Deterministic order by id so the SAME node set always lays out identically
     // — a metric-only refresh never reshuffles the topology (backend map
@@ -35714,7 +36117,9 @@ function runReplicationTask(id, name) {
 
     // Measure all boxes.
     const briBox={}, instBox={}, dockBox={};
-    bridges.forEach(b=> briBox[b.id]=netMeasure('🌉', b.name, [netMbps((b.rx_mbps||0)+(b.tx_mbps||0))]));
+    // Measure the bridge sub-line in the SAME '↓x ↑y' format netUpdateDynamic
+    // writes each poll — sizing for the single total let live text outgrow the box.
+    bridges.forEach(b=> briBox[b.id]=netMeasure('🌉', b.name, ['↓'+netMbps(b.rx_mbps||0)+' ↑'+netMbps(b.tx_mbps||0)]));
     instances.forEach(i=> instBox[i.id]=netMeasure(i.type==='vm'?'🖥':'📦', i.name, [i.state||'']));
     docker.forEach(d=> dockBox[d.id]=netMeasure('🐳', d.name, [netPortsLine(d.ports)]));
 
@@ -35734,15 +36139,15 @@ function runReplicationTask(id, name) {
     const isVm = (svg.id === 'vmtopo-svg') && instances.length === 1;
     const { W, H } = (_netLayout==='hierarchy') ? _netPlaceHierarchy(...args)
                    : (_netLayout==='grid')      ? _netPlaceGrid(...args)
-                   : isVm                       ? _netPlaceFocus(...args)
-                   :                              _netPlaceRadial(...args);
+                   : isVm                       ? _netPlaceFocus(svg, ...args)
+                   :                              _netPlaceRadial(svg, ...args);
 
     // ── Build SVG ──
     // Hub pulse rings.
     let hubsSvg='';
     bridges.forEach(b=>{
       const rr=(Math.hypot(briBox[b.id].w,briBox[b.id].h)/2)+10;
-      hubsSvg += `<circle class="net-hub-ring" cx="${b.__cx.toFixed(1)}" cy="${b.__cy.toFixed(1)}" r="${rr.toFixed(1)}" style="--h:${b.__hue}"/>`;
+      hubsSvg += `<circle class="net-hub-ring" data-id="${mapEsc(b.id)}" cx="${b.__cx.toFixed(1)}" cy="${b.__cy.toFixed(1)}" r="${rr.toFixed(1)}" style="--h:${b.__hue}"/>`;
     });
 
     // Spokes: bridge↔instance (every nic pair) + instance↔docker.
@@ -35791,9 +36196,14 @@ function runReplicationTask(id, name) {
     if (!_netFitted[svg.id]){
       const vp = svg.closest('.map-viewport') || svg.parentElement;
       if (vp && vp.clientWidth > 40 && vp.clientHeight > 40){
-        const fit = Math.min((vp.clientWidth-8)/W, (vp.clientHeight-8)/H);
+        // Star (force) placement: fit the settled CONTENT, not the padded
+        // workspace, then centre-scroll onto it — fills the panel exactly.
+        const st = _mapSims[svg.id];
+        const b  = st ? _forceContentBounds(st) : {x:0, y:0, w:W, h:H};
+        const fit = Math.min((vp.clientWidth-8)/b.w, (vp.clientHeight-8)/b.h);
         _mapZoomState[svg.id] = Math.max(MAP_ZMIN, Math.min(MAP_ZMAX, fit));
         _netFitted[svg.id] = true;
+        svg.__fitScroll = b;
       }
     }
 
@@ -35803,11 +36213,14 @@ function runReplicationTask(id, name) {
     svg.dataset.natW = W; svg.dataset.natH = H; // base size for the zoom controller
     svg.innerHTML =
       netDefs() +
+      mapGridRect(W, H, 'netGrid') +
       `<g class="net-hubs">${hubsSvg}</g>` +
       `<g class="net-spokes">${spokesSvg}</g>` +
       `<g class="net-nodes">${nodesSvg}</g>`;
     netUpdateDynamic(svg, net);
+    _forceBindEls(svg);  // wire the drag re-flow to the fresh DOM (star only)
     _mapApplyZoom(svg); // re-apply the user's zoom after the relayout
+    _forceFitScroll(svg); // centre a fresh content-fit (star only)
   }
 
   function netDefs(){
@@ -35819,6 +36232,7 @@ function runReplicationTask(id, name) {
         <feGaussianBlur stdDeviation="2.6" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
+      ${mapGridDefs('netGrid')}
     </defs>`;
   }
 
@@ -35847,7 +36261,13 @@ function runReplicationTask(id, name) {
     (net.bridges||[]).forEach(b=>{
       const g=svg.querySelector(`.net-node[data-id="${cssEsc(b.id)}"]`); if(!g) return;
       const sub=g.querySelector('[data-role="sub"]');
-      if (sub) sub.textContent = '↓'+netMbps(b.rx_mbps)+' ↑'+netMbps(b.tx_mbps);
+      if (sub){
+        // Fit to the node's real box width — raw text here can outgrow the
+        // box when the rate strings get longer than at measure time.
+        const bg=g.querySelector('.net-node-bg');
+        const iw=(bg ? parseFloat(bg.getAttribute('width'))||210 : 210)-14;
+        sub.textContent = _fitLine('↓'+netMbps(b.rx_mbps)+' ↑'+netMbps(b.tx_mbps), 9.5, iw, false);
+      }
     });
     (net.instances||[]).forEach(i=>{
       const g=svg.querySelector(`.net-node[data-id="${cssEsc(i.id)}"]`); if(!g) return;
@@ -35898,7 +36318,91 @@ function runReplicationTask(id, name) {
     data.consumers.forEach(c => { const did=c.dataset_ids&&c.dataset_ids[0]; c.__pool = did ? (dsPool[did]||'') : ''; });
   }
 
+  // Straight centre-to-centre conduit for the alternative (radial/grid)
+  // storage placements — the layered layout's orthogonal V-H-V jogs assume
+  // stacked rows. Same classes/data attributes as mapLinkMarkup so the
+  // hover-highlight walk and mapUpdateLinks' rate/flow refresh work unchanged.
+  function mapLinkMarkupStraight(l, gcls, flowCls, withLabel){
+    const x1=l.lower.__cx, y1=l.lower.__y + l.lower.__h/2;
+    const x2=l.upper.__cx, y2=l.upper.__y + l.upper.__h/2;
+    const d=`M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    const lbl = withLabel
+      ? `<text class="map-link-label" data-role="rate" x="${((x1+x2)/2).toFixed(1)}" y="${((y1+y2)/2-5).toFixed(1)}" text-anchor="middle"></text>`
+      : '';
+    return `<g class="map-linkg${gcls}" data-id="${l.id}" data-lower="${mapEsc(l.lower.id)}" data-upper="${mapEsc(l.upper.id)}">`
+         + `<path class="map-link-rail" d="${d}"/>`
+         + `<path class="${flowCls}" data-role="flow" d="${d}"/>`
+         + lbl + `</g>`;
+  }
+
+  // ── Alternative STORAGE placements (v6.7.4, background right-click menu).
+  // The classic layered stack stays the default ('layers'); these mirror the
+  // network layer's options.
+  //
+  // Star / radial (d3-force): every pool is a PINNED hub; its disks (tight),
+  // datasets, shares and their clients chain to it with springs. Draggable,
+  // pins persisted — same engine as the networking layer's star.
+  function _storePlaceRadial(svg, data, byId, clientRemotes){
+    if (!_forceReady()) return _storePlaceGrid(svg, data, clientRemotes);
+    const members=[].concat(data.disks, data.datasets, data.consumers, clientRemotes);
+    const allBoxes=[].concat(data.pools, members).map(n=>({w:n.__w, h:n.__h}));
+    const {W,H}=_forceWorkspace(svg, allBoxes);
+    // Home pool: disks/datasets carry pool_id; consumers resolve via their
+    // first dataset (mapResolveGroups); clients via their first share.
+    const homeOf=n=>{
+      if (n.pool_id) return n.pool_id;
+      if (n.__pool) return n.__pool;
+      const c=(n.consumer_ids||[]).map(id=>byId[id]).find(Boolean);
+      return c ? (c.__pool||'') : '';
+    };
+    const memArea={};
+    data.pools.forEach(p=> memArea[p.id]=(p.__w+26)*(p.__h+26));
+    members.forEach(n=>{ const g=homeOf(n);
+      if (memArea[g]!=null) memArea[g]+=(n.__w+26)*(n.__h+26); });
+    const hubSeed=_forceHubSeeds(W, H, data.pools.map(p=>({id:p.id, area:memArea[p.id]})));
+    const seedAround=(c,i,r0)=>({ x:c.x+(r0+14*(i%5))*Math.cos(i*2.4), y:c.y+(r0+14*(i%5))*Math.sin(i*2.4) });
+    const items=[], linksIn=[];
+    data.pools.forEach(p=> items.push({id:p.id, w:p.__w, h:p.__h, hub:true, seed:hubSeed[p.id], ref:p}));
+    members.forEach((n,i)=>{
+      const c=hubSeed[homeOf(n)]||{x:W/2,y:H/2};
+      items.push({id:n.id, w:n.__w, h:n.__h, seed:seedAround(c,i,130), ref:n});
+    });
+    data.disks.forEach(d=> linksIn.push({a:d.id, b:d.pool_id, tight:true}));
+    data.datasets.forEach(ds=> linksIn.push({a:ds.id, b:ds.pool_id}));
+    data.consumers.forEach(cn=> (cn.dataset_ids||[]).forEach(did=> linksIn.push({a:cn.id, b:did})));
+    clientRemotes.forEach(r=> (r.consumer_ids||[]).forEach(cid=> linksIn.push({a:r.id, b:cid})));
+    const st=_forceStarSim(svg, W, H, items, linksIn);
+    st.nodes.forEach(n=>{ n.ref.__x=n.x-n.w/2; n.ref.__y=n.y-n.h/2; n.ref.__cx=n.x; });
+    return { W:st.W, H:st.H };
+  }
+
+  // Grid: every node in a dense uniform grid, ordered by layer (clients,
+  // shares/VMs, datasets, pools, disks) then name, column count chosen so the
+  // canvas matches the viewport aspect ratio.
+  function _storePlaceGrid(svg, data, clientRemotes){
+    const GAP=14, PAD=MAP.PAD;
+    const all=[].concat(data.disks, data.pools, data.datasets, data.consumers, clientRemotes);
+    all.sort((a,b)=> (a.__layer-b.__layer) ||
+      String(a.name||a.label||a.dev||a.id).localeCompare(String(b.name||b.label||b.dev||b.id)));
+    const maxW=all.reduce((m,n)=>Math.max(m,n.__w),0), maxH=all.reduce((m,n)=>Math.max(m,n.__h),0);
+    const vp=svg.closest('.map-viewport');
+    const aspect=(vp && vp.clientWidth>40 && vp.clientHeight>40) ? Math.max(1, vp.clientWidth/vp.clientHeight) : 2.2;
+    const cols=Math.max(1, Math.ceil(Math.sqrt(all.length*aspect*(maxH+GAP)/(maxW+GAP))));
+    const headerH=(data.remotes||[]).some(r=>r.kind==='peer') ? 26 : 0;
+    let W=480;
+    all.forEach((n,i)=>{
+      const r=Math.floor(i/cols), c=i%cols;
+      n.__x=PAD + c*(maxW+GAP) + (maxW-n.__w)/2;      // centre within the cell
+      n.__y=PAD+headerH + r*(maxH+GAP) + (maxH-n.__h)/2;
+      n.__cx=n.__x+n.__w/2;
+      W=Math.max(W, n.__x+n.__w+PAD);
+    });
+    const rows=Math.ceil(all.length/cols);
+    return { W, H: PAD+headerH + rows*(maxH+GAP) - GAP + PAD };
+  }
+
   function mapFullRender(svg, data){
+    _mapSimDispose(svg.id); // full relayout: drop any live force simulation
     mapResolveGroups(data);
 
     // Measure with the live theme font (tron-legacy → wide Orbitron, etc.).
@@ -35920,6 +36424,20 @@ function runReplicationTask(id, name) {
     const layerH=layerArr.map(a=> a.reduce((m,n)=>Math.max(m,n.__needH), MAP_BASE+MAP_BOT));
     layerArr.forEach((a,l)=> a.forEach(n=> n.__h=layerH[l]));
     const nodeH = l => layerH[l];
+
+    // Remotes actually rendered: one box per client (a remote with shares).
+    const clientRemotes = data.remotes.filter(r => r.consumer_ids && r.consumer_ids.length);
+
+    // Placement: 'layers' (default) is the classic stacked flow below;
+    // 'radial'/'grid' come from the background right-click menu and use
+    // straight links instead of the stack's orthogonal jogs.
+    let W, H;
+    const altLayout = (_storeLayout==='radial' || _storeLayout==='grid');
+    if (altLayout){
+      ({W, H} = _storeLayout==='radial'
+        ? _storePlaceRadial(svg, data, byId, clientRemotes)
+        : _storePlaceGrid(svg, data, clientRemotes));
+    } else {
 
     // Groups = pools (in order) + a trailing "misc" bucket for unmapped nodes.
     const groupOrder = data.pools.map(p=>p.id);
@@ -35988,12 +36506,11 @@ function runReplicationTask(id, name) {
       cursor = groupRight + MAP.GROUP_GAP;
     });
 
-    let W = Math.max(cursor - MAP.GROUP_GAP + MAP.PAD, 480);
-    const H = layerTop[4] + nodeH(4) + MAP.PAD;
+    W = Math.max(cursor - MAP.GROUP_GAP + MAP.PAD, 480);
+    H = layerTop[4] + nodeH(4) + MAP.PAD;
 
     // Global remotes row: one box per client, sorted by the average x of the
     // shares it links to, centered across the map width.
-    const clientRemotes = data.remotes.filter(r => r.consumer_ids && r.consumer_ids.length);
     clientRemotes.forEach(r=>{
       const xs = r.consumer_ids.map(id=>byId[id] && byId[id].__cx).filter(v=>v!=null);
       r.__tx = xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : MAP.PAD;
@@ -36003,6 +36520,8 @@ function runReplicationTask(id, name) {
     W = Math.max(W, remW + 2*MAP.PAD);
     { let x = (W - remW)/2;
       clientRemotes.forEach(r=>{ r.__y=layerTop[0]; r.__x=x; r.__cx=x+r.__w/2; x += r.__w + MAP.COL_GAP; }); }
+
+    } // end 'layers' placement
 
     // ---- links ----
     const links = [];
@@ -36042,8 +36561,12 @@ function runReplicationTask(id, name) {
         peerLinks.push({ id:'pk:'+shareId+'>'+vm.id, share, vm });
     }));
 
-    const linkSvg = links.map(mapLinkMarkup).join('')
-                  + peerLinks.map((pl,i)=>mapPeerLinkMarkup(pl,i)).join('');
+    const linkSvg = links.map(l=> altLayout
+                      ? mapLinkMarkupStraight(l, '', 'map-link l'+l.lower.__layer, true)
+                      : mapLinkMarkup(l)).join('')
+                  + peerLinks.map((pl,i)=> altLayout
+                      ? mapLinkMarkupStraight({id:pl.id, lower:pl.share, upper:pl.vm}, ' map-peerg', 'map-link map-peerlink', false)
+                      : mapPeerLinkMarkup(pl,i)).join('');
     const nodeSvg = [].concat(
       data.disks, data.pools, data.datasets, data.consumers,
       data.remotes.filter(r=>r.__x!=null)
@@ -36056,9 +36579,14 @@ function runReplicationTask(id, name) {
     if (!_storeFitted[svg.id]){
       const vp = svg.closest('.map-viewport') || svg.parentElement;
       if (vp && vp.clientWidth > 40 && vp.clientHeight > 40){
-        const fit = Math.min((vp.clientWidth-8)/W, (vp.clientHeight-8)/H);
+        // Star (force) placement: fit the settled CONTENT, not the padded
+        // workspace, then centre-scroll onto it — fills the panel exactly.
+        const st = _mapSims[svg.id];
+        const b  = st ? _forceContentBounds(st) : {x:0, y:0, w:W, h:H};
+        const fit = Math.min((vp.clientWidth-8)/b.w, (vp.clientHeight-8)/b.h);
         _mapZoomState[svg.id] = Math.max(MAP_ZMIN, Math.min(MAP_ZMAX, fit));
         _storeFitted[svg.id] = true; // only lock once the viewport was measurable
+        svg.__fitScroll = b;
       }
     }
 
@@ -36070,11 +36598,29 @@ function runReplicationTask(id, name) {
     svg.dataset.natW = W; svg.dataset.natH = H; // base size for the zoom controller
     svg.innerHTML =
       mapDefs() +
+      mapGridRect(W, H, 'mapGrid') +
       mapHeaderMarkup(data, W) +
       `<g class="map-links">${linkSvg}</g>` +
       `<g class="map-nodes">${nodeSvg}</g>`;
     mapUpdateDynamic(svg, data); // set live text/classes immediately
+    _forceBindEls(svg);          // wire the drag re-flow to the fresh DOM (star only)
     _mapApplyZoom(svg);          // re-apply the user's zoom after the relayout
+    _forceFitScroll(svg);        // centre a fresh content-fit (star only)
+  }
+
+  // Graph-paper pattern (v6.7.4): one 80×80 tile = minor 16px squares + a
+  // stronger major line every 5th. userSpaceOnUse ⇒ the grid pans & zooms WITH
+  // the map content, like a drawing on real math paper. Line colours come from
+  // CSS (.map-grid-minor/.map-grid-major) so every theme stays readable.
+  function mapGridDefs(idp){
+    const minor=[16,32,48,64].map(v=>`M ${v} 0 V 80 M 0 ${v} H 80`).join(' ');
+    return `<pattern id="${idp}" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path class="map-grid-minor" d="${minor}" fill="none"/>
+      <path class="map-grid-major" d="M 80 0 H 0 V 80" fill="none"/>
+    </pattern>`;
+  }
+  function mapGridRect(W, H, idp){
+    return `<rect class="map-grid" width="${W}" height="${H}" fill="url(#${idp})"/>`;
   }
 
   function mapDefs(){
@@ -36086,6 +36632,7 @@ function runReplicationTask(id, name) {
         <feGaussianBlur stdDeviation="2.4" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
+      ${mapGridDefs('mapGrid')}
     </defs>`;
   }
 
@@ -36182,8 +36729,14 @@ function runReplicationTask(id, name) {
     const node = id => svg.querySelector(`.map-node[data-id="${cssEsc(id)}"]`);
 
     // Title (wrapped name) is static in the markup; only the live sub-lines
-    // (rates, client counts, state) are refreshed each poll.
-    const fill = (g, t)=>{ set(g,'sub',t.sub); set(g,'sub2',t.sub2); };
+    // (rates, client counts, state) are refreshed each poll. Re-fit each line
+    // to the node's real box width — writing the raw text here would undo the
+    // overflow truncation applied at layout time.
+    const fill = (g, t)=>{
+      const bg = g && g.querySelector('.map-node-bg');
+      const iw = (bg ? (parseFloat(bg.getAttribute('width'))||MAP.MAX_W) : MAP.MAX_W) - 18;
+      set(g,'sub',_fitLine(t.sub,9.5,iw,false)); set(g,'sub2',_fitLine(t.sub2,9.5,iw,false));
+    };
     // (Rich info now lives in the hover hovercard, so no native <title> tooltip.)
     data.disks.forEach(d=>{
       const g=node(d.id); if(!g) return;
@@ -57286,7 +57839,54 @@ function updateCreateBridgeType() {
   document.getElementById('cb-ext-fields').style.display  = t !== 'nat'  ? '' : 'none';
   document.getElementById('cb-vlan-row').style.display    = t === 'vlan' ? '' : 'none';
   if (t !== 'vlan') document.getElementById('cb-vlan-iface-row').style.display = 'none';
+  _cbRenderParentOptions();
   _updateVLANNameSuggestion();
+}
+
+// Host NICs for the parent picker, as {name, master}. master = bridge/bond the
+// NIC is already a port of. A NIC can only belong to ONE bridge: putting a
+// busy NIC into a new plain bridge steals it from its current bridge and can
+// take the server off the network — so those options are disabled for "plain".
+// A VLAN sub-interface on a busy NIC is safe, so "vlan" keeps them selectable.
+let _cbIfaces = [];
+function _cbRenderParentOptions() {
+  const sel = document.getElementById('cb-parent');
+  const hint = document.getElementById('cb-parent-hint');
+  const t = document.getElementById('cb-type').value;
+  if (t === 'nat') { hint.style.display = 'none'; return; }
+  if (!_cbIfaces.length) {
+    hint.style.display = 'none';
+    return; // keep the Loading…/error/empty placeholder set by the loader
+  }
+  const plain = t === 'plain';
+  const prev = sel.value;
+  let anyBusy = false;
+  sel.innerHTML = _cbIfaces.map(i => {
+    const busy = !!i.master;
+    if (busy) anyBusy = true;
+    const label = busy ? `${i.name} — port of ${i.master}` : i.name;
+    return `<option value="${esc(i.name)}"${plain && busy ? ' disabled' : ''}>${esc(label)}</option>`;
+  }).join('');
+  const opts = [...sel.options];
+  const prevOpt = opts.find(o => o.value === prev);
+  if (prevOpt && !prevOpt.disabled) sel.value = prev;
+  else {
+    const firstFree = opts.find(o => !o.disabled);
+    sel.value = firstFree ? firstFree.value : '';
+    if (!firstFree) sel.selectedIndex = -1;
+  }
+  csRefresh('cb-parent'); // sync the custom-dropdown trigger label after rebuild
+  if (plain && anyBusy) {
+    hint.style.color = 'var(--accent-warn)';
+    hint.textContent = '⚠ Greyed-out interfaces are already a port of the bridge shown. Moving one into a new plain bridge would pull it out of that bridge and can disconnect this server from the network. Pick a free interface, or create a VLAN bridge on top of it instead.';
+    hint.style.display = '';
+  } else if (!plain && anyBusy) {
+    hint.style.color = 'var(--text-3)';
+    hint.textContent = 'Interfaces marked "port of …" are shared with that bridge — a VLAN sub-interface on them is safe and leaves the bridge untouched.';
+    hint.style.display = '';
+  } else {
+    hint.style.display = 'none';
+  }
 }
 
 let _vlanTagTimer = null;
@@ -57341,13 +57941,18 @@ async function openCreateBridgeModal() {
   // Load physical interfaces for parent picker.
   const sel = document.getElementById('cb-parent');
   sel.innerHTML = '<option value="">Loading…</option>';
+  document.getElementById('cb-parent-hint').style.display = 'none';
+  _cbIfaces = [];
   try {
     const res = await fetch('/api/incus/host-interfaces');
-    const ifaces = res.ok ? await res.json() : [];
-    sel.innerHTML = ifaces.length
-      ? ifaces.map(i => `<option value="${esc(i)}">${esc(i)}</option>`).join('')
-      : '<option value="">No physical interfaces found</option>';
+    const raw = res.ok ? await res.json() : [];
+    // Older peers (via relay) return plain strings; new servers return {name, master}.
+    _cbIfaces = (Array.isArray(raw) ? raw : []).map(i =>
+      typeof i === 'string' ? {name: i, master: ''} : {name: i.name, master: i.master || ''});
+    if (_cbIfaces.length) _cbRenderParentOptions();
+    else sel.innerHTML = '<option value="">No physical interfaces found</option>';
   } catch { sel.innerHTML = '<option value="">Error loading interfaces</option>'; }
+  csRefresh('cb-parent');
   const al = document.getElementById('create-bridge-alert');
   al.classList.add('hidden');
   document.getElementById('modal-create-bridge').classList.remove('hidden');
@@ -57370,6 +57975,17 @@ async function submitCreateBridge() {
     req.ipv6_address = ipv6 || 'none';
   } else {
     req.parent_interface = document.getElementById('cb-parent').value;
+    if (!req.parent_interface) {
+      al.textContent = 'Select a parent interface.';
+      al.classList.remove('hidden'); return;
+    }
+    if (bridgeType === 'plain') {
+      const busy = _cbIfaces.find(i => i.name === req.parent_interface && i.master);
+      if (busy) {
+        al.textContent = `Interface ${busy.name} is already a port of ${busy.master} — moving it into a new plain bridge would disconnect ${busy.master} and can take this server off the network. Pick a free interface or create a VLAN bridge instead.`;
+        al.classList.remove('hidden'); return;
+      }
+    }
     if (bridgeType === 'vlan') {
       req.vlan_tag = parseInt(document.getElementById('cb-vlan-tag').value) || 0;
       if (req.vlan_tag < 1 || req.vlan_tag > 4094) {

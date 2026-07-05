@@ -494,6 +494,10 @@ type UserPreferences struct {
 	LXDColumns           []string            `json:"lxd_columns,omitempty"`            // selected toggleable columns for VM/Container tables; nil = default set
 	LXDGrouping          string              `json:"lxd_grouping,omitempty"`           // compute-tree grouping: "" | "none" | "tag" | "type"
 	LXDGroupCollapsed    map[string][]string `json:"lxd_group_collapsed,omitempty"`    // collapsed compute-tree group ids keyed by "local" or relay hostname
+	// Topology "Star / radial" placement: node positions the user pinned by
+	// dragging. Outer key "<local|relay-host>:<storage|network>", inner key =
+	// node id, value = [x, y] in map canvas coordinates.
+	MapPins map[string]map[string][2]float64 `json:"map_pins,omitempty"`
 }
 
 // User represents a portal or SMB-only user.

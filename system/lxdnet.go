@@ -588,6 +588,12 @@ func CreateLXDNetwork(req LXDNetworkCreateRequest) error {
 		if req.ParentInterface == "" {
 			return fmt.Errorf("parent interface is required for plain bridge")
 		}
+		// A NIC can only be a port of one bridge: Incus would silently steal
+		// it from its current master, cutting the host's uplink if that
+		// master carries the management IP.
+		if m := ifaceMaster(req.ParentInterface); m != "" {
+			return fmt.Errorf("interface %s is already a port of %q — moving it into a new bridge would disconnect %q (and possibly this server). Pick a free interface, or create a VLAN bridge on top of %s instead", req.ParentInterface, m, m, req.ParentInterface)
+		}
 		args := []string{"network", "create", req.Name,
 			"bridge.external_interfaces=" + req.ParentInterface,
 			"ipv4.address=none",
@@ -771,15 +777,38 @@ func GetInterfaceMTU(iface string) (int, error) {
 	return v, nil
 }
 
+// ifaceMaster returns the name of the bridge (or bond) the interface is
+// currently enslaved to, read from /sys/class/net/<iface>/master, or "" when
+// the interface is free.
+func ifaceMaster(iface string) string {
+	target, err := os.Readlink("/sys/class/net/" + iface + "/master")
+	if err != nil {
+		return ""
+	}
+	if i := strings.LastIndexByte(target, '/'); i >= 0 {
+		target = target[i+1:]
+	}
+	return target
+}
+
+// PhysicalInterface describes a host NIC offered as a bridge parent. Master is
+// the bridge/bond the NIC is currently enslaved to ("" when free) — attaching
+// such a NIC to a new plain bridge would steal it from that master and can
+// take the host off the network.
+type PhysicalInterface struct {
+	Name   string `json:"name"`
+	Master string `json:"master,omitempty"`
+}
+
 // ListPhysicalInterfaces returns non-virtual, non-loopback network interfaces
 // suitable for use as the parent of a VLAN or plain external bridge.
-func ListPhysicalInterfaces() ([]string, error) {
+func ListPhysicalInterfaces() ([]PhysicalInterface, error) {
 	data, err := os.ReadFile("/proc/net/dev")
 	if err != nil {
 		return nil, err
 	}
 	skip := []string{"lo", "lxd", "incus", "veth", "tap", "virbr", "docker", "br-", "vmbr0-"}
-	var names []string
+	var names []PhysicalInterface
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.Contains(line, ":") {
@@ -800,7 +829,18 @@ func ListPhysicalInterfaces() ([]string, error) {
 			}
 		}
 		if !bad {
-			names = append(names, iface)
+			// The name-prefix skip list misses user-named bridges (vmbr0,
+			// mybr…): a bridge can't be the parent of another bridge, so
+			// detect them structurally. Wi-Fi NICs can't be bridge ports
+			// either (802.11 rejects enslaving without 4addr mode).
+			if _, err := os.Stat("/sys/class/net/" + iface + "/bridge"); err == nil {
+				bad = true
+			} else if _, err := os.Stat("/sys/class/net/" + iface + "/wireless"); err == nil {
+				bad = true
+			}
+		}
+		if !bad {
+			names = append(names, PhysicalInterface{Name: iface, Master: ifaceMaster(iface)})
 		}
 	}
 	return names, nil

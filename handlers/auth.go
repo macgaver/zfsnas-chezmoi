@@ -489,6 +489,16 @@ func HandleUpdatePrefs(w http.ResponseWriter, r *http.Request) {
 	}
 	var saved config.UserPreferences
 	if err := config.UpdateUserByID(sess.UserID, func(u *config.User) error {
+		// Map-typed fields MERGE under a plain unmarshal (existing keys can
+		// never be removed). map_pins needs REPLACE semantics — un-pinning a
+		// topology node / "Reset placement" must be able to delete entries —
+		// so when the body carries the key, drop the old map first.
+		var probe struct {
+			MapPins json.RawMessage `json:"map_pins"`
+		}
+		if json.Unmarshal(raw, &probe) == nil && probe.MapPins != nil {
+			u.Preferences.MapPins = nil
+		}
 		// Unmarshal onto the existing prefs struct — absent fields keep their
 		// current value, present fields are overwritten.
 		if err := json.Unmarshal(raw, &u.Preferences); err != nil {

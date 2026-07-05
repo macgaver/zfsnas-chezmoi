@@ -2887,11 +2887,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 .map-legend-item[data-layer="disk"]      i{background:var(--map-disk);color:var(--map-disk);}
 .map-toolbar-right{display:flex;align-items:center;gap:12px;}
 .map-status{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums;}
-.map-style-toggle{background:color-mix(in srgb, var(--accent-2) 15%, transparent);
-  border:1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
-  color:var(--accent-2);border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;}
-.map-style-toggle:hover{background:color-mix(in srgb, var(--accent-2) 28%, transparent);}
-/* zoom controls (− / level / +) */
+/* zoom controls (− / level / + / ⛶) */
 .map-zoom{display:inline-flex;align-items:stretch;
   border:1px solid color-mix(in srgb, var(--accent-2) 35%, transparent);
   border-radius:8px;overflow:hidden;}
@@ -2905,12 +2901,43 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 
 /* Height is set precisely in JS (_mapSizeViewport) from the element's real top
    so the map fits the visible area exactly; this calc is only a pre-JS fallback. */
-.map-viewport{position:relative;overflow:auto;height:calc(100vh - 300px);min-height:340px;
+.map-viewport{position:relative;overflow:auto;height:calc(100vh - 300px);min-height:120px;
   background:transparent;border:none;
   /* JS owns pan + pinch-zoom on touch, so suppress the browser's own gestures
      (page pinch-zoom / two-finger scroll). Wheel + scrollbars still work. */
   touch-action:none;-webkit-user-select:none;user-select:none;}
+/* Fullscreen (⛶ in the zoom group): paint the theme background instead of the
+   browser's default black fullscreen backdrop. */
+.map-viewport:fullscreen{background:var(--bg);}
+.map-viewport:-webkit-full-screen{background:var(--bg);} /* prefixed Safari (separate rule: an unknown pseudo would void a shared one) */
+/* Pseudo-fullscreen for platforms without an element-fullscreen API (iOS
+   Safari): fill the browser window instead. Below the bg menu (z 99999). */
+.map-viewport.map-vp-fullwindow{position:fixed;inset:0;z-index:9000;background:var(--bg);}
+/* Floating exit button — the toolbar is not visible while the map is full
+   screen, and phones have no Esc key. Hidden otherwise. */
+.map-fs-exit{display:none;position:fixed;top:12px;right:12px;z-index:9500;
+  width:36px;height:36px;align-items:center;justify-content:center;
+  border-radius:10px;cursor:pointer;font-size:15px;line-height:1;
+  background:color-mix(in srgb, var(--accent-2) 14%, var(--surface));
+  border:1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  color:var(--accent-2);}
+.map-fs-exit:hover{background:color-mix(in srgb, var(--accent-2) 28%, var(--surface));}
+.map-viewport:fullscreen .map-fs-exit{display:flex;}
+.map-viewport:-webkit-full-screen .map-fs-exit{display:flex;}
+.map-viewport.map-vp-fullwindow .map-fs-exit{display:flex;}
 #map-svg{display:block;background:transparent;}
+/* Graph-paper background (v6.7.4): minor 16px squares, stronger line every
+   5th. Colours derive from the theme's muted text colour so the grid stays
+   subtle on light, dark and exotic themes; dimmed further under the HUD glow. */
+.map-grid{pointer-events:none;}
+.map-grid-minor{stroke:color-mix(in srgb, var(--text-3) 14%, transparent);stroke-width:1;}
+.map-grid-major{stroke:color-mix(in srgb, var(--text-3) 26%, transparent);stroke-width:1;}
+.map-hud .map-grid{opacity:.35;}
+/* below 50% zoom the minor squares collapse into noise — majors only */
+.map-zoom-tiny .map-grid-minor{display:none;}
+/* Star placement (d3-force): nodes are draggable */
+.map-force .map-node, .map-force .net-node{cursor:grab;}
+.map-force .map-node:active, .map-force .net-node:active{cursor:grabbing;}
 .map-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   color:var(--text-3);font-size:14px;}
 

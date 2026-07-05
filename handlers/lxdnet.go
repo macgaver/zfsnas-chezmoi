@@ -115,7 +115,9 @@ func HandleDeleteVLANInterface(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListPhysicalInterfaces returns host network interfaces suitable as
-// a bridge parent (physical + existing host bridges, no virtual/loopback).
+// a bridge parent (physical NICs and bonds only — no bridges, VLAN
+// sub-interfaces, Wi-Fi, virtual or loopback devices). Each entry carries
+// the bridge/bond it is currently enslaved to, if any.
 // GET /api/lxd/host-interfaces
 func HandleListPhysicalInterfaces(w http.ResponseWriter, r *http.Request) {
 	ifaces, err := system.ListPhysicalInterfaces()
