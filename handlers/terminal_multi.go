@@ -28,6 +28,9 @@ const terminalMultiPageHTML = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<!-- Same fixed page zoom as the main portal (mirror any change there):
+     without a viewport meta iOS renders at 980px and allows pinch zoom. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Z Terminals</title>
 <!-- "Add to Home Screen" on iPadOS picks up these tags. Naming the
      bookmarked app "Z Terminals" with its own Tron-themed icon so the
@@ -63,7 +66,8 @@ const terminalMultiPageHTML = `<!DOCTYPE html>
     --accent:#3b82f6; --danger:#ef4444; --ok:#22c55e;
   }
   * { box-sizing:border-box; }
-  html,body { height:100%; margin:0; background:var(--bg-0); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  html,body { height:100%; margin:0; background:var(--bg-0); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+              touch-action:pan-x pan-y; /* fixed page zoom on touch devices, like the main portal */ }
   body { display:flex; flex-direction:column; }
   #tabs {
     display:flex; align-items:stretch; background:var(--bg-1); border-bottom:1px solid var(--bd);

@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- Fixed page zoom on touch devices (maximum-scale/user-scalable) — the
+       app is a control panel, not a document. viewport-fit=cover keeps the
+       iPhone notch/safe-area support added with the mobile shell; the zoom
+       lock was accidentally dropped in that same change (v6.7.0). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ZFS NAS Portal</title>
   <link rel="icon" href="/static/favicon.jpg?v=2" type="image/jpeg">
   <link rel="apple-touch-icon" href="/static/favicon.jpg?v=2">
@@ -51173,6 +51177,11 @@ function _mountCMEditor(textareaId, mode) {
     tabSize: 2,
     indentWithTabs: false,
     smartIndent: true,
+    // Phone: the editor is auto-height (CSS) and the modal sheet is the one
+    // scroller — a fixed-height inner scroller is a nested-scroll trap on iOS
+    // (its bottom half hides under the keyboard / below the sheet, so the end
+    // of the document was unreachable). Auto-height needs every line rendered.
+    viewportMargin: document.body.classList.contains('is-phone') ? Infinity : 10,
     gutters: ['CodeMirror-linenumbers', 'znas-validate-gutter'],
     extraKeys: {
       'Tab': function (cm) { cm.replaceSelection('  ', 'end'); }, // YAML forbids tab indentation

@@ -1,5 +1,13 @@
 /* ===== ZFS NAS Portal — Global Design System ===== */
 
+/* Fixed page zoom on touch devices: pan gestures only. The viewport meta's
+   maximum-scale/user-scalable lock is ignored by newer iOS Safari for
+   accessibility, but touch-action IS honoured — together they pin the page
+   zoom like the pre-v6.7.0 mobile builds. Elements with their own gesture
+   handling (topology map, terminal, resize handles) override this locally
+   with touch-action:none. */
+html, body { touch-action: pan-x pan-y; }
+
 /* Tron theme fonts — loaded only when the browser renders the Tron theme */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap');
 
@@ -3431,6 +3439,22 @@ body.is-phone .modal {
    single "Got it"/close button after the scroll region instead of in a
    .modal-footer) must never be squeezed out by the flex:1 scroll area. */
 body.is-phone .modal > button { flex-shrink: 0; }
+
+/* Compose YAML / .env editors on phone: AUTO height, so the modal sheet body
+   is the single scroller. A fixed-height CodeMirror inside the sheet is a
+   nested-scroll trap on iOS — the inner scroller maxes out while its lower
+   half sits under the keyboard / below the sheet, so the end of the document
+   could never be reached. (JS side: _mountCMEditor sets viewportMargin
+   Infinity on phones so CodeMirror actually renders every line.) */
+body.is-phone .znas-cm-yaml.CodeMirror,
+body.is-phone .znas-cm-env.CodeMirror,
+body.is-phone .znas-cm-docker-yaml.CodeMirror,
+body.is-phone .znas-cm-docker-env.CodeMirror {
+  height: auto !important;
+  /* the editors are flex children of the sheet's column — without this they
+     get SQUEEZED to fit instead of letting the sheet body scroll */
+  flex-shrink: 0;
+}
 
 /* ===== File browser — phone layout =========================================
    The desktop file browser is a resizable two-pane window (260px tree + a
