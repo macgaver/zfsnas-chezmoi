@@ -38093,11 +38093,27 @@ function runReplicationTask(id, name) {
     const wrap = document.getElementById('interlink-table-wrap');
     if (!wrap) return;
     wrap.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">Loading…</div>';
-    let servers = [];
-    try { servers = await _apiFetch('/api/interlink/servers'); } catch(e) {
-      wrap.innerHTML = `<div class="alert alert-error">${_esc(e.message)}</div>`;
-      return;
+    // Live list can legitimately take a few seconds (it pings every peer), but
+    // it must never hang the modal. Bound it with an AbortController; on
+    // timeout or error, fall back to the instant /fast endpoint (last-cached
+    // status) so the screen always renders something actionable.
+    let servers = null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      servers = await _apiFetch('/api/interlink/servers', { signal: ctrl.signal });
+    } catch(e) {
+      try {
+        servers = await _apiFetch('/api/interlink/servers/fast');
+      } catch(e2) {
+        clearTimeout(timer);
+        wrap.innerHTML = `<div class="alert alert-error">${_esc(e.message)}</div>`;
+        return;
+      }
+    } finally {
+      clearTimeout(timer);
     }
+    if (!Array.isArray(servers)) servers = [];
     if (!servers.length) {
       wrap.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">No linked servers yet. Click "+ Add Server" to connect a remote ZNAS instance.</div>';
       return;

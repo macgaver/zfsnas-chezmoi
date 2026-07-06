@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -45,6 +46,21 @@ var (
 	statusCache    = map[string]serverStatus{} // keyed by LinkedServer.ID
 	statusCacheTTL = 30 * time.Second
 )
+
+// interlinkMu serialises read-check-append and dedupe/save cycles on
+// appCfg.InterLink. Without it, cluster propagation (which fires several
+// accept-link requests concurrently) can race two handlers past the
+// "already linked?" check and append the same peer twice — the duplicate
+// that shows up as a server "listed twice" and doubles the ping work.
+var interlinkMu sync.Mutex
+
+// interlinkListMaxWait bounds how long the "Manage InterLink" list waits for
+// live peer pings. One unreachable peer used to make every goroutine block up
+// to ~90s (PingServer + RemotePingHasLXD + GetRemoteZFSAccess, each 30s), and
+// the endpoint waited for all of them — so the modal sat on "Loading…". Past
+// this deadline we fill any missing peer from its cached status (or mark it
+// offline) and return, so a dead peer can't hang the screen.
+const interlinkListMaxWait = 8 * time.Second
 
 func cachedStatus(id string) (serverStatus, bool) {
 	statusCacheMu.Lock()
@@ -124,6 +140,13 @@ func HandleInterlinkAcceptLink(appCfg *config.AppConfig) http.HandlerFunc {
 			hostname = "localhost"
 		}
 
+		// Serialize the whole check-and-append under interlinkMu. Cluster
+		// propagation fires several accept-link requests at once; without
+		// this lock two of them could both pass the "already linked?" check
+		// below before either appends, writing the same peer twice (the
+		// "listed twice" duplicate).
+		interlinkMu.Lock()
+
 		// Idempotent: if already linked by this caller URL, return the existing IDs.
 		// Still hand back the existing peers list (v6.5.42) so a repeat link
 		// from a fresh admin who didn't ride out the original cluster
@@ -131,12 +154,14 @@ func HandleInterlinkAcceptLink(appCfg *config.AppConfig) http.HandlerFunc {
 		// computed BEFORE the new-link branch appends `req.CallerURL`,
 		// so the caller never sees itself in its own propagation list.
 		for _, ls := range appCfg.InterLink {
-			if ls.URL == req.CallerURL {
-				jsonOK(w, system.AcceptLinkResponse{
+			if normalizeInterlinkURL(ls.URL) == normalizeInterlinkURL(req.CallerURL) {
+				resp := system.AcceptLinkResponse{
 					RemoteID:      ls.ID,
 					Hostname:      hostname,
 					ExistingPeers: buildInterlinkPeerList(appCfg, req.CallerURL),
-				})
+				}
+				interlinkMu.Unlock()
+				jsonOK(w, resp)
 				return
 			}
 		}
@@ -157,9 +182,11 @@ func HandleInterlinkAcceptLink(appCfg *config.AppConfig) http.HandlerFunc {
 			LinkedAt:     time.Now(),
 		})
 		if err := config.SaveAppConfig(appCfg); err != nil {
+			interlinkMu.Unlock()
 			jsonErr(w, http.StatusInternalServerError, "failed to save config")
 			return
 		}
+		interlinkMu.Unlock()
 		alerts.ReconcileLinkedServerSubscribers(appCfg)
 
 		audit.Log(audit.Entry{
@@ -178,14 +205,16 @@ func HandleInterlinkAcceptLink(appCfg *config.AppConfig) http.HandlerFunc {
 			// TOFU: capture and pin the caller's certificate on first outbound contact.
 			callerFP := system.CaptureTLSFingerprint(callerURL)
 			if callerFP != "" {
+				interlinkMu.Lock()
 				for i := range appCfg.InterLink {
 					if appCfg.InterLink[i].ID == callerLSID {
 						appCfg.InterLink[i].TLSFingerprint = callerFP
 						config.SaveAppConfig(appCfg) //nolint:errcheck
-						alerts.ReconcileLinkedServerSubscribers(appCfg)
 						break
 					}
 				}
+				interlinkMu.Unlock()
+				alerts.ReconcileLinkedServerSubscribers(appCfg)
 			}
 			if err := system.GrantLocalZFSAccess(); err != nil {
 				log.Printf("interlink accept-link: zfs allow failed: %v", err)
@@ -231,6 +260,87 @@ func buildInterlinkPeerList(appCfg *config.AppConfig, excludeURL string) []syste
 		return nil
 	}
 	return out
+}
+
+// normalizeInterlinkURL returns a comparison key for a linked-server URL: the
+// lowercased host[:port], so links that reach the same peer collapse together
+// regardless of scheme casing or a trailing slash. Falls back to the trimmed
+// raw string when the URL can't be parsed.
+func normalizeInterlinkURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return strings.ToLower(strings.TrimRight(strings.TrimSpace(raw), "/"))
+	}
+	return strings.ToLower(u.Host)
+}
+
+// interlinkCompleteness scores a LinkedServer so dedupeInterLink keeps the
+// richest of several duplicates — the entry that actually works for SSO /
+// relay / LXD is the one carrying a pinned fingerprint, a remote ID, and LXD
+// trust.
+func interlinkCompleteness(ls config.LinkedServer) int {
+	n := 0
+	if ls.TLSFingerprint != "" {
+		n++
+	}
+	if ls.RemoteID != "" {
+		n++
+	}
+	if ls.LXDTrusted {
+		n++
+	}
+	return n
+}
+
+// dedupeInterLink collapses linked-server entries that point at the same peer
+// (same normalized URL host). Duplicates arise from the concurrent-append race
+// in accept-link during cluster propagation; besides cluttering the list they
+// double the ping work behind the "Manage InterLink" screen. Keeps the most
+// complete entry (see interlinkCompleteness); ties break toward the newer link.
+// Returns true when it changed appCfg.InterLink. Caller holds interlinkMu.
+func dedupeInterLink(appCfg *config.AppConfig) bool {
+	if appCfg == nil || len(appCfg.InterLink) < 2 {
+		return false
+	}
+	seen := map[string]int{} // normalized URL -> index into kept
+	kept := make([]config.LinkedServer, 0, len(appCfg.InterLink))
+	changed := false
+	for _, ls := range appCfg.InterLink {
+		key := normalizeInterlinkURL(ls.URL)
+		if idx, ok := seen[key]; ok {
+			changed = true
+			cur := kept[idx]
+			if interlinkCompleteness(ls) > interlinkCompleteness(cur) ||
+				(interlinkCompleteness(ls) == interlinkCompleteness(cur) && ls.LinkedAt.After(cur.LinkedAt)) {
+				kept[idx] = ls
+			}
+			continue
+		}
+		seen[key] = len(kept)
+		kept = append(kept, ls)
+	}
+	if changed {
+		appCfg.InterLink = kept
+	}
+	return changed
+}
+
+// dedupeAndPersistInterLink removes duplicate linked-server entries and, if any
+// were removed, persists the cleaned list. Called at the top of the list
+// handlers so a config that already picked up a duplicate self-heals on the
+// next "Manage InterLink" open — no manual editing required.
+func dedupeAndPersistInterLink(appCfg *config.AppConfig) {
+	interlinkMu.Lock()
+	changed := dedupeInterLink(appCfg)
+	if changed {
+		if err := config.SaveAppConfig(appCfg); err != nil {
+			log.Printf("interlink: dedupe save failed: %v", err)
+		}
+	}
+	interlinkMu.Unlock()
+	if changed {
+		alerts.ReconcileLinkedServerSubscribers(appCfg)
+	}
 }
 
 // HandleInterlinkCheckUser handles POST /api/interlink/check-user — HMAC-authenticated.
@@ -332,6 +442,7 @@ func HandleInterlinkLogin(appCfg *config.AppConfig) http.HandlerFunc {
 // Returns server config immediately with last-cached online/lxd_enabled status (no live ping).
 func HandleInterlinkListFast(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		dedupeAndPersistInterLink(appCfg)
 		type serverOut struct {
 			ID         string `json:"id"`
 			URL        string `json:"url"`
@@ -368,6 +479,7 @@ func HandleInterlinkListFast(appCfg *config.AppConfig) http.HandlerFunc {
 // Returns all linked servers with cached online status and ZFS access check.
 func HandleInterlinkList(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		dedupeAndPersistInterLink(appCfg)
 		type serverOut struct {
 			ID            string    `json:"id"`
 			URL           string    `json:"url"`
@@ -412,10 +524,36 @@ func HandleInterlinkList(appCfg *config.AppConfig) http.HandlerFunc {
 			}()
 		}
 
+		// Collect results, but never block longer than interlinkListMaxWait:
+		// one unreachable peer must not hang the whole "Manage InterLink"
+		// screen. The channel is buffered to len(InterLink), so goroutines
+		// still in flight after the deadline can finish and warm the status
+		// cache for next time without leaking.
 		statusMap := make(map[string]result, len(appCfg.InterLink))
+		timeout := time.After(interlinkListMaxWait)
+	collect:
 		for range appCfg.InterLink {
-			res := <-ch
-			statusMap[res.id] = res
+			select {
+			case res := <-ch:
+				statusMap[res.id] = res
+			case <-timeout:
+				break collect
+			}
+		}
+		// Any peer that didn't answer in time: fall back to its last-known
+		// cached status, or mark it offline if we've never reached it.
+		for _, ls := range appCfg.InterLink {
+			if _, ok := statusMap[ls.ID]; ok {
+				continue
+			}
+			if s, ok := cachedStatus(ls.ID); ok {
+				statusMap[ls.ID] = result{
+					id: ls.ID, online: s.Online, ver: s.RemoteVersion,
+					lxdEnabled: s.LXDEnabled, hostname: s.Hostname,
+				}
+			} else {
+				statusMap[ls.ID] = result{id: ls.ID}
+			}
 		}
 
 		// Persist any hostname drift back to config (v6.5.43). A peer
