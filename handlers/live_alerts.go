@@ -127,6 +127,41 @@ func deriveLiveAlerts(appCfg *config.AppConfig) []LiveAlert {
 		}
 	}
 
+	// --- Sudoers hardening review pending ---
+	// Mirrors the client-side `prereqs` live alert (updatePrereqDot): when
+	// hardening is enabled and the installed sudoers file drifts from the
+	// required template (unsilenced missing/extra lines), a review is pending.
+	// Deriving it here means it survives the "All Servers" aggregate view and
+	// is reported by interlink peers (both previously dropped it because it
+	// only ever lived in the browser's _liveAlertsRegistry).
+	if appCfg.SudoersHardeningEnabled {
+		current, _ := sudoersCurrentContent(appCfg)
+		diff := system.ComputeSudoersDiff(current, system.RequiredSudoersContent(), appCfg.SudoersSilencedLines)
+		pending := 0
+		for _, d := range diff.MissingLines {
+			if !d.Silenced {
+				pending++
+			}
+		}
+		for _, d := range diff.ExtraLines {
+			if !d.Silenced {
+				pending++
+			}
+		}
+		if pending > 0 {
+			s := ""
+			if pending != 1 {
+				s = "s"
+			}
+			alerts = append(alerts, LiveAlert{
+				ID: "sudoers-pending", Severity: "warn",
+				Label:   "Sudoers review pending",
+				Message: fmt.Sprintf("%d change%s awaiting approval", pending, s),
+				Page:    "prereqs", System: hostname,
+			})
+		}
+	}
+
 	// --- Update available ---
 	// Recompute against the *live* running version rather than trusting the
 	// VersionCheckCache.UpdateAvailable bool, which is computed at check time
