@@ -4608,11 +4608,20 @@
       <div class="page hidden" id="page-datastore-detail">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
           <h2 style="margin:0;flex:1;" id="datastore-detail-title">Datastore</h2>
-          <span onclick="loadDatastoreMembers()" title="Refresh" style="cursor:pointer;color:var(--text-2);padding:4px 6px;line-height:1;user-select:none;display:inline-flex;align-items:center;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-2)'">
+          <span onclick="_dsdRefreshActiveTab()" title="Refresh" style="cursor:pointer;color:var(--text-2);padding:4px 6px;line-height:1;user-select:none;display:inline-flex;align-items:center;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-2)'">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
           </span>
         </div>
         <div id="datastore-detail-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+
+        <!-- v6.7.7 — datastore detail is tabbed: instances vs virtual disks -->
+        <div class="settings-tab-bar">
+          <button class="settings-tab active" id="dstab-members" onclick="switchDatastoreTab('members')">VM &amp; LXC</button>
+          <button class="settings-tab" id="dstab-vdisks" onclick="switchDatastoreTab('vdisks')">Virtual Disks</button>
+        </div>
+
+        <!-- Tab 1: VM & LXC (pre-6.7.7 content, unchanged) -->
+        <div id="dstab-panel-members">
         <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
           <button class="btn btn-secondary btn-sm" onclick="_lxdToggleColsMenu(event)" title="Choose table columns">&#9881; Columns &#9662;</button>
         </div>
@@ -4638,6 +4647,27 @@
           </tbody>
         </table>
         </div>
+        </div><!-- /dstab-panel-members -->
+
+        <!-- Tab 2: Virtual Disks (v6.7.7) -->
+        <div id="dstab-panel-vdisks" style="display:none;">
+          <div class="table-wrap">
+            <table class="table" id="vdisks-table">
+              <thead><tr>
+                <th style="cursor:pointer;user-select:none;" onclick="_vdSortBy('name')">Virtual Disk<span id="vdsort-name" class="sort-arrow"></span></th>
+                <th style="cursor:pointer;user-select:none;width:110px;" onclick="_vdSortBy('size')">Configured<span id="vdsort-size" class="sort-arrow"></span></th>
+                <th style="cursor:pointer;user-select:none;width:110px;" onclick="_vdSortBy('used')">Consumed<span id="vdsort-used" class="sort-arrow"></span></th>
+                <th style="cursor:pointer;user-select:none;width:120px;" onclick="_vdSortBy('ratio')">Compression<span id="vdsort-ratio" class="sort-arrow"></span></th>
+                <th style="cursor:pointer;user-select:none;" onclick="_vdSortBy('instance')">VM / LXC<span id="vdsort-instance" class="sort-arrow"></span></th>
+                <th style="cursor:pointer;user-select:none;width:140px;" onclick="_vdSortBy('changed')">Last Change<span id="vdsort-changed" class="sort-arrow"></span></th>
+                <th style="width:44px;"></th>
+              </tr></thead>
+              <tbody id="vdisks-tbody">
+                <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div><!-- /dstab-panel-vdisks -->
       </div>
 
       <!-- ===== v6.5.19: Backups (Datastores → Backups) page ===== -->
@@ -4675,6 +4705,38 @@
       </div>
 
       <!-- Add Datastore modal -->
+      <!-- v6.7.7 — connect an unattached virtual disk to a VM / LXC -->
+      <div class="modal-backdrop hidden" id="modal-vdisk-connect" onclick="if(event.target===this)closeVDiskConnect()">
+        <div class="modal" style="max-width:540px;max-height:88vh;display:flex;flex-direction:column;">
+          <div class="modal-header">
+            <h3 style="margin:0;">Connect Virtual Disk</h3>
+            <button class="modal-close" onclick="closeVDiskConnect()">✕</button>
+          </div>
+          <div style="padding:16px 28px 0;overflow-y:auto;flex:1;">
+            <div id="vdc-alert" class="alert alert-error hidden"></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+              <div id="vdc-disk-leaf" style="font-weight:700;color:var(--text);"></div>
+              <div id="vdc-disk-path" style="font-size:11.5px;font-family:'SF Mono',monospace;color:var(--text-3);margin-top:2px;"></div>
+              <div id="vdc-disk-size" style="font-size:12px;color:var(--text-2);margin-top:4px;"></div>
+            </div>
+            <div class="form-group">
+              <label>Attach to <i class="info-tip" data-tip="The disk is attached as a raw block device (/dev/zvol). Virtual machines see a new virtio disk; containers get the block device inside the instance. A disk can only be attached to one instance at a time."></i></label>
+              <div id="vdc-instances" style="border:1px solid var(--border);border-radius:8px;max-height:260px;overflow-y:auto;">
+                <div style="color:var(--text-3);font-size:12.5px;padding:14px;text-align:center;">Loading instances…</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Device name <span class="text-3 text-xs">(how the disk appears in the instance config)</span></label>
+              <input type="text" id="vdc-devname" maxlength="40">
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:14px 28px 18px;">
+            <button class="btn btn-ghost" onclick="closeVDiskConnect()">Cancel</button>
+            <button class="btn btn-primary" id="vdc-attach-btn" onclick="vdConnectSubmit()" disabled>Connect Disk</button>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-backdrop hidden" id="modal-add-datastore" onclick="if(event.target===this)document.getElementById('modal-add-datastore').classList.add('hidden')">
         <div class="modal" style="max-width:480px;">
           <div class="modal-header">
@@ -7568,6 +7630,7 @@ Select the Console tab to load.</pre>
                        box-shadow:0 0 10px rgba(110,64,201,0.4);letter-spacing:.02em;">
           <span style="font-size:14px;">✦</span> Folder TreeMap
         </button>
+        <span id="dsd-related" style="display:contents;"></span>
       </div>
       <div id="dsd-usage-bar" style="height:6px;border-radius:3px;background:var(--surface2);margin-bottom:16px;overflow:hidden;">
         <div id="dsd-usage-fill" style="height:100%;border-radius:3px;transition:width .3s;"></div>
@@ -14743,6 +14806,11 @@ function _renderLiveAlertsTab() {
   if (countEl) {
     if (alerts.length > 0) {
       countEl.textContent = alerts.length;
+      // Badge severity mirrors the worst alert: red only when at least one
+      // danger-level alert exists; all-warn shows a yellow badge instead.
+      const hasDanger = alerts.some(a => a.severity === 'danger');
+      countEl.style.background = hasDanger ? '#ff453a' : '#f0b429';
+      countEl.style.color      = hasDanger ? '#fff' : '#1a1a1a';
       countEl.classList.remove('hidden');
     } else {
       countEl.classList.add('hidden');
@@ -21228,6 +21296,9 @@ let zvolCache = [];
 async function loadDatasets() {
   const el = document.getElementById('datasets-content');
   el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div>';
+  // Warm the topology cache (fire-and-forget) so the detail popups' Related
+  // VM/LXC buttons appear instantly — a cold /api/map/topology takes seconds.
+  _dsRelatedInstances('');
   await refreshPoolBar();
 
   if (!poolData) {
@@ -21250,6 +21321,60 @@ async function loadDatasets() {
   renderDatasets(el);
 }
 
+// Whole-row click on the Datasets & Zvol table → same info popup the top
+// capacity bar opens. Guarded so buttons, the collapse chevron, links and the
+// row ⋮ menu keep their own behavior.
+function _dsRowOpenDetail(ev, name, kind) {
+  if (ev.target.closest('button,a,input,select,.row-menu-wrap,[data-ds-chevron],.info-tip')) return;
+  if (kind === 'zvol') openZVolDetail(name);
+  else openDatasetDetail(name);
+}
+
+// ── Related VM / LXC buttons in the detail popups (v6.7.7) ──────────────────
+// The topology endpoint already resolves which instances consume each
+// dataset/zvol (VM disk zvols, container datasets, bind mounts / VirtIO-FS
+// shares) — reuse it instead of duplicating the resolution logic. 60s cache;
+// consumers are only present when virtualization is enabled.
+let _dsRelTopoCache = { at: 0, data: null };
+
+async function _dsRelatedInstances(zfsName) {
+  if (!_dsRelTopoCache.data || Date.now() - _dsRelTopoCache.at > 60000) {
+    try {
+      const r = await fetch('/api/map/topology', { credentials: 'same-origin' });
+      if (r.ok) _dsRelTopoCache = { at: Date.now(), data: await r.json() };
+    } catch {}
+  }
+  const d = _dsRelTopoCache.data;
+  if (!d) return [];
+  const id = 'ds:' + zfsName;
+  return (d.consumers || []).filter(c =>
+    (c.type === 'vm' || c.type === 'container') && (c.dataset_ids || []).includes(id));
+}
+
+// Renders "Related VM · name" / "Related LXC · name" buttons into the given
+// placeholder span (async — the popup opens instantly, buttons appear when
+// the topology answer arrives). closeFnName closes the popup before jumping
+// to the instance.
+async function _dsRenderRelated(spanId, zfsName, closeFnName) {
+  const span = document.getElementById(spanId);
+  if (!span) return;
+  span.innerHTML = '';
+  span.dataset.forName = zfsName;
+  const rel = await _dsRelatedInstances(zfsName);
+  const s2 = document.getElementById(spanId);
+  if (!s2 || s2.dataset.forName !== zfsName) return; // popup changed meanwhile
+  s2.innerHTML = rel.slice(0, 4).map(c => {
+    const isVM = c.type === 'vm';
+    return `<button onclick="${closeFnName}();openComputeInstance('${esc(c.name)}','${isVM ? 'virtual-machine' : 'container'}')"
+      title="This ${isVM ? 'virtual machine' : 'container'} uses this ${zfsName.includes('/') ? 'volume' : 'dataset'} — click to open it"
+      style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:600;border-radius:8px;border:none;cursor:pointer;
+             background:linear-gradient(135deg,#1f8a4c 0%,#0dbbbd 100%);color:#fff;
+             box-shadow:0 0 10px rgba(13,187,189,0.35);letter-spacing:.02em;">
+      <span style="font-size:14px;">${isVM ? '🖥' : '📦'}</span> Related ${isVM ? 'VM' : 'LXC'} · ${esc(c.name)}
+    </button>`;
+  }).join('');
+}
+
 function _datasetRow(d, showComment, showQuota, hasChildren) {
   const indent = d.depth * 24;
   const isRoot = d.depth === 0;
@@ -21262,7 +21387,7 @@ function _datasetRow(d, showComment, showQuota, hasChildren) {
        </span>`
     : `<span style="display:inline-block;width:12px;flex-shrink:0;"></span>`;
   return `
-    <tr data-ds-name="${esc(d.name)}">
+    <tr data-ds-name="${esc(d.name)}" onclick="_dsRowOpenDetail(event,'${esc(d.name)}','ds')" style="cursor:pointer;">
       <td>
         <div style="display:flex;align-items:center;gap:6px;padding-left:${indent}px;">
           ${chevronEl}
@@ -21463,7 +21588,7 @@ function _zvolRow(z, showComment, showQuota) {
   const shortName = parts[parts.length - 1];
   const indent = (parts.length - 1) * 24;
   return `
-    <tr data-zvol-name="${esc(z.name)}">
+    <tr data-zvol-name="${esc(z.name)}" onclick="_dsRowOpenDetail(event,'${esc(z.name)}','zvol')" style="cursor:pointer;">
       <td>
         <div style="display:flex;align-items:center;gap:6px;padding-left:${indent}px;">
           <span style="display:inline-block;width:12px;flex-shrink:0;"></span>
@@ -21961,10 +22086,14 @@ function openZVolDetail(name) {
                      box-shadow:0 0 10px rgba(110,64,201,0.4);letter-spacing:.02em;">
         <span style="font-size:14px;">✦</span> Trending
       </button>
+      <span id="zvd-related" style="display:contents;"></span>
     `;
   } else {
-    actions.innerHTML = '';
+    // Read-only sessions still get the Related VM/LXC navigation.
+    actions.innerHTML = `<span id="zvd-related" style="display:contents;"></span>`;
   }
+  // Related VM/LXC buttons (VM disk zvols, attached custom volumes) — async fill.
+  _dsRenderRelated('zvd-related', name, 'closeZVolDetail');
   document.getElementById('modal-zvol-detail').classList.remove('hidden');
 }
 
@@ -24562,6 +24691,8 @@ function openDatasetDetail(name) {
   const d = (datasetData || []).find(x => x.name === name) || (datasetCache || []).find(x => x.name === name);
   if (!d) return;
   _dsdCurrentName = name;
+  // Related VM/LXC buttons (bind mounts / VirtIO-FS shares) — async fill.
+  _dsRenderRelated('dsd-related', name, 'closeDatasetDetail');
 
   // Title: short name, full path below.
   document.getElementById('dsd-title').textContent = d.short_name || d.name;
@@ -34210,6 +34341,7 @@ document.addEventListener('click', function(e) {
     'modal-extstorage':       closeExtStorageModal,
     'modal-extsync':          closeExtSyncModal,
     'modal-extlog':           closeExtLogModal,
+    'modal-vdisk-connect':    closeVDiskConnect,
     'modal-snapshot':         closeSnapshotModal,
     'modal-winacl-restart':          closeWinACLRestartModal,
     'modal-shadow-copy-restart':     closeShadowCopyRestartModal,
@@ -43101,7 +43233,7 @@ async function ciRefreshBkDep() {
   if (!wrap || !_ciCurrentName) return;
   const name = _ciCurrentName;
   try {
-    const r = await fetch('/api/lxd/instances/' + encodeURIComponent(name) + '/backup-dependency');
+    const r = await fetch('/api/incus/instances/' + encodeURIComponent(name) + '/backup-dependency');
     if (!r.ok) { wrap.style.display = 'none'; return; }
     const d = await r.json();
     if (name !== _ciCurrentName) return; // navigated away during the fetch
@@ -43152,7 +43284,7 @@ async function ciSubmitPromote() {
   const btn = document.getElementById('pf-submit-btn');
   btn.disabled = true; btn.textContent = 'Promoting…';
   try {
-    const r = await fetch('/api/lxd/instances/' + encodeURIComponent(name) + '/promote-full-copy', {
+    const r = await fetch('/api/incus/instances/' + encodeURIComponent(name) + '/promote-full-copy', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ datastore: ds }),
     });
     const d = await r.json();
@@ -47401,7 +47533,7 @@ function _dsLabel(poolName) {
 // selection is persisted server-side in UserPreferences.lxd_columns. The
 // VCPU/RAM/Filesystem cells render a "%used + bar"; Net/Disk-IO render a single
 // rate number. All five read a latest-sample rollup fetched once from
-// /api/lxd/instances-metrics and cached. Per-cell hover popups show the full
+// /api/incus/instances-metrics and cached. Per-cell hover popups show the full
 // breakdown (every filesystem, every NIC, every disk device).
 
 // Toggleable columns only — Type/Name/Status/Actions are always shown. 'image'
@@ -47482,7 +47614,7 @@ function _lxdEnsureMetrics(force) {
     return Promise.resolve(_lxdMetricsCache);
   }
   if (_lxdMetricsInflight) return _lxdMetricsInflight;
-  _lxdMetricsInflight = fetch('/api/lxd/instances-metrics', {credentials:'same-origin'})
+  _lxdMetricsInflight = fetch('/api/incus/instances-metrics', {credentials:'same-origin'})
     .then(r => r.ok ? r.json() : null)
     .then(j => { if (j && j.instances) { _lxdMetricsCache = j; _lxdMetricsTS = Date.now(); } _lxdMetricsInflight = null; return _lxdMetricsCache; })
     .catch(() => { _lxdMetricsInflight = null; return _lxdMetricsCache; });
@@ -54857,7 +54989,7 @@ async function lxdEnableOpenStaticIP() {
   });
   m.classList.remove('hidden');
   try {
-    const r = await fetch('/api/lxd/enable/netconfig', { credentials: 'same-origin' });
+    const r = await fetch('/api/incus/enable/netconfig', { credentials: 'same-origin' });
     if (r.ok) {
       const c = await r.json();
       const set = (k, v) => { const el = document.getElementById('lxd-static-ip-' + k); if (el && v != null) el.value = v; };
@@ -54898,7 +55030,7 @@ async function lxdEnableApplyStaticIP() {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
     try {
-      await fetch('/api/lxd/enable/static-ip', {
+      await fetch('/api/incus/enable/static-ip', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ iface, address, gateway, dns }),
@@ -54912,7 +55044,7 @@ async function lxdEnableApplyStaticIP() {
 
   // Same IP — make it static in place; the connection survives.
   try {
-    const r = await fetch('/api/lxd/enable/static-ip', {
+    const r = await fetch('/api/incus/enable/static-ip', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ iface, address, gateway, dns }),
@@ -59727,6 +59859,7 @@ function renderDatastoresNav(pools) {
 }
 
 async function openDatastoreDetail(name) {
+  const changed = _currentDatastoreName !== name;
   _currentDatastoreName = name;
   document.getElementById('datastore-detail-title').textContent = name;
   _clearDatastoresRootActive();
@@ -59734,7 +59867,276 @@ async function openDatastoreDetail(name) {
   const navBtn = document.getElementById('nav-ds-' + name);
   if (navBtn) navBtn.classList.add('active');
   showPage('datastore-detail');
+  if (changed) switchDatastoreTab('members'); // fresh datastore → default tab
+  else if (_dsdActiveTab === 'vdisks') loadDatastoreVDisks();
   await loadDatastoreMembers();
+}
+
+// ── Datastore detail tabs (v6.7.7) ──────────────────────────────────────────
+let _dsdActiveTab = 'members';
+
+function switchDatastoreTab(tab) {
+  _dsdActiveTab = tab;
+  ['members', 'vdisks'].forEach(t => {
+    const panel = document.getElementById('dstab-panel-' + t);
+    const btn   = document.getElementById('dstab-' + t);
+    if (!panel || !btn) return;
+    panel.style.display = (t === tab) ? '' : 'none';
+    btn.classList.toggle('active', t === tab);
+  });
+  if (tab === 'vdisks') loadDatastoreVDisks();
+}
+
+function _dsdRefreshActiveTab() {
+  if (_dsdActiveTab === 'vdisks') loadDatastoreVDisks();
+  else loadDatastoreMembers();
+}
+
+// ── Virtual Disks tab ───────────────────────────────────────────────────────
+let _vdRows = [];
+let _vdSort = { key: 'name', dir: 1 };
+
+async function loadDatastoreVDisks() {
+  const tbody = document.getElementById('vdisks-tbody');
+  if (!tbody || !_currentDatastoreName) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
+  try {
+    const r = await fetch(`/api/incus/storage-pools/${encodeURIComponent(_currentDatastoreName)}/vdisks`);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'load failed');
+    _vdRows = (await r.json()) || [];
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Could not load virtual disks: ${esc(e.message)}</td></tr>`;
+    return;
+  }
+  renderVDisks();
+}
+
+function _vdSortBy(key) {
+  if (_vdSort.key === key) _vdSort.dir = -_vdSort.dir;
+  else _vdSort = { key, dir: 1 };
+  renderVDisks();
+}
+
+function _vdChanged(r) { return Math.max(r.last_snap || 0, r.creation || 0); }
+
+// Relative "when" for a unix-seconds timestamp.
+function _vdWhen(t) {
+  if (!t) return '—';
+  const diff = Math.floor(Date.now() / 1000 - t);
+  if (diff < 3600) return Math.max(1, Math.floor(diff / 60)) + ' min ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' h ago';
+  if (diff < 86400 * 30) return Math.floor(diff / 86400) + ' d ago';
+  return new Date(t * 1000).toLocaleDateString();
+}
+
+function renderVDisks() {
+  const tbody = document.getElementById('vdisks-tbody');
+  if (!tbody) return;
+  // Sort arrows
+  ['name', 'size', 'used', 'ratio', 'instance', 'changed'].forEach(k => {
+    const el = document.getElementById('vdsort-' + k);
+    if (el) el.textContent = _vdSort.key === k ? (_vdSort.dir > 0 ? ' ▲' : ' ▼') : '';
+  });
+  if (!_vdRows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No virtual disks on this datastore.</td></tr>';
+    return;
+  }
+  const val = (r) => {
+    switch (_vdSort.key) {
+      case 'size':     return r.size || 0;
+      case 'used':     return r.used || 0;
+      case 'ratio':    return parseFloat(r.comp_ratio) || 0;
+      case 'instance': return (r.instance || '￿').toLowerCase(); // unattached last
+      case 'changed':  return _vdChanged(r);
+      default:         return (r.name || '').toLowerCase();
+    }
+  };
+  const rows = [..._vdRows].sort((a, b) => {
+    const va = val(a), vb = val(b);
+    return (va < vb ? -1 : va > vb ? 1 : 0) * _vdSort.dir;
+  });
+  tbody.innerHTML = rows.map(r => {
+    // VM / LXC cell — clickable chip navigating to the instance page.
+    let instCell;
+    if (r.instance) {
+      const isVM = r.inst_type === 'vm';
+      instCell = `
+        <a onclick="openComputeInstance('${esc(r.instance)}','${isVM ? 'virtual-machine' : 'container'}')"
+           title="Open ${esc(r.instance)}${r.inst_dev ? ' (device: ' + esc(r.inst_dev) + ')' : ''}"
+           style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--accent);font-weight:600;">
+          ${isVM ? '🖥' : '📦'} ${esc(r.instance)}
+          ${r.root_disk ? '<span style="font-size:9px;font-weight:800;letter-spacing:.5px;padding:1px 5px;border-radius:3px;background:var(--surface2);color:var(--text-3);">ROOT</span>' : ''}
+        </a>`;
+    } else {
+      instCell = '<span style="color:var(--text-3);">— unattached</span>';
+    }
+    const changed = _vdChanged(r);
+    const changedTitle = (r.last_snap ? 'Newest snapshot: ' + new Date(r.last_snap * 1000).toLocaleString() + ' (the disk may have changed since)' : 'Created: ' + new Date((r.creation || 0) * 1000).toLocaleString());
+    const menuBtn = !r.instance
+      ? `<button onclick="_vdMenu(event,'${esc(r.name)}')" style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px;padding:4px 8px;border-radius:6px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">⋮</button>`
+      : '';
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="opacity:.7;color:var(--zvol-color);display:flex;align-items:center;">${typeof diskSVG === 'function' ? diskSVG(15) : '💽'}</span>
+          <div style="min-width:0;">
+            <div style="font-weight:600;">${esc(r.leaf)}</div>
+            <div class="text-3 text-xs" style="font-family:'SF Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;">${esc(r.name)}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-family:monospace;font-size:13px;white-space:nowrap;">${fmtBytes(r.size)}</td>
+      <td style="font-family:monospace;font-size:13px;white-space:nowrap;">${fmtBytes(r.used)}</td>
+      <td style="font-size:13px;">${esc(_fmtRatio(r.comp_ratio))}</td>
+      <td>${instCell}</td>
+      <td style="font-size:12.5px;color:var(--text-2);" title="${esc(changedTitle)}">${esc(_vdWhen(changed))}</td>
+      <td style="text-align:right;">${menuBtn}</td>
+    </tr>`;
+  }).join('');
+  if (typeof _mCardifyTables === 'function') _mCardifyTables(document.getElementById('dstab-panel-vdisks'));
+}
+
+// Burger menu for unattached disks: connect / delete.
+function _vdMenu(ev, name) {
+  ev.stopPropagation();
+  closeExtRowMenu(); // shared single-popover pattern
+  const m = document.createElement('div');
+  m.id = 'ext-row-menu';
+  m.style.cssText = 'position:fixed;z-index:2000;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);min-width:210px;overflow:hidden;padding:4px 0;';
+  const item = (label, fn, danger) =>
+    `<button onclick="closeExtRowMenu();${fn}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:${danger ? '#ff453a' : 'var(--text-1)'};cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${label}</button>`;
+  m.innerHTML =
+    item('🔌 Connect to VM / LXC…', `openVDiskConnect('${esc(name)}')`) +
+    `<div style="height:1px;background:var(--border);margin:4px 0;"></div>` +
+    item('🗑 Delete zvol', `vdDeleteZVol('${esc(name)}')`, true);
+  document.body.appendChild(m);
+  const rect = ev.currentTarget.getBoundingClientRect();
+  m.style.top = Math.min(window.innerHeight - m.offsetHeight - 8, rect.bottom + 4) + 'px';
+  m.style.left = Math.max(8, rect.right - m.offsetWidth) + 'px';
+  setTimeout(() => document.addEventListener('click', closeExtRowMenu, { once: true }), 0);
+}
+
+function vdDeleteZVol(name) {
+  const r = _vdRows.find(x => x.name === name) || {};
+  showConfirm({
+    title: 'Delete this virtual disk?',
+    body: `You are about to permanently destroy the zvol “${r.leaf || name}” (${fmtBytes(r.size || 0)} configured, ${fmtBytes(r.used || 0)} in use) at:\n\n${name}\n\nEverything stored on this virtual disk — including all of its snapshots — will be irreversibly erased. This disk is not attached to any VM or container, so nothing that is currently running depends on it. This action cannot be undone.`,
+    confirmText: 'Delete Forever',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        const resp = await fetch('/api/zvol/delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        const d = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(d.error || 'delete failed');
+        showToast('Virtual disk deleted', 'success');
+      } catch (e) { showToast('Delete failed: ' + e.message, 'error'); }
+      loadDatastoreVDisks();
+    },
+  });
+}
+
+// ── Connect-to-instance popup ───────────────────────────────────────────────
+let _vdcDisk = null;     // vdisk row being connected
+let _vdcSelected = null; // { name, type }
+
+async function openVDiskConnect(name) {
+  const r = _vdRows.find(x => x.name === name);
+  if (!r) return;
+  _vdcDisk = r;
+  _vdcSelected = null;
+  document.getElementById('vdc-alert').classList.add('hidden');
+  document.getElementById('vdc-disk-leaf').textContent = r.leaf;
+  document.getElementById('vdc-disk-path').textContent = r.dev_path;
+  document.getElementById('vdc-disk-size').textContent = fmtBytes(r.size) + ' configured · ' + fmtBytes(r.used) + ' in use';
+  // Default device name from the leaf, sanitized for Incus device naming.
+  document.getElementById('vdc-devname').value =
+    ('disk-' + r.leaf).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').slice(0, 30).replace(/-$/, '');
+  document.getElementById('vdc-attach-btn').disabled = true;
+  const list = document.getElementById('vdc-instances');
+  list.innerHTML = '<div style="color:var(--text-3);font-size:12.5px;padding:14px;text-align:center;">Loading instances…</div>';
+  document.getElementById('modal-vdisk-connect').classList.remove('hidden');
+  try {
+    const resp = await fetch('/api/incus/instances');
+    const insts = resp.ok ? ((await resp.json()) || []) : [];
+    if (!insts.length) {
+      list.innerHTML = '<div style="color:var(--text-3);font-size:12.5px;padding:14px;text-align:center;">No VMs or containers found.</div>';
+      return;
+    }
+    list.innerHTML = insts.map(i => {
+      const isVM = i.type === 'virtual-machine';
+      const state = (i.state || i.status || '').toLowerCase();
+      const running = state === 'running';
+      return `<button type="button" data-vdc-name="${esc(i.name)}" data-vdc-type="${esc(i.type)}"
+        onclick="vdConnectSelect(this)"
+        style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 14px;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text-1);cursor:pointer;font-size:13px;">
+        <span style="font-size:15px;">${isVM ? '🖥' : '📦'}</span>
+        <span style="flex:1;font-weight:600;">${esc(i.name)}</span>
+        <span style="font-size:10.5px;font-weight:700;letter-spacing:.4px;padding:1px 6px;border-radius:4px;background:var(--surface2);color:var(--text-3);">${isVM ? 'VM' : 'LXC'}</span>
+        <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${running ? '#30d158' : 'var(--text-3)'};" title="${esc(state || 'unknown')}"></span>
+      </button>`;
+    }).join('');
+  } catch {
+    list.innerHTML = '<div style="color:var(--text-3);font-size:12.5px;padding:14px;text-align:center;">Could not load instances.</div>';
+  }
+}
+
+function vdConnectSelect(btn) {
+  _vdcSelected = { name: btn.dataset.vdcName, type: btn.dataset.vdcType };
+  document.querySelectorAll('#vdc-instances button').forEach(b => {
+    const on = b === btn;
+    b.style.background = on ? 'color-mix(in srgb,var(--accent) 12%,transparent)' : 'none';
+    b.style.boxShadow  = on ? 'inset 3px 0 0 var(--accent)' : 'none';
+  });
+  document.getElementById('vdc-attach-btn').disabled = false;
+}
+
+function closeVDiskConnect() { document.getElementById('modal-vdisk-connect').classList.add('hidden'); }
+
+async function vdConnectSubmit() {
+  if (!_vdcDisk || !_vdcSelected) return;
+  const alertEl = document.getElementById('vdc-alert');
+  const devName = document.getElementById('vdc-devname').value.trim();
+  if (!devName || !/^[a-z0-9][a-z0-9-]*$/i.test(devName)) {
+    alertEl.textContent = 'Device name must contain only letters, digits and dashes.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  const btn = document.getElementById('vdc-attach-btn');
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try {
+    // Read the instance's current raw-disk list and append — the config PUT
+    // is partial-aware: only fields present in the body are managed.
+    const cr = await fetch(`/api/incus/instances/${encodeURIComponent(_vdcSelected.name)}/config`);
+    if (!cr.ok) throw new Error('could not read instance configuration');
+    const cfg = await cr.json();
+    const existing = (cfg.existing_disks_raw || []).filter(d => d.dev_path);
+    if (existing.some(d => d.dev_path === _vdcDisk.dev_path)) throw new Error('this disk is already attached to that instance');
+    // The backend attach is add-only and silently SKIPS an already-used
+    // device name — validate against both raw disks and regular disk
+    // devices so the connect can't silently no-op.
+    const usedNames = new Set([
+      ...existing.map(d => d.device_name),
+      ...((cfg.disks || []).map(d => d.name)),
+    ]);
+    if (usedNames.has(devName)) throw new Error(`device name “${devName}” is already used on that instance — pick another`);
+    existing.push({ device_name: devName, dev_path: _vdcDisk.dev_path });
+    const pr = await fetch(`/api/incus/instances/${encodeURIComponent(_vdcSelected.name)}/config`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ existing_disks_raw: existing }),
+    });
+    const pd = await pr.json().catch(() => ({}));
+    if (!pr.ok) throw new Error(pd.error || 'attach failed');
+    closeVDiskConnect();
+    showToast(`Disk connected to ${_vdcSelected.name}`, 'success');
+    loadDatastoreVDisks();
+  } catch (e) {
+    alertEl.textContent = e.message;
+    alertEl.classList.remove('hidden');
+  }
+  btn.disabled = false; btn.textContent = 'Connect Disk';
 }
 
 async function loadDatastoreMembers() {

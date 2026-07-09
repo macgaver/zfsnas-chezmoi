@@ -2583,6 +2583,7 @@ type ZVol struct {
 	Encrypted      bool   `json:"encrypted"`
 	Comment        string `json:"comment"`
 	DevPath        string `json:"dev_path"` // /dev/zvol/<name>
+	Creation       int64  `json:"creation"` // unix seconds (v6.7.7)
 }
 
 // ZVolCreateRequest holds all parameters for creating a new ZVol.
@@ -2617,7 +2618,7 @@ func ListAllZVols() ([]ZVol, error) {
 	out, err := exec.Command("sudo", "zfs", "list",
 		"-t", "volume",
 		"-H", "-p",
-		"-o", "name,volsize,used,refer,compression,compressratio,sync,dedup,volblocksize,encryption,zfsnas:comment,refreservation",
+		"-o", "name,volsize,used,refer,compression,compressratio,sync,dedup,volblocksize,encryption,zfsnas:comment,refreservation,creation",
 	).Output()
 	if err != nil {
 		// No volumes is not an error — zfs list exits non-zero when there are no results.
@@ -2661,6 +2662,10 @@ func parseZVolLine(line string) (ZVol, error) {
 	if len(f) >= 12 {
 		refreservation, _ = strconv.ParseUint(f[11], 10, 64)
 	}
+	var creation int64
+	if len(f) >= 13 {
+		creation, _ = strconv.ParseInt(f[12], 10, 64) // -p prints unix seconds
+	}
 	pool := strings.SplitN(name, "/", 2)[0]
 	return ZVol{
 		Name:           name,
@@ -2677,6 +2682,7 @@ func parseZVolLine(line string) (ZVol, error) {
 		Encrypted:      encrypted,
 		Comment:        comment,
 		DevPath:        "/dev/zvol/" + name,
+		Creation:       creation,
 	}, nil
 }
 

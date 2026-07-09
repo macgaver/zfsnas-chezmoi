@@ -917,3 +917,14 @@ func instanceDisks() map[string][]system.LXDInstanceDisk {
 	instDisksExp = time.Now().Add(60 * time.Second)
 	return instDisksC
 }
+
+// invalidateInstanceDisks drops the 60s disk-device cache. Called after an
+// instance config change so consumers of the mapping (topology, the
+// Datastore → Virtual Disks association) reflect a just-attached/detached
+// disk immediately instead of showing it unattached for up to a minute
+// (which would even let the user attach it twice).
+func invalidateInstanceDisks() {
+	instDisksMu.Lock()
+	instDisksC = nil
+	instDisksMu.Unlock()
+}

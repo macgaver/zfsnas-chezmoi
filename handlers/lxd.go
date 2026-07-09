@@ -583,6 +583,10 @@ func HandleLXDSetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDEditConfig, Target: name, Result: audit.ResultOK})
+	// Config edits can add/remove disk devices — refresh the cached
+	// instance→disks mapping so topology + Virtual Disks associations are
+	// immediately accurate (v6.7.7).
+	invalidateInstanceDisks()
 	jsonOK(w, map[string]string{"ok": "updated"})
 }
 

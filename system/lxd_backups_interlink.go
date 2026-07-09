@@ -70,7 +70,7 @@ func InterlinkRemotePoolSource(remoteURL, sharedSecret, tlsFP, pool string) (str
 		HMAC:      LXDPoolSourceHMAC(sharedSecret, ts, nh, pool),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-pool-source", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-pool-source", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -134,7 +134,7 @@ func InterlinkRemoteZFSPools(remoteURL, sharedSecret, tlsFP string) ([]LXDRemote
 		HMAC:      LXDZFSPoolsHMAC(sharedSecret, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-zfs-pools", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-zfs-pools", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func InterlinkRemotePrepWorkload(remoteURL, sharedSecret, tlsFP, pool, kind, com
 		HMAC:        LXDPrepWorkloadHMAC(sharedSecret, ts, nh, pool, kind, compression),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-prep-workload", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-prep-workload", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func InterlinkRemotePrepChain(remoteURL, sharedSecret, tlsFP, pool, vm string, s
 		HMAC:            LXDPrepChainHMAC(sharedSecret, ts, nh, pool, vm, srcSnapshots),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-prep-chain", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-prep-chain", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func InterlinkRemoteVMBackups(remoteURL, sharedSecret, tlsFP, vm string) ([]Remo
 		HMAC:      LXDBackupsHMAC(sharedSecret, ts, nh, vm),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-backups", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-backups", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func InterlinkRemoteDeleteBackup(remoteURL, sharedSecret, tlsFP, vm, datastore, 
 		HMAC:         LXDBackupDeleteHMAC(sharedSecret, ts, nh, vm, datastore, snapshotName),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-backup-delete", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-backup-delete", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

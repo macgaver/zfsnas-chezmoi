@@ -1269,13 +1269,13 @@ async function buildAddMenu() {
 
   // Fetch local + each online peer's instances in parallel.
   const onlinePeers = (peers || []).filter(p => p.online);
-  // Local instances come from /api/lxd/instances which returns full
+  // Local instances come from /api/incus/instances which returns full
   // LXDInstance objects: state lives on .status, type on .type. The
   // peer endpoint returns LXDInstanceSummary with .state + .type
   // (extended in v6.5.30 specifically so this menu could filter to
   // running) — normalise the local payload to the same shape below.
   const promises = [
-    fetch('/api/lxd/instances', NORELAY)
+    fetch('/api/incus/instances', NORELAY)
       .then(r => r.ok ? r.json() : [])
       .then(list => ({
         serverId: '',

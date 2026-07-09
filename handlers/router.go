@@ -448,7 +448,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/extstorage/prereqs",
 		RequireAuth(http.HandlerFunc(HandleExtStoragePrereqs))).Methods("GET")
 	r.Handle("/api/extstorage/install",
-		RequireAdmin(http.HandlerFunc(HandleExtStorageInstall))).Methods("POST")
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleExtStorageInstall)))).Methods("POST")
 	r.Handle("/api/extstorage/test",
 		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageTest(appCfg))))).Methods("POST")
 	r.Handle("/api/extstorage/{id}",
@@ -997,6 +997,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDeleteStoragePool)))).Methods("DELETE")
 	r.Handle("/api/lxd/storage-pools/{name}/members",
 		RequireAuth(http.HandlerFunc(HandleGetStoragePoolMembers))).Methods("GET")
+	r.Handle("/api/lxd/storage-pools/{name}/vdisks",
+		RequireAuth(http.HandlerFunc(HandleDatastoreVDisks))).Methods("GET")
 	r.Handle("/api/lxd/free-zvols",
 		RequireAuth(http.HandlerFunc(HandleListFreeZVols))).Methods("GET")
 	r.Handle("/api/lxd/networks",

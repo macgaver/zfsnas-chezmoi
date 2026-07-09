@@ -363,19 +363,19 @@ func LXDInterlinkTrustHMAC(sharedSecret, certPEM string, timestamp int64, nonce 
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// LXDInterlinkCertRequest is the HMAC-signed POST /api/lxd/interlink-cert payload.
+// LXDInterlinkCertRequest is the HMAC-signed POST /api/incus/interlink-cert payload.
 type LXDInterlinkCertRequest struct {
 	Timestamp int64  `json:"timestamp"`
 	Nonce     string `json:"nonce"`
 	HMAC      string `json:"hmac"`
 }
 
-// LXDInterlinkCertResponse is returned by POST /api/lxd/interlink-cert.
+// LXDInterlinkCertResponse is returned by POST /api/incus/interlink-cert.
 type LXDInterlinkCertResponse struct {
 	CertPEM string `json:"cert_pem"`
 }
 
-// LXDInterlinkTrustRequest is the HMAC-signed POST /api/lxd/interlink-trust payload.
+// LXDInterlinkTrustRequest is the HMAC-signed POST /api/incus/interlink-trust payload.
 type LXDInterlinkTrustRequest struct {
 	CertPEM   string `json:"cert_pem"`
 	PeerID    string `json:"peer_id"`
@@ -396,7 +396,7 @@ func GetRemoteLXDCert(remoteURL, sharedSecret, tlsFP string) (string, error) {
 		HMAC:      LXDInterlinkCertHMAC(sharedSecret, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-cert", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-cert", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -427,7 +427,7 @@ func SendLXDCertToRemote(remoteURL, sharedSecret, tlsFP, certPEM, ourID string) 
 		HMAC:      LXDInterlinkTrustHMAC(sharedSecret, certPEM, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/interlink-trust", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-trust", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -1210,7 +1210,7 @@ func GetRemoteLXDStoragePools(remoteURL, sharedSecret, tlsFP string) ([]string, 
 		HMAC:      LXDStoragePoolsHMAC(sharedSecret, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/storage-pools-remote", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/storage-pools-remote", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -1257,7 +1257,7 @@ func GetRemoteLXDBridges(remoteURL, sharedSecret, tlsFP string) ([]LXDNetworkInf
 		HMAC:      LXDBridgesHMAC(sharedSecret, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/bridges-remote", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/bridges-remote", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -1356,7 +1356,7 @@ func GetRemoteLXDInstances(remoteURL, sharedSecret, tlsFP string) ([]LXDInstance
 		HMAC:      LXDInstancesHMAC(sharedSecret, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/instances-remote", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/instances-remote", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -1397,7 +1397,7 @@ func LXDClearTPMState(vmName string) error {
 	return nil
 }
 
-// LXDTPMClearRequest is the HMAC-signed payload for POST /api/lxd/vm-tpm-clear.
+// LXDTPMClearRequest is the HMAC-signed payload for POST /api/incus/vm-tpm-clear.
 type LXDTPMClearRequest struct {
 	VMName    string `json:"vm_name"`
 	Timestamp int64  `json:"timestamp"`
@@ -1431,7 +1431,7 @@ func ClearRemoteTPMState(remoteURL, sharedSecret, tlsFP, vmName string) error {
 		HMAC:      LXDTPMClearHMAC(sharedSecret, vmName, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/vm-tpm-clear", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/vm-tpm-clear", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -1442,7 +1442,7 @@ func ClearRemoteTPMState(remoteURL, sharedSecret, tlsFP, vmName string) error {
 	return nil
 }
 
-// LXDNVRAMResetRequest is the HMAC-signed payload for POST /api/lxd/vm-nvram-reset.
+// LXDNVRAMResetRequest is the HMAC-signed payload for POST /api/incus/vm-nvram-reset.
 type LXDNVRAMResetRequest struct {
 	VMName    string `json:"vm_name"`
 	Timestamp int64  `json:"timestamp"`
@@ -1578,7 +1578,7 @@ func ResetRemoteVMNVRAM(remoteURL, sharedSecret, tlsFP, vmName string) error {
 		HMAC:      LXDNVRAMResetHMAC(sharedSecret, vmName, ts, nh),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/lxd/vm-nvram-reset", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/vm-nvram-reset", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

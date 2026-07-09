@@ -713,7 +713,7 @@ async function _probeAndReconnect() {
   let vmStatus = '';
   let probeFailed = false;
   try {
-    const r = await fetch(apiURL('/api/lxd/instances/' + encodeURIComponent(name) + '/status'), { cache: 'no-store' });
+    const r = await fetch(apiURL('/api/incus/instances/' + encodeURIComponent(name) + '/status'), { cache: 'no-store' });
     if (r.ok) {
       const d = await r.json();
       vmStatus = (d && d.status) || '';
@@ -925,7 +925,7 @@ let _cdromState = { configured: [], available: [], pool: '', running: false };
 
 async function refreshCDROMState() {
   try {
-    const r = await fetch(apiURL('/api/lxd/instances/' + encodeURIComponent(name) + '/cdroms'), { cache:'no-store' });
+    const r = await fetch(apiURL('/api/incus/instances/' + encodeURIComponent(name) + '/cdroms'), { cache:'no-store' });
     if (!r.ok) { document.getElementById('cdrom-wrap').style.display = 'none'; return; }
     _cdromState = await r.json();
   } catch(_) { document.getElementById('cdrom-wrap').style.display = 'none'; return; }
@@ -1035,7 +1035,7 @@ function toggleCDROMMenu(e) {
 async function swapCDROM(filename, pool) {
   document.getElementById('cdrom-menu').style.display = 'none';
   try {
-    const r = await fetch(apiURL('/api/lxd/instances/' + encodeURIComponent(name) + '/cdroms/swap'), {
+    const r = await fetch(apiURL('/api/incus/instances/' + encodeURIComponent(name) + '/cdroms/swap'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: filename, pool: pool || '' })
