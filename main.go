@@ -239,6 +239,16 @@ func main() {
 	// ===== Snapshot scheduler =====
 	handlers.StartScheduler(appCfg)
 
+	// ===== External storage rsync scheduler + mount janitor (v6.7.7) =====
+	handlers.StartRsyncScheduler(appCfg)
+	go func() {
+		// Re-mount persistent external storages after boot; a dead remote
+		// only logs, it must never block startup.
+		for id, err := range system.MountAllPersistent(absConfig, appCfg.ExternalStorages) {
+			log.Printf("[extstorage] persistent mount %s failed: %v", id, err)
+		}
+	}()
+
 	// ===== LXD snapshot + backup schedulers (v6.5.19+) =====
 	handlers.StartLXDSnapshotScheduler(appCfg)
 	handlers.StartLXDBackupScheduler(appCfg)

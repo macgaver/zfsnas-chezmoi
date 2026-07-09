@@ -541,6 +541,12 @@ func ResolveKnownRoots(configDir string) (map[string]string, error) {
 		}
 	}
 
+	// Mounted external storages (v6.7.7 Filesystem rsync) — browsable while
+	// mounted; unmounted storages disappear from the root list.
+	for mp, label := range extKnownRoots() {
+		roots[mp] = label
+	}
+
 	if len(roots) == 0 {
 		return roots, fmt.Errorf("no known roots found")
 	}

@@ -1742,21 +1742,52 @@
 
       <!-- SNAPSHOTS -->
       <div class="page hidden" id="page-snapshots">
-        <!-- Schedules sub-section -->
-        <div class="card" style="margin-bottom:20px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-            <h3 style="margin:0;">Snapshot &amp; Replication Schedules</h3>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-ghost btn-sm" onclick="loadSnapshots()">↻ Refresh</button>
-              <button class="btn btn-primary btn-sm" onclick="openCreateSchedule()" id="btn-create-schedule">+ Add Policy</button>
-            </div>
-          </div>
-          <div id="schedules-content">
-            <div style="color:var(--text-3);font-size:13px;">Loading schedules…</div>
-          </div>
+        <!-- v6.7.7 — Protect is tabbed: block-level ZFS protection vs
+             file-level rsync sync with external storage. -->
+        <div class="settings-tab-bar">
+          <button class="settings-tab active" id="prot-tab-zfs" onclick="switchProtectTab('zfs')">ZFS Replication &amp; Snapshots</button>
+          <button class="settings-tab" id="prot-tab-rsync" onclick="switchProtectTab('rsync')" style="display:flex;align-items:center;gap:6px;">
+            Filesystem rsync
+            <span id="prot-rsync-tab-dot" style="display:none;width:7px;height:7px;border-radius:50%;background:#f0b429;box-shadow:0 0 4px rgba(240,180,41,0.6);flex-shrink:0;"></span>
+          </button>
         </div>
 
-        <div id="snapshots-content"><div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div></div>
+        <!-- ── Tab 1: ZFS Replication & Snapshots (pre-6.7.7 page, unchanged) ── -->
+        <div id="prot-panel-zfs">
+          <!-- Schedules sub-section -->
+          <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+              <h3 style="margin:0;">Snapshot &amp; Replication Schedules</h3>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-ghost btn-sm" onclick="loadSnapshots()">↻ Refresh</button>
+                <button class="btn btn-primary btn-sm" onclick="openCreateSchedule()" id="btn-create-schedule">+ Add Policy</button>
+              </div>
+            </div>
+            <div id="schedules-content">
+              <div style="color:var(--text-3);font-size:13px;">Loading schedules…</div>
+            </div>
+          </div>
+
+          <div id="snapshots-content"><div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div></div>
+        </div>
+
+        <!-- ── Tab 2: Filesystem rsync (v6.7.7) ── -->
+        <div id="prot-panel-rsync" style="display:none;">
+          <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px;">
+              <h3 style="margin:0;display:flex;align-items:center;gap:8px;">External Storage
+                <i class="info-tip tip-down" data-tip="Connect remote SMB, NFS, FTP or SSH storage. Each storage is mounted locally so you can browse it with the File Browser and set up a scheduled rsync synchronization — pulling remote files onto this NAS, or pushing local folders to the remote."></i>
+              </h3>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-ghost btn-sm" onclick="loadExtStorages()">↻ Refresh</button>
+                <button class="btn btn-primary btn-sm" onclick="openExtStorageModal()" id="btn-add-extstorage">+ Add External Storage</button>
+              </div>
+            </div>
+            <div id="extstorage-content">
+              <div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="page hidden" id="page-shares">
         <div class="page-header">
@@ -6847,6 +6878,7 @@ Select the Console tab to load.</pre>
         <!-- Tab 1: Activity & Events -->
         <div id="ab-events-pane">
           <div id="ab-jobs"></div>
+          <div id="ab-remote-jobs"></div>
           <div id="ab-entries">
             <div style="color:var(--text-3);font-size:12px;padding:8px 0;">Loading…</div>
           </div>
@@ -9299,6 +9331,282 @@ Select the Console tab to load.</pre>
 
 <!-- Create / Edit Snapshot Schedule Modal -->
 <!-- ZFS Replication SSH Info Modal -->
+<!-- ═══ v6.7.7 External Storage (Filesystem rsync) modals ═══ -->
+<div class="modal-backdrop hidden" id="modal-extstorage">
+  <div class="modal" style="max-width:560px;max-height:92vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <h3 id="ext-modal-title" style="margin:0;">Add External Storage</h3>
+      <button class="modal-close" onclick="closeExtStorageModal()">✕</button>
+    </div>
+    <form onsubmit="submitExtStorage(event)" style="display:flex;flex-direction:column;flex:1;min-height:0;padding:0;">
+      <div style="overflow-y:auto;flex:1;padding:20px 32px 0;scrollbar-gutter:stable;">
+        <div id="ext-alert" class="alert alert-error hidden"></div>
+
+        <!-- Protocol picker — 4 selectable cards -->
+        <div class="form-group">
+          <label>Storage type</label>
+          <div id="ext-type-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+            <!-- populated by extRenderTypeCards() -->
+          </div>
+          <div id="ext-prereq-warn" class="hidden" style="margin-top:8px;font-size:12px;color:#f0b429;background:rgba(240,180,41,0.08);border:1px solid rgba(240,180,41,0.35);border-radius:6px;padding:8px 10px;display:flex;align-items:center;gap:10px;">
+            <span id="ext-prereq-warn-text" style="flex:1;"></span>
+            <button type="button" class="btn btn-ghost btn-sm" id="ext-prereq-install-btn" onclick="extInstallHelper()" style="flex-shrink:0;">Install</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Name <span class="text-3 text-xs">(shown in the storage list)</span></label>
+          <input type="text" id="ext-name" placeholder="e.g. Office NAS backup share" maxlength="60">
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label id="ext-host-label">Server / Host</label>
+            <input type="text" id="ext-host" placeholder="192.168.1.50 or nas.local">
+          </div>
+          <div class="form-group" id="ext-port-group" style="display:none;">
+            <label>Port</label>
+            <input type="number" id="ext-port" min="1" max="65535" placeholder="22">
+          </div>
+        </div>
+
+        <div class="form-group" id="ext-share-group">
+          <label id="ext-share-label">Share name</label>
+          <input type="text" id="ext-share" placeholder="backup">
+          <div id="ext-share-hint" style="font-size:11.5px;color:var(--text-3);margin-top:4px;"></div>
+        </div>
+
+        <div id="ext-auth-section">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Username</label>
+              <input type="text" id="ext-user" autocomplete="off">
+            </div>
+            <div class="form-group" id="ext-pass-group">
+              <label id="ext-pass-label">Password</label>
+              <input type="password" id="ext-pass" autocomplete="new-password" placeholder="">
+            </div>
+          </div>
+          <div class="form-group" id="ext-domain-group" style="display:none;">
+            <label>Domain <span class="text-3 text-xs">(optional — AD / workgroup)</span></label>
+            <input type="text" id="ext-domain" placeholder="">
+          </div>
+          <!-- SSH auth method -->
+          <div class="form-group" id="ext-sshauth-group" style="display:none;">
+            <label>Authentication</label>
+            <div style="display:flex;gap:8px;">
+              <button type="button" id="ext-sshauth-pass" class="btn btn-ghost btn-sm" onclick="extSetSSHAuth('pass')" style="flex:1;">🔑 Password</button>
+              <button type="button" id="ext-sshauth-key" class="btn btn-ghost btn-sm" onclick="extSetSSHAuth('key')" style="flex:1;">📄 Private key</button>
+            </div>
+            <textarea id="ext-sshkey" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;paste the private key here" style="display:none;margin-top:8px;font-family:'SF Mono',monospace;font-size:11px;width:100%;"></textarea>
+            <div id="ext-sshkey-note" style="display:none;font-size:11.5px;color:var(--text-3);margin-top:4px;">The key is stored on this server only (config/extstorage, mode 600). Leave empty when editing to keep the current key.</div>
+          </div>
+        </div>
+
+        <!-- Mount mode — SMB/NFS only -->
+        <div class="form-group" id="ext-mountmode-group">
+          <label>Mount mode <i class="info-tip tip-down" data-tip="On-demand: the share is mounted automatically when a sync runs or when you open it in the File Browser, and unmounted after ~15 minutes idle — the NAS never holds a stale connection. Persistent: the share stays mounted and is re-mounted when the system starts."></i></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button type="button" id="ext-mm-ondemand" onclick="extSetMountMode('ondemand')"
+                    style="text-align:left;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;color:var(--text-1);">
+              <div style="font-size:13px;font-weight:600;">⚡ On-demand</div>
+              <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Mounted only while in use <span style="color:var(--accent-3);">· recommended</span></div>
+            </button>
+            <button type="button" id="ext-mm-persistent" onclick="extSetMountMode('persistent')"
+                    style="text-align:left;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;color:var(--text-1);">
+              <div style="font-size:13px;font-weight:600;">📌 Persistent</div>
+              <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Always mounted, restored at boot</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Advanced -->
+        <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;">
+          <button type="button" onclick="extToggleAdv()" style="width:100%;background:var(--card-bg);border:none;padding:9px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;color:var(--text-1);font-size:13px;font-weight:500;">
+            <span>Advanced</span>
+            <span id="ext-adv-arrow" style="font-size:11px;color:var(--text-3);">▶</span>
+          </button>
+          <div id="ext-adv-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Extra mount options <span class="text-3 text-xs">(comma-separated)</span> <i class="info-tip" data-tip="Appended verbatim to the mount options — e.g. vers=3.0 for old SMB servers, ro for read-only, nfsvers=4.2."></i></label>
+              <input type="text" id="ext-extraopts" placeholder="e.g. vers=3.0,ro">
+            </div>
+          </div>
+        </div>
+
+        <div id="ext-test-result" style="margin-bottom:14px;"></div>
+      </div>
+      <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 32px 20px;">
+        <button type="button" class="btn btn-ghost" id="ext-test-btn" onclick="extTestConnection()" style="margin-right:auto;">Test connection</button>
+        <button type="button" class="btn btn-ghost" onclick="closeExtStorageModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="ext-submit-btn">Add Storage</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-extsync">
+  <div class="modal" style="max-width:820px;max-height:92vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <h3 id="extsync-title" style="margin:0;">Set up synchronization</h3>
+      <button class="modal-close" onclick="closeExtSyncModal()">✕</button>
+    </div>
+    <form onsubmit="submitExtSync(event)" style="display:flex;flex-direction:column;flex:1;min-height:0;padding:0;">
+      <div style="overflow-y:auto;flex:1;padding:20px 32px 0;scrollbar-gutter:stable;">
+        <div id="extsync-alert" class="alert alert-error hidden"></div>
+
+        <!-- Direction — two large cards -->
+        <div class="form-group">
+          <label>Direction</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button type="button" id="extsync-dir-pull" onclick="extSyncSetDir('pull')"
+                    style="text-align:left;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;color:var(--text-1);">
+              <div style="font-size:15px;font-weight:700;">⬇ Backup from remote</div>
+              <div style="font-size:11.5px;color:var(--text-3);margin-top:3px;">Pull remote files onto this NAS</div>
+            </button>
+            <button type="button" id="extsync-dir-push" onclick="extSyncSetDir('push')"
+                    style="text-align:left;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;color:var(--text-1);">
+              <div style="font-size:15px;font-weight:700;">⬆ Push to remote</div>
+              <div style="font-size:11.5px;color:var(--text-3);margin-top:3px;">Copy local folders to the remote storage</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Visual path flow: source → destination, arrow flips with direction -->
+        <div class="form-group">
+          <div id="extsync-flow" style="display:grid;grid-template-columns:1fr 34px 1fr;gap:8px;align-items:stretch;">
+            <div id="extsync-remote-box" style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--card-bg);">
+              <div style="font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;">
+                <span id="extsync-remote-role">Remote source</span> · <span id="extsync-remote-name" style="color:var(--accent);"></span>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <input type="text" id="extsync-remote-path" placeholder="/ (whole share)" style="flex:1;min-width:0;">
+                <button type="button" class="btn btn-ghost btn-sm" id="extsync-remote-pick-btn" onclick="extSyncPickRemote(event)" title="Browse the share's folders" style="padding:4px 8px;flex-shrink:0;">▾</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Path inside the remote share — pick a folder or type freely</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;">
+              <span id="extsync-arrow" style="font-size:22px;color:var(--accent);">→</span>
+            </div>
+            <div id="extsync-local-box" style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--card-bg);">
+              <div style="font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;">
+                <span id="extsync-local-role">Local destination</span> · <span style="color:var(--accent-3);">this NAS</span>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <input type="text" id="extsync-local-path" placeholder="/tank/backups/office" style="flex:1;min-width:0;">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="extSyncPickLocal(event)" title="Pick a dataset mountpoint" style="padding:4px 8px;flex-shrink:0;">▾</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Absolute path on this server — pick a dataset or type freely</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Schedule -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>Frequency</label>
+            <select id="extsync-freq" onchange="extSyncUpdateFields()">
+              <option value="manual">Manual only</option>
+              <option value="hourly">Hourly</option>
+              <option value="daily" selected>Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="form-group" id="extsync-weekday-group" style="display:none;">
+            <label>Day of week</label>
+            <select id="extsync-weekday">
+              <option value="0">Sunday</option><option value="1">Monday</option>
+              <option value="2">Tuesday</option><option value="3">Wednesday</option>
+              <option value="4">Thursday</option><option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </select>
+          </div>
+          <div class="form-group" id="extsync-dom-group" style="display:none;">
+            <label>Day of month</label>
+            <input type="number" id="extsync-dom" value="1" min="1" max="28">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group" id="extsync-hour-group">
+            <label>Hour (0–23)</label>
+            <input type="number" id="extsync-hour" value="3" min="0" max="23">
+          </div>
+          <div class="form-group" id="extsync-minute-group">
+            <label>Minute (0–59)</label>
+            <input type="number" id="extsync-minute" value="0" min="0" max="59">
+          </div>
+        </div>
+        <!-- Optional daily run window -->
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="extsync-window-on" onchange="extSyncUpdateWindowFields()" style="width:15px;height:15px;accent-color:var(--accent-2);">
+            Only run within a daily time window
+            <i class="info-tip" data-tip="Restrict transfers to a daily window (it may span midnight, e.g. 22:00 → 06:00). A sync still running when the window closes is paused — the partial transfer is kept — and resumes automatically when the window opens again. You can always force it to continue immediately with the ▶ Run button."></i>
+          </label>
+          <div id="extsync-window-fields" style="display:none;margin-top:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="time" id="extsync-window-start" value="22:00" style="width:110px;">
+              <span style="color:var(--text-3);font-size:13px;">→</span>
+              <input type="time" id="extsync-window-end" value="06:00" style="width:110px;">
+              <span style="font-size:11.5px;color:var(--text-3);">pauses outside this window, resumes next opening</span>
+            </div>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:16px;">
+          <input type="checkbox" id="extsync-enabled" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> Enabled
+        </label>
+
+        <!-- Advanced options -->
+        <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;">
+          <button type="button" onclick="extSyncToggleAdv()" style="width:100%;background:var(--card-bg);border:none;padding:9px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;color:var(--text-1);font-size:13px;font-weight:500;">
+            <span>Advanced</span>
+            <span id="extsync-adv-arrow" style="font-size:11px;color:var(--text-3);">▶</span>
+          </button>
+          <div id="extsync-adv-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px;">
+              <input type="checkbox" id="extsync-delete" style="width:15px;height:15px;accent-color:#ff9f0a;margin-top:1px;">
+              <span>Mirror deletions <span style="color:#ff9f0a;">(--delete)</span>
+                <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Files removed on the source are also removed on the destination. Makes the destination an exact mirror — use with care.</div>
+              </span>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Bandwidth limit <span class="text-3 text-xs">(KB/s, 0 = none)</span></label>
+                <input type="number" id="extsync-bwlimit" value="0" min="0">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Extra rsync flags</label>
+                <input type="text" id="extsync-extraflags" placeholder="e.g. --exclude=*.tmp">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 32px 20px;">
+        <button type="button" class="btn btn-ghost" id="extsync-remove-btn" onclick="extSyncRemove()" style="margin-right:auto;color:#ff453a;display:none;">Remove sync</button>
+        <button type="button" class="btn btn-ghost" onclick="closeExtSyncModal()">Cancel</button>
+        <button type="button" class="btn btn-ghost" id="extsync-saverun-btn" onclick="submitExtSync(event, true)">Save &amp; Run now</button>
+        <button type="submit" class="btn btn-primary" id="extsync-submit-btn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-extlog">
+  <div class="modal" style="max-width:760px;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <h3 id="extlog-title" style="margin:0;">Last synchronization</h3>
+      <button class="modal-close" onclick="closeExtLogModal()">✕</button>
+    </div>
+    <div style="padding:16px 24px 20px;display:flex;flex-direction:column;min-height:0;flex:1;">
+      <div id="extlog-meta" style="font-size:12.5px;color:var(--text-2);margin-bottom:10px;"></div>
+      <pre id="extlog-body" style="flex:1;min-height:120px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="modal-schedule">
   <div class="modal" style="max-width:500px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
@@ -12026,6 +12334,10 @@ function canViewNetworking() {
   return true;
 }
 let abRefreshInt     = null;
+// v6.7.7 — drawer entry window (was a hard 15-row cap that hid most events
+// in All-Servers mode). "Show more" bumps the limit; the body scrolls.
+let _abEntriesLimit  = 250;
+let _abLastEntries   = null;
 let activeJobs       = {};  // id -> { label, startedAt, pending? }
 let _installRunning  = false;           // true while an install fetch is in flight
 let _pageUnloading   = false;
@@ -12182,6 +12494,9 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
   await loadSettings();
   initAlertsWebSocket();
   _initAbAllServersGating();
+  // Re-attach pollers for rsync jobs running on THIS server so background
+  // syncs survive page reloads and interlink server switches (v6.7.7).
+  if (typeof _extBootJobDiscovery === 'function') _extBootJobDiscovery();
   const _initialPage = (() => {
     try {
       const stored = sessionStorage.getItem('znas-intended-page');
@@ -13184,7 +13499,7 @@ function showPage(name) {
   if (name === 'disks')     { loadDisks(); _updateDiskPowerPrereqStatus(); }
   if (name === 'pool')      loadPool();
   if (name === 'datasets')  loadDatasets();
-  if (name === 'snapshots') { loadSnapshots(); loadSchedules(); }
+  if (name === 'snapshots') { loadSnapshots(); loadSchedules(); protectRestoreTab(); }
   if (name !== 'pool')      { _clearPoolStatusInterval(); _clearPhysicalDisksInterval(); }
   if (name === 'shares')    loadShares();
   if (name === 'nfs')       loadNFSShares();
@@ -13590,6 +13905,13 @@ async function refreshActivityBar() {
   // ones. Falls back to /api/audit on any failure.
   const useAgg = !!_abAllServers;
   const url = useAgg ? '/api/audit/aggregate' : '/api/audit';
+  // Fleet-wide background jobs (v6.7.7): in All-Servers mode the jobs
+  // section also lists syncs running on OTHER servers (host chip, live
+  // progress) — a job never disappears just because the user is viewing a
+  // different interlink server. No-relay so the fan-out always runs on the
+  // home server regardless of the relay target.
+  if (useAgg) _refreshRemoteJobs();
+  else { const el = document.getElementById('ab-remote-jobs'); if (el) el.innerHTML = ''; }
   try {
     const resp = await fetch(url);
     if (!resp.ok) {
@@ -13603,6 +13925,33 @@ async function refreshActivityBar() {
     const entries = await resp.json();
     renderActivityBar(entries || []);
   } catch {}
+}
+
+async function _refreshRemoteJobs() {
+  const el = document.getElementById('ab-remote-jobs');
+  if (!el) return;
+  let jobs = [];
+  try {
+    const r = await fetch('/api/rsync-jobs/aggregate', { headers: { 'X-ZNAS-No-Relay': '1' } });
+    if (!r.ok) { el.innerHTML = ''; return; }
+    jobs = ((await r.json()) || []).filter(j => j.status === 'running');
+  } catch { return; }
+  // Jobs already tracked by a local poller render in ab-jobs — skip them here.
+  jobs = jobs.filter(j => !(typeof activeJobs === 'object' && activeJobs && activeJobs[j.id]));
+  if (!jobs.length) { el.innerHTML = ''; return; }
+  el.innerHTML = jobs.map(j => {
+    const pct = typeof j.progress === 'number' ? Math.min(100, Math.max(0, j.progress)) : 0;
+    const txt = (typeof _extProgressText === 'function') ? _extProgressText(j) : '';
+    return `<div class="ab-job-row">
+      <div style="display:flex;align-items:center;gap:8px;width:100%;">
+        <span class="spinner" style="width:12px;height:12px;border-width:2px;flex-shrink:0;"></span>
+        <span class="ab-host" title="Server running this job" style="display:inline-block;background:var(--surface2);color:var(--text-2);font-size:10px;font-family:'SF Mono',monospace;border-radius:3px;padding:0 5px;flex-shrink:0;">${esc(j.system || '?')}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">rsync — ${esc(j.storage_name || '')}</span>
+        <span class="text-3" style="flex-shrink:0;font-size:11px;">${esc(txt || (pct + '%'))}</span>
+      </div>
+      <div style="width:100%;height:3px;background:var(--border);border-radius:2px;margin-top:4px;"><div style="height:100%;border-radius:2px;background:var(--accent-2);width:${pct.toFixed(1)}%"></div></div>
+    </div>`;
+  }).join('');
 }
 
 function renderActivityBar(entries) {
@@ -13671,7 +14020,7 @@ function renderActivityBar(entries) {
     jobsEl.innerHTML = '';
   }
 
-  // Recent entries (newest first, last 15)
+  // Recent entries (newest first)
   // entries===null means "jobs-only update — leave entries section as-is"
   const entriesEl = document.getElementById('ab-entries');
   if (entries === null) return;
@@ -13681,7 +14030,17 @@ function renderActivityBar(entries) {
   }
   // Aggregate mode: entries arrive newest-first from /api/audit/aggregate
   // (server-side sort). Local mode: oldest-first, so reverse for display.
-  const recent = _abAllServers ? entries.slice(0, 15) : [...entries].reverse().slice(0, 15);
+  //
+  // v6.7.7 fix: the drawer used to hard-cap at 15 rows. In All-Servers mode
+  // that hid nearly everything — the 15 newest entries across the whole
+  // fleet can span just a couple of minutes when one peer is chatty (e.g. a
+  // peer logging frequent logins), crowding out every other local and remote
+  // event. The drawer body scrolls and is user-resizable, so render a
+  // generous window and let "Show more" extend it — no event is unreachable.
+  _abLastEntries = entries;
+  const ordered = _abAllServers ? entries : [...entries].reverse();
+  const recent = ordered.slice(0, _abEntriesLimit);
+  const remaining = ordered.length - recent.length;
   entriesEl.innerHTML = recent.map(e => {
     const ev = _auditEventMeta(e);
     // Inline hostname chip — only in aggregate mode, so the local-only
@@ -13701,7 +14060,20 @@ function renderActivityBar(entries) {
         ${e.details ? `<span class="ab-target"> (${esc(e.details)})</span>` : ''}
       </span>
     </div>`;
-  }).join('');
+  }).join('') + (remaining > 0
+    ? `<div style="padding:8px 0;text-align:center;">
+         <button onclick="_abShowMoreEntries()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-2);font-size:11.5px;padding:4px 14px;cursor:pointer;">
+           Show ${Math.min(500, remaining)} more <span style="color:var(--text-3);">(${remaining} older)</span>
+         </button>
+       </div>`
+    : '');
+}
+
+// Extends the drawer's visible entry window and re-renders from the cached
+// last fetch (no refetch needed). The 10s refresher keeps the wider window.
+function _abShowMoreEntries() {
+  _abEntriesLimit += 500;
+  if (_abLastEntries) renderActivityBar(_abLastEntries);
 }
 
 // Returns display metadata for an audit entry based on its action type.
@@ -22455,6 +22827,923 @@ function updateSnapshotNavDot(policies) {
     dot.style.boxShadow  = '0 0 4px rgba(48,209,88,0.6)';
     _clearLiveAlert('snapshot-error');
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v6.7.7 — Protect tabs + Filesystem rsync (External Storage)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function switchProtectTab(tab) {
+  ['zfs', 'rsync'].forEach(t => {
+    const panel = document.getElementById('prot-panel-' + t);
+    const btn   = document.getElementById('prot-tab-' + t);
+    if (!panel || !btn) return;
+    panel.style.display = (t === tab) ? '' : 'none';
+    btn.classList.toggle('active', t === tab);
+  });
+  try { localStorage.setItem('znas_protect_tab', tab); } catch {}
+  if (tab === 'rsync') loadExtStorages();
+}
+
+// Restores the last-used Protect tab when the page opens.
+function protectRestoreTab() {
+  let tab = 'zfs';
+  try { tab = localStorage.getItem('znas_protect_tab') || 'zfs'; } catch {}
+  switchProtectTab(tab === 'rsync' ? 'rsync' : 'zfs');
+}
+
+// ── External storage state ──────────────────────────────────────────────────
+let _extStorages   = [];
+let _extPrereqs    = null;   // {smb,nfs,ssh,ftp,rsync: bool}
+let _extEditId     = null;   // storage being edited (null = create)
+let _extType       = 'smb';  // selected protocol in the storage modal
+let _extSSHAuth    = 'pass'; // 'pass' | 'key'
+let _extMountMode  = 'ondemand';
+let _extSyncId     = null;   // storage whose sync is being configured
+let _extSyncDir    = 'pull';
+let _extRefreshTimer = null;
+
+const _EXT_TYPES = {
+  smb: { label: 'SMB',  desc: 'Windows / Samba', icon: '🗄️', color: '#0a84ff' },
+  nfs: { label: 'NFS',  desc: 'Unix export',     icon: '📁', color: '#30d158' },
+  ftp: { label: 'FTP',  desc: 'FTP server',      icon: '🌐', color: '#ff9f0a' },
+  ssh: { label: 'SSH',  desc: 'SFTP / SSH',      icon: '🔐', color: '#bf5af2' },
+};
+
+function _extRelTime(iso) {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (!t || t < 1e9) return '';
+  const diff = Math.floor((Date.now() - t) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' h ago';
+  if (diff < 86400 * 30) return Math.floor(diff / 86400) + ' d ago';
+  return new Date(iso).toLocaleDateString();
+}
+
+// Whole-number MB/GB (base-1000) for the transfer readout — per user spec,
+// no decimals.
+function _extFmtSize(n) {
+  if (!n || n <= 0) return '0 MB';
+  if (n >= 1e12) return Math.round(n / 1e12) + ' TB';
+  if (n >= 1e9)  return Math.round(n / 1e9) + ' GB';
+  return Math.max(1, Math.round(n / 1e6)) + ' MB';
+}
+
+// "1 GB of 20 GB · 19 GB left · 105 MB/s · 3:05 left" from a progress
+// snapshot ({bytes_done, bytes_total, speed, eta}).
+function _extProgressText(raw) {
+  if (!raw || !raw.bytes_done) return 'starting…';
+  const parts = [];
+  if (raw.bytes_total > 0) {
+    parts.push(_extFmtSize(raw.bytes_done) + ' of ' + _extFmtSize(raw.bytes_total));
+    const left = raw.bytes_total - raw.bytes_done;
+    if (left > 0) parts.push(_extFmtSize(left) + ' left');
+  } else {
+    parts.push(_extFmtSize(raw.bytes_done) + ' transferred');
+  }
+  if (raw.speed) parts.push(raw.speed.replace('B/s', 'B/s'));
+  if (raw.eta && raw.eta !== '0:00:00') parts.push(raw.eta + ' left');
+  return parts.join(' · ');
+}
+
+// Human resume-time label: "today 22:00", "tomorrow 06:00", else "Sat 22:00".
+function _extResumeLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!d.getTime() || d.getTime() < Date.now() - 60000) return '';
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d);  day.setHours(0, 0, 0, 0);
+  const diff = Math.round((day - today) / 86400000);
+  if (diff === 0) return 'today at ' + hm;
+  if (diff === 1) return 'tomorrow at ' + hm;
+  return d.toLocaleDateString([], { weekday: 'short' }) + ' at ' + hm;
+}
+
+function _extScheduleSummary(rc) {
+  if (!rc || !rc.frequency || rc.frequency === 'manual') return 'Manual';
+  const hm = String(rc.hour).padStart(2, '0') + ':' + String(rc.minute).padStart(2, '0');
+  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  switch (rc.frequency) {
+    case 'hourly':  return 'Hourly at :' + String(rc.minute).padStart(2, '0');
+    case 'daily':   return 'Daily ' + hm;
+    case 'weekly':  return (wd[rc.weekday] || 'Sun') + ' ' + hm;
+    case 'monthly': return 'Monthly d' + (rc.day_of_month || 1) + ' ' + hm;
+  }
+  return rc.frequency;
+}
+
+async function loadExtStorages() {
+  const el = document.getElementById('extstorage-content');
+  if (!el) return;
+  try {
+    // Prereqs are ALWAYS re-fetched (never cached): the answer is per-server
+    // and this call follows the relay, so after an interlink switch it must
+    // reflect the server being configured — not whichever host the browser
+    // URL points at (v6.7.7 fix).
+    const [sResp, pResp, jResp] = await Promise.all([
+      fetch('/api/extstorage'),
+      fetch('/api/extstorage/prereqs'),
+      fetch('/api/rsync-jobs'),
+    ]);
+    if (!sResp.ok) throw new Error('list failed');
+    _extStorages = (await sResp.json()) || [];
+    if (pResp && pResp.ok) _extPrereqs = await pResp.json();
+    // Re-attach pollers for any running job (page reload / other browser).
+    // Jobs seen here belong to the server this view targets: local when not
+    // relaying (pin localOnly), the viewed peer when relaying (follow relay).
+    if (jResp && jResp.ok) {
+      const jobs = (await jResp.json()) || [];
+      const local = !(typeof _relayActive !== 'undefined' && _relayActive);
+      jobs.filter(j => j.status === 'running').forEach(j => _extAttachJobPoller(j.id, j.storage_name, { localOnly: local }));
+    }
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">Could not load external storages.</div>';
+    return;
+  }
+  renderExtStorages(el);
+  _extUpdateTabDot();
+  // While a sync is running, keep the Last Sync column progress fresh.
+  clearTimeout(_extRefreshTimer);
+  if (_extStorages.some(s => s.running_job)) {
+    _extRefreshTimer = setTimeout(() => {
+      const pane = document.getElementById('prot-panel-rsync');
+      if (pane && pane.style.display !== 'none' && !document.getElementById('page-snapshots').classList.contains('hidden')) loadExtStorages();
+    }, 5000);
+  }
+}
+
+function _extUpdateTabDot() {
+  const dot = document.getElementById('prot-rsync-tab-dot');
+  if (!dot) return;
+  const bad = _extStorages.some(s => s.last_sync_status === 'error');
+  dot.style.display = bad ? 'inline-block' : 'none';
+}
+
+function renderExtStorages(el) {
+  el = el || document.getElementById('extstorage-content');
+  if (!el) return;
+  if (!_extStorages.length) {
+    // Onboarding empty state.
+    el.innerHTML = `
+      <div style="text-align:center;padding:44px 20px 40px;">
+        <div style="display:flex;justify-content:center;gap:14px;font-size:30px;margin-bottom:14px;">
+          ${Object.keys(_EXT_TYPES).map(t => `
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:14px;background:color-mix(in srgb,${_EXT_TYPES[t].color} 12%,transparent);border:1px solid color-mix(in srgb,${_EXT_TYPES[t].color} 35%,transparent);">${_EXT_TYPES[t].icon}</span>`).join('')}
+        </div>
+        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px;">Sync files with external storage</div>
+        <div style="font-size:13px;color:var(--text-2);max-width:480px;margin:0 auto 18px;line-height:1.5;">
+          Connect an SMB, NFS, FTP or SSH location, browse it like a local folder,
+          and schedule rsync to pull remote files onto this NAS — or push local folders out.
+        </div>
+        <div style="display:flex;justify-content:center;gap:22px;font-size:12px;color:var(--text-3);margin-bottom:22px;flex-wrap:wrap;">
+          <span><span style="color:var(--accent);font-weight:700;">1</span> Connect storage</span>
+          <span><span style="color:var(--accent);font-weight:700;">2</span> Browse files</span>
+          <span><span style="color:var(--accent);font-weight:700;">3</span> Schedule sync</span>
+        </div>
+        <button class="btn btn-primary" onclick="openExtStorageModal()">+ Add External Storage</button>
+      </div>`;
+    return;
+  }
+
+  const rows = _extStorages.map((s, i) => {
+    const T = _EXT_TYPES[s.type] || _EXT_TYPES.smb;
+    const hostLine = s.type === 'smb' ? `//${s.host}/${s.share}`
+                   : s.type === 'nfs' ? `${s.host}:${s.share}`
+                   : `${s.username || ''}@${s.host}${s.port ? ':' + s.port : ''}${s.share ? ' ' + s.share : ''}`;
+    // Mount pill
+    let mountPill;
+    if (s.mounted) {
+      mountPill = `<button onclick="extToggleMount('${esc(s.id)}')" title="Click to unmount"
+        style="display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:20px;font-size:11.5px;font-weight:600;background:rgba(48,209,88,0.12);color:#30d158;border:1px solid rgba(48,209,88,0.4);cursor:pointer;">● Mounted${s.mount_mode === 'persistent' ? ' 📌' : ''}</button>`;
+    } else {
+      mountPill = `<button onclick="extToggleMount('${esc(s.id)}')" title="Click to mount now"
+        style="display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:20px;font-size:11.5px;font-weight:600;background:var(--surface2);color:var(--text-3);border:1px solid var(--border);cursor:pointer;">○ ${s.mount_mode === 'persistent' ? 'Persistent' : 'On-demand'}</button>`;
+    }
+    // Synchronization cell
+    let syncCell;
+    if (!s.rsync) {
+      syncCell = `<button class="btn btn-ghost btn-sm" onclick="openExtSyncModal('${esc(s.id)}')" style="font-size:12px;border-style:dashed;">+ Set up sync</button>`;
+    } else {
+      const rc = s.rsync;
+      const dirChip = rc.direction === 'push'
+        ? `<span title="Push: local → remote" style="color:#ff9f0a;font-weight:700;">⬆ Push</span>`
+        : `<span title="Pull: remote → local" style="color:#0a84ff;font-weight:700;">⬇ Pull</span>`;
+      const disabled = rc.enabled ? '' : `<span style="color:var(--text-3);font-size:11px;"> · paused</span>`;
+      const running = !!s.running_job;
+      syncCell = `
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:12.5px;">${dirChip}</span>
+          <span style="font-size:12px;color:var(--text-2);">${esc(_extScheduleSummary(rc))}${disabled}</span>
+          <button class="btn btn-ghost btn-sm" onclick="extRunNow('${esc(s.id)}')" title="${s.sync_paused ? 'Resume the paused synchronization now' : 'Run synchronization now'}"
+            style="font-size:11.5px;padding:2px 8px;${s.sync_paused ? 'border-color:#f0b429;color:#f0b429;' : ''}" ${running ? 'disabled' : ''}>${running ? '⏳ Run' : (s.sync_paused ? '▶ Resume' : '▶ Run')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="openExtSyncModal('${esc(s.id)}')" title="Edit synchronization" style="font-size:11.5px;padding:2px 8px;">✎</button>
+        </div>`;
+    }
+    // Last sync cell
+    let lastCell;
+    if (s.running_job) {
+      const j = s.running_job;
+      // Seed bar + readout from the shared poller state so the 5s table
+      // re-render doesn't flash back to 0% between ticks.
+      const st  = (typeof _bgJobs === 'object' && _bgJobs[j]) || {};
+      const raw = st.raw || {};
+      const pct = typeof raw.progress === 'number' ? raw.progress : (st.progress || 0);
+      lastCell = `
+        <div style="min-width:190px;">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);margin-bottom:4px;">
+            <span class="spinner" style="width:10px;height:10px;border-width:2px;"></span> Syncing…
+            <button onclick="extCancelJob('${esc(j)}')" title="Stop — pauses the sync; it resumes automatically or via ▶ Run" style="background:none;border:none;color:#ff453a;cursor:pointer;font-size:12px;padding:0 2px;">✕</button>
+          </div>
+          <div style="height:4px;border-radius:2px;background:var(--surface2);overflow:hidden;">
+            <div id="ext-prog-${esc(s.id)}" style="height:100%;width:${pct}%;background:var(--accent);transition:width 0.5s;"></div>
+          </div>
+          <div id="ext-progtext-${esc(s.id)}" style="font-size:10.5px;color:var(--text-3);margin-top:3px;white-space:nowrap;">${esc(_extProgressText(raw))}</div>
+        </div>`;
+    } else if (s.sync_paused) {
+      const byUser = s.sync_pause_reason === 'user';
+      const resume = _extResumeLabel(s.sync_resume_at);
+      lastCell = `
+        <div style="min-width:170px;">
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#f0b429;font-weight:600;">
+            ⏸ Paused ${byUser ? 'by user' : '(time window)'}
+          </span>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px;">
+            ${resume ? 'Resumes automatically ' + esc(resume) : 'Resume with the ▶ Run button'}
+          </div>
+        </div>`;
+    } else if (s.last_sync_status) {
+      const ok = s.last_sync_status === 'ok';
+      const dotc = ok ? '#30d158' : '#ff453a';
+      const what = ok
+        ? `${s.last_sync_bytes ? fmtBytes(s.last_sync_bytes) + ' · ' : ''}${s.last_sync_seconds ? s.last_sync_seconds + 's' : ''}`
+        : (s.last_sync_error || 'failed');
+      lastCell = `
+        <a onclick="openExtLogModal('${esc(s.id)}')" style="cursor:pointer;display:inline-block;" title="Show last run log">
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-1);">
+            <span style="width:8px;height:8px;border-radius:50%;background:${dotc};box-shadow:0 0 4px ${dotc}66;flex-shrink:0;"></span>
+            ${esc(_extRelTime(s.last_sync_time))}
+          </span>
+          <div style="font-size:11px;color:${ok ? 'var(--text-3)' : '#ff453a'};margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(what)}</div>
+        </a>`;
+    } else {
+      lastCell = `<span style="color:var(--text-3);font-size:12px;">—</span>`;
+    }
+
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;font-size:16px;flex-shrink:0;background:color-mix(in srgb,${T.color} 13%,transparent);border:1px solid color-mix(in srgb,${T.color} 38%,transparent);">${T.icon}</span>
+          <div style="min-width:0;">
+            <div style="display:flex;align-items:center;gap:7px;">
+              <span style="font-weight:600;color:var(--text);">${esc(s.name)}</span>
+              <span style="font-size:9.5px;font-weight:800;letter-spacing:0.5px;padding:1px 6px;border-radius:4px;color:${T.color};background:color-mix(in srgb,${T.color} 13%,transparent);">${T.label}</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--text-3);font-family:'SF Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;">${esc(hostLine)}</div>
+          </div>
+        </div>
+      </td>
+      <td>${mountPill}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="extBrowse('${esc(s.id)}')" style="font-size:12px;">📂 Browse</button></td>
+      <td>${syncCell}</td>
+      <td>${lastCell}</td>
+      <td style="text-align:right;position:relative;">
+        <button onclick="extRowMenu(event,'${esc(s.id)}')" style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px;padding:4px 8px;border-radius:6px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">⋯</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>
+          <th>Storage</th><th>Mount</th><th>Browse</th><th>Synchronization</th><th>Last Sync</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  if (typeof _mCardifyTables === 'function') _mCardifyTables(el);
+}
+
+// ── Row actions ─────────────────────────────────────────────────────────────
+
+function extRowMenu(ev, id) {
+  ev.stopPropagation();
+  closeExtRowMenu();
+  const s = _extStorages.find(x => x.id === id);
+  if (!s) return;
+  const m = document.createElement('div');
+  m.id = 'ext-row-menu';
+  m.style.cssText = 'position:fixed;z-index:1000;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);min-width:180px;overflow:hidden;padding:4px 0;';
+  const item = (label, fn, danger) =>
+    `<button onclick="closeExtRowMenu();${fn}" style="display:block;width:100%;padding:8px 14px;text-align:left;background:none;border:none;color:${danger ? '#ff453a' : 'var(--text-1)'};cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${label}</button>`;
+  m.innerHTML =
+    item('✎ Edit storage', `openExtStorageModal('${esc(id)}')`) +
+    item('🔌 Test connection', `extTestSaved('${esc(id)}')`) +
+    item(s.mounted ? '⏏ Unmount' : '▶ Mount now', `extToggleMount('${esc(id)}')`) +
+    `<div style="height:1px;background:var(--border);margin:4px 0;"></div>` +
+    item('🗑 Delete', `extDeleteStorage('${esc(id)}')`, true);
+  document.body.appendChild(m);
+  const r = ev.currentTarget.getBoundingClientRect();
+  m.style.top = Math.min(window.innerHeight - m.offsetHeight - 8, r.bottom + 4) + 'px';
+  m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px';
+  setTimeout(() => document.addEventListener('click', closeExtRowMenu, { once: true }), 0);
+}
+function closeExtRowMenu() {
+  const m = document.getElementById('ext-row-menu');
+  if (m) m.remove();
+}
+
+async function extToggleMount(id) {
+  const s = _extStorages.find(x => x.id === id);
+  if (!s) return;
+  if (s.running_job) { showToast('A sync is running — cannot change the mount now', 'error'); return; }
+  showToast(s.mounted ? 'Unmounting…' : 'Mounting…', 'info');
+  try {
+    const r = await fetch(`/api/extstorage/${encodeURIComponent(id)}/${s.mounted ? 'unmount?force=1' : 'mount'}`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'failed');
+    showToast(s.mounted ? 'Unmounted' : 'Mounted', 'success');
+  } catch (e) {
+    showToast((s.mounted ? 'Unmount' : 'Mount') + ' failed: ' + e.message, 'error');
+  }
+  loadExtStorages();
+}
+
+async function extBrowse(id) {
+  await openFileBrowser('external', id);
+}
+
+function extDeleteStorage(id) {
+  const s = _extStorages.find(x => x.id === id);
+  if (!s) return;
+  showConfirm({
+    title: 'Delete external storage?',
+    body: `“${s.name}” will be unmounted and removed, together with its sync configuration. No files are deleted — neither local nor remote.`,
+    confirmText: 'Delete',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        const r = await fetch('/api/extstorage/' + encodeURIComponent(id), { method: 'DELETE' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'failed');
+        showToast('External storage deleted', 'success');
+      } catch (e) { showToast('Delete failed: ' + e.message, 'error'); }
+      loadExtStorages();
+    },
+  });
+}
+
+async function extTestSaved(id) {
+  showToast('Testing connection…', 'info');
+  try {
+    const r = await fetch('/api/extstorage/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({}, _extStorages.find(x => x.id === id) || {}, { id })),
+    });
+    const d = await r.json();
+    if (d.ok) showToast('Connected ✓ — found ' + (d.entries || []).length + ' top-level entries', 'success');
+    else showToast('Connection failed: ' + (d.error || 'unknown'), 'error');
+  } catch (e) { showToast('Connection failed: ' + e.message, 'error'); }
+}
+
+// ── Run / jobs ──────────────────────────────────────────────────────────────
+
+async function extRunNow(id) {
+  const s = _extStorages.find(x => x.id === id);
+  if (!s) return;
+  try {
+    const r = await fetch(`/api/extstorage/${encodeURIComponent(id)}/rsync/run`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'failed');
+    _extAttachJobPoller(d.job_id, s.name);
+    showToast('Synchronization started', 'success');
+  } catch (e) {
+    showToast('Could not start sync: ' + e.message, 'error');
+  }
+  loadExtStorages();
+}
+
+function _extAttachJobPoller(jobId, storageName, opts) {
+  if (!jobId) return;
+  opts = opts || {};
+  _bgPollJob(jobId, 'rsync — ' + (storageName || 'external storage'),
+    `/api/rsync-jobs/${encodeURIComponent(jobId)}/progress`,
+    () => loadExtStorages(),
+    { cancelURL: `/api/rsync-jobs/${encodeURIComponent(jobId)}/cancel`, kind: 'rsync',
+      // localOnly pins the poller to THIS server (X-ZNAS-No-Relay) so the
+      // job stays tracked while the session relays to another server. Only
+      // set for jobs that actually run on the local host — a job started
+      // while viewing a peer lives on that peer and must follow the relay.
+      localOnly: !!opts.localOnly });
+  // Feed the inline table progress bar + byte/ETA readout from the shared
+  // poller state (st.raw carries the full last payload).
+  const tick = () => {
+    const st = _bgJobs[jobId];
+    if (!st || st.status !== 'running') return;
+    const s = _extStorages.find(x => x.running_job === jobId);
+    if (s) {
+      const raw = st.raw || {};
+      const bar = document.getElementById('ext-prog-' + s.id);
+      const pct = typeof raw.progress === 'number' ? raw.progress : st.progress;
+      if (bar && typeof pct === 'number') bar.style.width = pct + '%';
+      const txt = document.getElementById('ext-progtext-' + s.id);
+      if (txt) txt.textContent = _extProgressText(raw);
+    }
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 1500);
+}
+
+// Boot-time discovery: re-attach pollers for rsync jobs running on the LOCAL
+// server (no-relay), so background syncs stay visible in the activity bar
+// after a page reload or an interlink server switch.
+async function _extBootJobDiscovery() {
+  try {
+    const r = await fetch('/api/rsync-jobs', { headers: { 'X-ZNAS-No-Relay': '1' } });
+    if (!r.ok) return;
+    ((await r.json()) || []).filter(j => j.status === 'running')
+      .forEach(j => _extAttachJobPoller(j.id, j.storage_name, { localOnly: true }));
+  } catch {}
+}
+
+async function extCancelJob(jobId) {
+  try { await fetch(`/api/rsync-jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }); } catch {}
+  showToast('Cancelling sync…', 'info');
+  setTimeout(loadExtStorages, 1200);
+}
+
+// ── Log modal ───────────────────────────────────────────────────────────────
+
+async function openExtLogModal(id) {
+  const s = _extStorages.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('extlog-title').textContent = 'Last synchronization — ' + s.name;
+  document.getElementById('extlog-meta').innerHTML = '';
+  document.getElementById('extlog-body').textContent = 'Loading…';
+  document.getElementById('modal-extlog').classList.remove('hidden');
+  try {
+    const r = await fetch(`/api/extstorage/${encodeURIComponent(id)}/rsync/log`);
+    const d = await r.json();
+    const ok = d.status === 'ok';
+    document.getElementById('extlog-meta').innerHTML =
+      `<span style="color:${ok ? '#30d158' : '#ff453a'};font-weight:700;">${ok ? '✓ Success' : '✕ ' + esc(d.error || 'Failed')}</span>` +
+      (d.time ? ` · ${esc(new Date(d.time).toLocaleString())}` : '') +
+      (d.secs ? ` · ${d.secs}s` : '') +
+      (d.bytes ? ` · ${esc(fmtBytes(d.bytes))} transferred` : '');
+    document.getElementById('extlog-body').textContent = d.log || '(no log recorded)';
+  } catch {
+    document.getElementById('extlog-body').textContent = 'Could not load the log.';
+  }
+}
+function closeExtLogModal() { document.getElementById('modal-extlog').classList.add('hidden'); }
+
+// ── Add / Edit storage modal ────────────────────────────────────────────────
+
+function extRenderTypeCards() {
+  const wrap = document.getElementById('ext-type-cards');
+  wrap.innerHTML = Object.keys(_EXT_TYPES).map(t => {
+    const T = _EXT_TYPES[t];
+    const sel = t === _extType;
+    const missing = _extPrereqs && _extPrereqs[t] === false;
+    return `<button type="button" onclick="extSelectType('${t}')" ${_extEditId ? 'disabled title="The type cannot be changed after creation"' : ''}
+      style="padding:10px 6px;border-radius:10px;cursor:${_extEditId ? 'not-allowed' : 'pointer'};text-align:center;position:relative;
+             border:1.5px solid ${sel ? T.color : 'var(--border)'};
+             background:${sel ? `color-mix(in srgb,${T.color} 12%,transparent)` : 'var(--surface2)'};
+             opacity:${_extEditId && !sel ? 0.4 : 1};">
+      <div style="font-size:20px;">${T.icon}</div>
+      <div style="font-size:12.5px;font-weight:700;color:${sel ? T.color : 'var(--text-1)'};margin-top:3px;">${T.label}</div>
+      <div style="font-size:10px;color:var(--text-3);margin-top:1px;">${T.desc}</div>
+      ${missing ? '<span title="Helper package not installed" style="position:absolute;top:5px;right:6px;width:7px;height:7px;border-radius:50%;background:#f0b429;"></span>' : ''}
+    </button>`;
+  }).join('');
+}
+
+function extSelectType(t) {
+  if (_extEditId) return;
+  _extType = t;
+  extRenderTypeCards();
+  extApplyTypeFields();
+}
+
+function extApplyTypeFields() {
+  const t = _extType;
+  // Host / port
+  document.getElementById('ext-port-group').style.display = (t === 'ftp' || t === 'ssh') ? '' : 'none';
+  document.getElementById('ext-port').placeholder = t === 'ssh' ? '22' : '21';
+  // Share field
+  const shareGrp   = document.getElementById('ext-share-group');
+  const shareLabel = document.getElementById('ext-share-label');
+  const shareHint  = document.getElementById('ext-share-hint');
+  const shareInput = document.getElementById('ext-share');
+  shareGrp.style.display = '';
+  if (t === 'smb')      { shareLabel.textContent = 'Share name';   shareInput.placeholder = 'backup';        shareHint.textContent = 'The shared folder name — not a path (e.g. "backup" for \\\\server\\backup).'; }
+  else if (t === 'nfs') { shareLabel.textContent = 'Export path';  shareInput.placeholder = '/srv/backup';   shareHint.textContent = 'The exported directory as configured on the NFS server.'; }
+  else if (t === 'ftp') { shareLabel.textContent = 'Base path';    shareInput.placeholder = '/ (optional)';  shareHint.textContent = 'Optional starting directory on the FTP server.'; }
+  else                  { shareLabel.textContent = 'Remote base path'; shareInput.placeholder = '/ (optional)'; shareHint.textContent = 'Optional starting directory on the remote host.'; }
+  // Auth
+  document.getElementById('ext-auth-section').style.display = t === 'nfs' ? 'none' : '';
+  document.getElementById('ext-domain-group').style.display = t === 'smb' ? '' : 'none';
+  document.getElementById('ext-sshauth-group').style.display = t === 'ssh' ? '' : 'none';
+  document.getElementById('ext-pass-group').style.display = (t === 'ssh' && _extSSHAuth === 'key') ? 'none' : '';
+  // Mount mode selectable only for kernel mounts
+  document.getElementById('ext-mountmode-group').style.display = (t === 'smb' || t === 'nfs') ? '' : 'none';
+  // FTP credential caveat
+  if (t === 'ftp') { shareHint.textContent += ' Note: FTP transfers (and credentials) are unencrypted.'; }
+  extUpdatePrereqWarn();
+}
+
+function extUpdatePrereqWarn() {
+  const warn = document.getElementById('ext-prereq-warn');
+  if (!warn) return;
+  const missing = [];
+  if (_extPrereqs) {
+    if (_extPrereqs[_extType] === false) missing.push(_extType);
+    if (_extPrereqs.rsync === false) missing.push('rsync');
+  }
+  if (missing.length) {
+    const pkgs = { smb: 'cifs-utils', nfs: 'nfs-common', ssh: 'sshfs', ftp: 'curlftpfs', rsync: 'rsync' };
+    document.getElementById('ext-prereq-warn-text').textContent =
+      'Missing helper package' + (missing.length > 1 ? 's' : '') + ': ' + missing.map(m => pkgs[m]).join(', ');
+    warn.dataset.types = missing.join(',');
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+}
+
+async function extInstallHelper() {
+  const warn = document.getElementById('ext-prereq-warn');
+  const types = (warn.dataset.types || '').split(',').filter(Boolean);
+  const btn = document.getElementById('ext-prereq-install-btn');
+  btn.disabled = true; btn.textContent = 'Installing…';
+  for (const t of types) {
+    try {
+      const r = await fetch('/api/extstorage/install', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: t }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'install failed'); }
+    } catch (e) {
+      showToast('Install failed: ' + e.message, 'error');
+      btn.disabled = false; btn.textContent = 'Install';
+      return;
+    }
+  }
+  showToast('Helper packages installed', 'success');
+  btn.disabled = false; btn.textContent = 'Install';
+  _extPrereqs = null; // re-fetch
+  try { const r = await fetch('/api/extstorage/prereqs'); if (r.ok) _extPrereqs = await r.json(); } catch {}
+  extRenderTypeCards();
+  extUpdatePrereqWarn();
+}
+
+function extSetSSHAuth(mode) {
+  _extSSHAuth = mode;
+  const pb = document.getElementById('ext-sshauth-pass');
+  const kb = document.getElementById('ext-sshauth-key');
+  const on  = 'background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:var(--accent);color:var(--accent);';
+  pb.style.cssText = 'flex:1;' + (mode === 'pass' ? on : '');
+  kb.style.cssText = 'flex:1;' + (mode === 'key' ? on : '');
+  document.getElementById('ext-sshkey').style.display = mode === 'key' ? '' : 'none';
+  document.getElementById('ext-sshkey-note').style.display = mode === 'key' ? '' : 'none';
+  document.getElementById('ext-pass-group').style.display = mode === 'key' ? 'none' : '';
+}
+
+function extSetMountMode(m) {
+  _extMountMode = m;
+  const od = document.getElementById('ext-mm-ondemand');
+  const pe = document.getElementById('ext-mm-persistent');
+  od.style.borderColor = m === 'ondemand' ? 'var(--accent)' : 'var(--border)';
+  od.style.background  = m === 'ondemand' ? 'color-mix(in srgb,var(--accent) 10%,transparent)' : 'var(--surface2)';
+  pe.style.borderColor = m === 'persistent' ? 'var(--accent)' : 'var(--border)';
+  pe.style.background  = m === 'persistent' ? 'color-mix(in srgb,var(--accent) 10%,transparent)' : 'var(--surface2)';
+}
+
+function extToggleAdv() {
+  const b = document.getElementById('ext-adv-body');
+  const open = b.style.display === 'none';
+  b.style.display = open ? '' : 'none';
+  document.getElementById('ext-adv-arrow').textContent = open ? '▼' : '▶';
+}
+
+function openExtStorageModal(id) {
+  _extEditId = id || null;
+  const s = id ? _extStorages.find(x => x.id === id) : null;
+  _extType = s ? s.type : 'smb';
+  _extSSHAuth = s && s.ssh_key ? 'key' : 'pass';
+  _extMountMode = s ? (s.mount_mode || 'ondemand') : 'ondemand';
+  document.getElementById('ext-modal-title').textContent = s ? 'Edit External Storage' : 'Add External Storage';
+  document.getElementById('ext-submit-btn').textContent  = s ? 'Save Changes' : 'Add Storage';
+  document.getElementById('ext-alert').classList.add('hidden');
+  document.getElementById('ext-test-result').innerHTML = '';
+  document.getElementById('ext-name').value   = s ? s.name : '';
+  document.getElementById('ext-host').value   = s ? s.host : '';
+  document.getElementById('ext-port').value   = s && s.port ? s.port : '';
+  document.getElementById('ext-share').value  = s ? (s.share || '') : '';
+  document.getElementById('ext-user').value   = s ? (s.username || '') : '';
+  document.getElementById('ext-pass').value   = '';
+  document.getElementById('ext-pass').placeholder = s && s.has_password ? '•••••• (unchanged)' : '';
+  document.getElementById('ext-domain').value = s ? (s.domain || '') : '';
+  document.getElementById('ext-sshkey').value = '';
+  document.getElementById('ext-extraopts').value = s ? (s.extra_opts || '') : '';
+  document.getElementById('ext-adv-body').style.display = 'none';
+  document.getElementById('ext-adv-arrow').textContent = '▶';
+  extRenderTypeCards();
+  extApplyTypeFields();
+  extSetSSHAuth(_extSSHAuth);
+  extSetMountMode(_extMountMode);
+  document.getElementById('modal-extstorage').classList.remove('hidden');
+}
+function closeExtStorageModal() { document.getElementById('modal-extstorage').classList.add('hidden'); }
+
+function _extCollectForm() {
+  return {
+    name:      document.getElementById('ext-name').value.trim(),
+    type:      _extType,
+    host:      document.getElementById('ext-host').value.trim(),
+    port:      parseInt(document.getElementById('ext-port').value, 10) || 0,
+    share:     document.getElementById('ext-share').value.trim(),
+    username:  document.getElementById('ext-user').value.trim(),
+    password:  document.getElementById('ext-pass').value,
+    domain:    document.getElementById('ext-domain').value.trim(),
+    mount_mode: (_extType === 'smb' || _extType === 'nfs') ? _extMountMode : 'ondemand',
+    extra_opts: document.getElementById('ext-extraopts').value.trim(),
+    ssh_key:    _extType === 'ssh' && _extSSHAuth === 'key',
+    ssh_private_key: (_extType === 'ssh' && _extSSHAuth === 'key') ? document.getElementById('ext-sshkey').value : '',
+  };
+}
+
+function _extShowAlert(msg) {
+  const a = document.getElementById('ext-alert');
+  a.textContent = msg;
+  a.classList.remove('hidden');
+}
+
+async function extTestConnection() {
+  const body = _extCollectForm();
+  if (_extEditId) body.id = _extEditId;
+  const out = document.getElementById('ext-test-result');
+  out.innerHTML = '<span style="font-size:12.5px;color:var(--text-2);"><span class="spinner" style="width:11px;height:11px;border-width:2px;display:inline-block;vertical-align:-1px;"></span> Connecting…</span>';
+  try {
+    const r = await fetch('/api/extstorage/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const names = (d.entries || []).slice(0, 5).join(', ');
+      out.innerHTML = `<div style="font-size:12.5px;color:#30d158;background:rgba(48,209,88,0.08);border:1px solid rgba(48,209,88,0.3);border-radius:6px;padding:8px 10px;">✓ Connected${names ? ' — found: ' + esc(names) + ((d.entries || []).length > 5 ? '…' : '') : ' (share is empty)'}</div>`;
+    } else {
+      out.innerHTML = `<div style="font-size:12.5px;color:#ff453a;background:rgba(255,69,58,0.08);border:1px solid rgba(255,69,58,0.3);border-radius:6px;padding:8px 10px;">✕ ${esc(d.error || 'Connection failed')}</div>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<div style="font-size:12.5px;color:#ff453a;">✕ ${esc(e.message)}</div>`;
+  }
+}
+
+async function submitExtStorage(ev) {
+  ev.preventDefault();
+  const body = _extCollectForm();
+  if (!body.name) { _extShowAlert('Please give this storage a name.'); return; }
+  if (!body.host) { _extShowAlert('Please enter the server host.'); return; }
+  const btn = document.getElementById('ext-submit-btn');
+  btn.disabled = true;
+  try {
+    const url = _extEditId ? '/api/extstorage/' + encodeURIComponent(_extEditId) : '/api/extstorage';
+    const r = await fetch(url, {
+      method: _extEditId ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'save failed');
+    closeExtStorageModal();
+    showToast(_extEditId ? 'Storage updated' : 'External storage added', 'success');
+    if (d.mount_error) showToast('Saved, but mounting failed: ' + d.mount_error, 'error');
+    loadExtStorages();
+  } catch (e) {
+    _extShowAlert(e.message);
+  }
+  btn.disabled = false;
+}
+
+// ── Sync setup modal ────────────────────────────────────────────────────────
+
+function extSyncSetDir(dir) {
+  _extSyncDir = dir;
+  const pull = document.getElementById('extsync-dir-pull');
+  const push = document.getElementById('extsync-dir-push');
+  const on  = (el, color) => { el.style.borderColor = color; el.style.background = `color-mix(in srgb,${color} 10%,transparent)`; };
+  const off = (el) => { el.style.borderColor = 'var(--border)'; el.style.background = 'var(--surface2)'; };
+  if (dir === 'pull') { on(pull, '#0a84ff'); off(push); } else { on(push, '#ff9f0a'); off(pull); }
+  // Arrow + role labels: layout is always [Remote] arrow [Local].
+  document.getElementById('extsync-arrow').textContent = dir === 'pull' ? '→' : '←';
+  document.getElementById('extsync-arrow').style.color = dir === 'pull' ? '#0a84ff' : '#ff9f0a';
+  document.getElementById('extsync-remote-role').textContent = dir === 'pull' ? 'Remote source' : 'Remote destination';
+  document.getElementById('extsync-local-role').textContent  = dir === 'pull' ? 'Local destination' : 'Local source';
+}
+
+function extSyncUpdateFields() {
+  const f = document.getElementById('extsync-freq').value;
+  document.getElementById('extsync-weekday-group').style.display = f === 'weekly' ? '' : 'none';
+  document.getElementById('extsync-dom-group').style.display     = f === 'monthly' ? '' : 'none';
+  const timed = f === 'daily' || f === 'weekly' || f === 'monthly';
+  document.getElementById('extsync-hour-group').style.display    = timed ? '' : 'none';
+  document.getElementById('extsync-minute-group').style.display  = f === 'manual' ? 'none' : '';
+}
+
+function extSyncToggleAdv() {
+  const b = document.getElementById('extsync-adv-body');
+  const open = b.style.display === 'none';
+  b.style.display = open ? '' : 'none';
+  document.getElementById('extsync-adv-arrow').textContent = open ? '▼' : '▶';
+}
+
+function extSyncUpdateWindowFields() {
+  const on = document.getElementById('extsync-window-on').checked;
+  document.getElementById('extsync-window-fields').style.display = on ? '' : 'none';
+}
+
+// ── Path picker popovers ────────────────────────────────────────────────────
+// Shared builder for the sync modal's two folder pickers. `rect` MUST be
+// captured from ev.currentTarget BEFORE any await — currentTarget is null
+// once the event dispatch has finished (this is exactly the bug that made
+// the original local-path picker "do nothing": the rect lookup threw after
+// the fetch, leaving an unpositioned menu). z-index 2000 clears the phone
+// modal backdrop (1500); items stay a *suggestion* — the inputs remain
+// fully hand-editable.
+function _extShowPathMenu(rect, items, inputId) {
+  closeExtRowMenu();
+  const m = document.createElement('div');
+  m.id = 'ext-row-menu';
+  m.style.cssText = 'position:fixed;z-index:2000;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);min-width:260px;max-width:420px;max-height:300px;overflow-y:auto;padding:4px 0;';
+  m.innerHTML = items.map(it => `
+    <button onclick="document.getElementById('${inputId}').value=${JSON.stringify(it.value).replace(/"/g, '&quot;')};closeExtRowMenu();"
+      style="display:flex;align-items:baseline;gap:8px;width:100%;padding:6px 14px 6px ${14 + (it.indent || 0) * 14}px;text-align:left;background:none;border:none;color:var(--text-1);cursor:pointer;font-size:12.5px;"
+      onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+      <span style="font-family:'SF Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.label)}</span>
+      ${it.hint ? `<span style="font-size:10.5px;color:var(--text-3);flex-shrink:0;margin-left:auto;">${esc(it.hint)}</span>` : ''}
+    </button>`).join('');
+  document.body.appendChild(m);
+  m.style.top = Math.max(8, Math.min(window.innerHeight - Math.min(300, m.offsetHeight) - 8, rect.bottom + 4)) + 'px';
+  m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, rect.right - m.offsetWidth)) + 'px';
+  setTimeout(() => document.addEventListener('click', closeExtRowMenu, { once: true }), 0);
+}
+
+// Local destination: every pool + dataset mountpoint, indented by depth.
+async function extSyncPickLocal(ev) {
+  ev.stopPropagation();
+  const rect = ev.currentTarget.getBoundingClientRect(); // before any await!
+  let datasets = [];
+  try {
+    const r = await fetch('/api/datasets');
+    datasets = ((await r.json()) || []).filter(d =>
+      d.mountpoint && d.mountpoint !== 'none' && d.mountpoint !== 'legacy' && d.mountpoint !== '-');
+  } catch {}
+  if (!datasets.length) { showToast('No dataset mountpoints found', 'error'); return; }
+  _extShowPathMenu(rect, datasets.map(d => ({
+    label: d.mountpoint,
+    value: d.mountpoint,
+    hint: d.name,
+    indent: d.depth || 0,
+  })), 'extsync-local-path');
+}
+
+// Remote source: the share's folders, 2 levels deep, via the storage's
+// mount (mounts on demand — first open on an unmounted share takes a moment).
+async function extSyncPickRemote(ev) {
+  ev.stopPropagation();
+  const rect = ev.currentTarget.getBoundingClientRect(); // before any await!
+  const btn = document.getElementById('extsync-remote-pick-btn');
+  btn.textContent = '⏳'; btn.disabled = true;
+  let dirs = null;
+  try {
+    const r = await fetch(`/api/extstorage/${encodeURIComponent(_extSyncId)}/browse`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'browse failed');
+    dirs = d.dirs || [];
+  } catch (e) {
+    showToast('Could not browse the share: ' + e.message, 'error');
+  }
+  btn.textContent = '▾'; btn.disabled = false;
+  if (dirs === null) return;
+  const items = [{ label: '/ (whole share)', value: '', indent: 0 }];
+  dirs.forEach(p => items.push({
+    label: p.slice(p.lastIndexOf('/') + 1) + '/',
+    value: p,
+    indent: (p.match(/\//g) || []).length + 1,
+    hint: p.includes('/') ? '/' + p : '',
+  }));
+  _extShowPathMenu(rect, items, 'extsync-remote-path');
+}
+
+function openExtSyncModal(id) {
+  const s = _extStorages.find(x => x.id === id);
+  if (!s) return;
+  _extSyncId = id;
+  const rc = s.rsync;
+  document.getElementById('extsync-title').textContent = (rc ? 'Edit synchronization — ' : 'Set up synchronization — ') + s.name;
+  document.getElementById('extsync-alert').classList.add('hidden');
+  document.getElementById('extsync-remote-name').textContent = s.name;
+  document.getElementById('extsync-remote-path').value = rc ? (rc.remote_path || '') : '';
+  document.getElementById('extsync-local-path').value  = rc ? (rc.local_path || '') : '';
+  document.getElementById('extsync-freq').value        = rc ? (rc.frequency || 'daily') : 'daily';
+  document.getElementById('extsync-hour').value        = rc ? (rc.hour ?? 3) : 3;
+  document.getElementById('extsync-minute').value      = rc ? (rc.minute ?? 0) : 0;
+  document.getElementById('extsync-weekday').value     = rc ? (rc.weekday ?? 0) : 0;
+  document.getElementById('extsync-dom').value         = rc ? (rc.day_of_month || 1) : 1;
+  document.getElementById('extsync-enabled').checked   = rc ? !!rc.enabled : true;
+  document.getElementById('extsync-window-on').checked = !!(rc && rc.window_start && rc.window_end);
+  if (rc && rc.window_start) document.getElementById('extsync-window-start').value = rc.window_start;
+  if (rc && rc.window_end)   document.getElementById('extsync-window-end').value   = rc.window_end;
+  extSyncUpdateWindowFields();
+  document.getElementById('extsync-delete').checked    = rc ? !!rc.delete : false;
+  document.getElementById('extsync-bwlimit').value     = rc ? (rc.bwlimit_kb || 0) : 0;
+  document.getElementById('extsync-extraflags').value  = rc ? (rc.extra_flags || '') : '';
+  document.getElementById('extsync-remove-btn').style.display = rc ? '' : 'none';
+  document.getElementById('extsync-adv-body').style.display = (rc && (rc.delete || rc.bwlimit_kb || rc.extra_flags)) ? '' : 'none';
+  document.getElementById('extsync-adv-arrow').textContent = (rc && (rc.delete || rc.bwlimit_kb || rc.extra_flags)) ? '▼' : '▶';
+  extSyncSetDir(rc ? (rc.direction || 'pull') : 'pull');
+  initCustomSelect('extsync-freq');    csRefresh('extsync-freq');
+  initCustomSelect('extsync-weekday'); csRefresh('extsync-weekday');
+  extSyncUpdateFields();
+  document.getElementById('modal-extsync').classList.remove('hidden');
+}
+function closeExtSyncModal() { document.getElementById('modal-extsync').classList.add('hidden'); }
+
+async function submitExtSync(ev, runNow) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  const localPath = document.getElementById('extsync-local-path').value.trim();
+  const alertEl = document.getElementById('extsync-alert');
+  if (!localPath || !localPath.startsWith('/')) {
+    alertEl.textContent = 'Please enter an absolute local path (e.g. /tank/backups).';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  const body = {
+    enabled:    document.getElementById('extsync-enabled').checked,
+    direction:  _extSyncDir,
+    remote_path: document.getElementById('extsync-remote-path').value.trim(),
+    local_path:  localPath,
+    frequency:  document.getElementById('extsync-freq').value,
+    hour:       parseInt(document.getElementById('extsync-hour').value, 10) || 0,
+    minute:     parseInt(document.getElementById('extsync-minute').value, 10) || 0,
+    weekday:    parseInt(document.getElementById('extsync-weekday').value, 10) || 0,
+    day_of_month: parseInt(document.getElementById('extsync-dom').value, 10) || 1,
+    delete:     document.getElementById('extsync-delete').checked,
+    bwlimit_kb: parseInt(document.getElementById('extsync-bwlimit').value, 10) || 0,
+    extra_flags: document.getElementById('extsync-extraflags').value.trim(),
+    window_start: document.getElementById('extsync-window-on').checked ? document.getElementById('extsync-window-start').value : '',
+    window_end:   document.getElementById('extsync-window-on').checked ? document.getElementById('extsync-window-end').value : '',
+  };
+  if (document.getElementById('extsync-window-on').checked && (!body.window_start || !body.window_end)) {
+    alertEl.textContent = 'Please set both the window start and end times.';
+    alertEl.classList.remove('hidden');
+    return;
+  }
+  try {
+    const r = await fetch(`/api/extstorage/${encodeURIComponent(_extSyncId)}/rsync`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'save failed');
+    closeExtSyncModal();
+    showToast('Synchronization saved', 'success');
+    if (runNow) {
+      await loadExtStorages();
+      extRunNow(_extSyncId);
+    } else {
+      loadExtStorages();
+    }
+  } catch (e) {
+    alertEl.textContent = e.message;
+    alertEl.classList.remove('hidden');
+  }
+}
+
+function extSyncRemove() {
+  showConfirm({
+    title: 'Remove synchronization?',
+    body: 'The schedule and sync settings are removed. The external storage itself is kept, and no files are deleted.',
+    confirmText: 'Remove',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        const r = await fetch(`/api/extstorage/${encodeURIComponent(_extSyncId)}/rsync`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ remove: true }),
+        });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'failed'); }
+        closeExtSyncModal();
+        showToast('Synchronization removed', 'success');
+        loadExtStorages();
+      } catch (e) { showToast('Remove failed: ' + e.message, 'error'); }
+    },
+  });
 }
 
 function renderSchedules(el, policies) {
@@ -32918,6 +34207,9 @@ document.addEventListener('click', function(e) {
     'modal-delete-zvol':      closeDeleteZVolModal,
     'modal-sched-info':       closeSchedInfoModal,
     'modal-schedule':         closeScheduleModal,
+    'modal-extstorage':       closeExtStorageModal,
+    'modal-extsync':          closeExtSyncModal,
+    'modal-extlog':           closeExtLogModal,
     'modal-snapshot':         closeSnapshotModal,
     'modal-winacl-restart':          closeWinACLRestartModal,
     'modal-shadow-copy-restart':     closeShadowCopyRestartModal,
@@ -42361,15 +43653,17 @@ function _bgPollJob(key, label, progressURL, onDone, opts) {
       st.lines = d.lines || st.lines;
       st.status = d.status || 'running';
       st.error = d.error || '';
+      st.raw = d; // full last payload — rich renderers (rsync bytes/ETA) read this
       if (typeof d.progress === 'number') st.progress = d.progress;
       if (d.phase) st.phase = d.phase;
-      if (d.status === 'done' || d.status === 'error' || d.status === 'canceled') {
+      if (d.status === 'done' || d.status === 'error' || d.status === 'canceled' || d.status === 'paused') {
         st.eta = null;
         st._polling = false;                    // definitive end — stop the loop
         _bgJobModalRender(key);                 // final paint so an open modal shows the end state
         removeActiveJob(key);
         if (d.status === 'done')  showToast(label + ' — done', 'success');
         if (d.status === 'error') showToast(label + ' failed: ' + (d.error || 'unknown'), 'error');
+        if (d.status === 'paused') showToast(label + ' — paused (will resume automatically)', 'info');
         setTimeout(() => { delete _bgJobs[key]; }, 60000); // keep briefly for an open modal
         if (onDone) onDone();
         return;
@@ -53934,6 +55228,19 @@ async function _softRelayRefresh() {
     if (typeof _lxdNetworks       !== 'undefined') _lxdNetworks       = [];
     if (typeof _lxdPools          !== 'undefined') _lxdPools          = [];
     if (typeof _lxdNetworksCache  !== 'undefined') _lxdNetworksCache  = [];
+    // External storage (Filesystem rsync) — the storage list AND the
+    // helper-package prereqs are per-server; a stale _extPrereqs made the
+    // add-storage modal report the previous server's packages (v6.7.7 fix).
+    if (typeof _extStorages !== 'undefined') _extStorages = [];
+    if (typeof _extPrereqs  !== 'undefined') _extPrereqs  = null;
+    if (typeof _extBootJobDiscovery === 'function') _extBootJobDiscovery();
+    // If the Filesystem rsync pane is on screen, reload it for the new server.
+    try {
+      const pane = document.getElementById('prot-panel-rsync');
+      if (pane && pane.style.display !== 'none'
+          && !document.getElementById('page-snapshots').classList.contains('hidden')
+          && typeof loadExtStorages === 'function') loadExtStorages();
+    } catch {}
 
     // Top-bar disk I/O charts are per-server (device list + pool filter). Reset
     // them so the previous server's disks don't linger after a switch — the
@@ -55345,11 +56652,39 @@ function formatFileSize(bytes) {
 // root the modal should land on instead of the root itself. Used by
 // the Folder TreeMap "📂 Browse Files" verb so the user lands deep in
 // the tree they were already exploring rather than at the dataset root.
+// v6.7.7 — keepalive ping so an on-demand external-storage mount is never
+// idle-unmounted while its File Browser window is open.
+let _fbExtKeepalive = null;
+function _fbSetExtKeepalive(extId) {
+  clearInterval(_fbExtKeepalive);
+  _fbExtKeepalive = null;
+  if (!extId) return;
+  _fbExtKeepalive = setInterval(() => {
+    const modal = document.getElementById('modal-file-browser');
+    if (!modal || modal.classList.contains('hidden')) { _fbSetExtKeepalive(null); return; }
+    fetch(`/api/extstorage/${encodeURIComponent(extId)}/mount`, { method: 'POST' }).catch(() => {});
+  }, 5 * 60 * 1000);
+}
+
 async function openFileBrowser(sourceType, sourceId, subpath) {
   let absPath = '';
   let label = '';
+  let extId = null;
 
-  if (sourceType === 'dataset') {
+  if (sourceType === 'external') {
+    // Ensure the storage is mounted (on-demand mounts) and get its root.
+    try {
+      const r = await fetch(`/api/extstorage/${encodeURIComponent(sourceId)}/mount`, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { showToast('Mount failed: ' + (d.error || 'unknown'), 'error'); return; }
+      absPath = d.mountpoint;
+      label = d.label || 'External storage';
+      extId = sourceId;
+    } catch (e) {
+      showToast('Mount failed: ' + e.message, 'error');
+      return;
+    }
+  } else if (sourceType === 'dataset') {
     const d = datasetCache.find(x => x.name === sourceId);
     if (!d || !d.mountpoint || d.mountpoint === 'none' || d.mountpoint === 'legacy' || d.mountpoint === '-') {
       showToast('Dataset has no accessible mountpoint', 'error');
@@ -55398,6 +56733,7 @@ async function openFileBrowser(sourceType, sourceId, subpath) {
     fbLoadTree(fileBrowserState.root),
     fileBrowserNavigate(subpath || ''),
   ]);
+  _fbSetExtKeepalive(extId);
   _fbAttachGlobalHandlers();
 }
 
@@ -57189,6 +58525,7 @@ async function applyChmod() {
 
 function closeFileBrowser() {
   document.getElementById('modal-file-browser').classList.add('hidden');
+  if (typeof _fbSetExtKeepalive === 'function') _fbSetExtKeepalive(null);
 }
 
 // ===== User Menu ===============================================================

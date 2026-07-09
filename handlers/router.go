@@ -440,6 +440,42 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/snapshot-schedules/{id}/run-now",
 		RequireAuth(RequirePermission("manage_protection")(HandleRunScheduleNow(appCfg)))).Methods("POST")
 
+	// --- External storage + Filesystem rsync (v6.7.7) ---
+	r.Handle("/api/extstorage",
+		RequireAuth(http.HandlerFunc(HandleExtStorageList(appCfg)))).Methods("GET")
+	r.Handle("/api/extstorage",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageCreate(appCfg))))).Methods("POST")
+	r.Handle("/api/extstorage/prereqs",
+		RequireAuth(http.HandlerFunc(HandleExtStoragePrereqs))).Methods("GET")
+	r.Handle("/api/extstorage/install",
+		RequireAdmin(http.HandlerFunc(HandleExtStorageInstall))).Methods("POST")
+	r.Handle("/api/extstorage/test",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageTest(appCfg))))).Methods("POST")
+	r.Handle("/api/extstorage/{id}",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageUpdate(appCfg))))).Methods("PUT")
+	r.Handle("/api/extstorage/{id}",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageDelete(appCfg))))).Methods("DELETE")
+	r.Handle("/api/extstorage/{id}/mount",
+		RequireAuth(http.HandlerFunc(HandleExtStorageMount(appCfg)))).Methods("POST")
+	r.Handle("/api/extstorage/{id}/unmount",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageUnmount(appCfg))))).Methods("POST")
+	r.Handle("/api/extstorage/{id}/browse",
+		RequireAuth(http.HandlerFunc(HandleExtStorageBrowse(appCfg)))).Methods("GET")
+	r.Handle("/api/extstorage/{id}/rsync",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageSetRsync(appCfg))))).Methods("PUT")
+	r.Handle("/api/extstorage/{id}/rsync/run",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageRunRsync(appCfg))))).Methods("POST")
+	r.Handle("/api/extstorage/{id}/rsync/log",
+		RequireAuth(http.HandlerFunc(HandleExtStorageRsyncLog(appCfg)))).Methods("GET")
+	r.Handle("/api/rsync-jobs",
+		RequireAuth(http.HandlerFunc(HandleRsyncJobs))).Methods("GET")
+	r.Handle("/api/rsync-jobs/aggregate",
+		RequireAuth(http.HandlerFunc(HandleRsyncJobsAggregate(appCfg)))).Methods("GET")
+	r.Handle("/api/rsync-jobs/{id}/progress",
+		RequireAuth(http.HandlerFunc(HandleRsyncJobProgress))).Methods("GET")
+	r.Handle("/api/rsync-jobs/{id}/cancel",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleRsyncJobCancel)))).Methods("POST")
+
 	// --- iSCSI sharing ---
 	r.Handle("/api/iscsi/status",
 		RequireAuth(http.HandlerFunc(HandleISCSIStatus(appCfg)))).Methods("GET")

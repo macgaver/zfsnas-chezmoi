@@ -439,6 +439,71 @@ type AppConfig struct {
 	LXDSnapshotPolicies     []LXDSnapshotPolicy   `json:"lxd_snapshot_policies,omitempty"`   // v6.5.19 — per-instance scheduled snapshots
 	ComposeUpdatePolicies   []ComposeUpdatePolicy `json:"compose_update_policies,omitempty"` // per-stack scheduled auto-updates
 	LXDBackupPolicies       []LXDBackupPolicy     `json:"lxd_backup_policies,omitempty"`     // v6.5.19 — per-instance scheduled syncoid backups
+	ExternalStorages        []ExternalStorage     `json:"external_storages,omitempty"`       // v6.7.7 — Filesystem rsync external storage targets
+}
+
+// ExternalStorage describes one remote filesystem target for the Protect →
+// Filesystem rsync tab (v6.7.7). All four protocols funnel into a local
+// mount under /mnt/zfsnas-ext/<id>, then the file browser and rsync operate
+// against that path.
+type ExternalStorage struct {
+	ID       string `json:"id"`   // short random id; also the mountpoint dir name
+	Name     string `json:"name"` // display name
+	Type     string `json:"type"` // "smb" | "nfs" | "ftp" | "ssh"
+	Host     string `json:"host"`
+	Port     int    `json:"port,omitempty"`  // ftp/ssh only; 0 = protocol default
+	Share    string `json:"share,omitempty"` // smb share name / nfs export path / ssh+ftp base path
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Domain   string `json:"domain,omitempty"`   // smb optional AD/workgroup domain
+	SSHKey   bool   `json:"ssh_key,omitempty"`  // true = config/extstorage/<id>.key is used instead of Password
+	// MountMode: "ondemand" (default — mounted for rsync runs / file-browser
+	// use, auto-unmounted when idle) or "persistent" (mounted at save +
+	// service startup, stays mounted). SSH/FTP are always on-demand.
+	MountMode string `json:"mount_mode,omitempty"`
+	ExtraOpts string `json:"extra_opts,omitempty"` // extra mount options (power users)
+
+	Rsync *RsyncConfig `json:"rsync,omitempty"` // nil = sync not configured
+
+	// Last rsync run state (updated after every run, incl. scheduled ones).
+	LastSyncTime    time.Time `json:"last_sync_time,omitempty"`
+	LastSyncStatus  string    `json:"last_sync_status,omitempty"` // "ok" | "error" | "paused" | ""
+	LastSyncError   string    `json:"last_sync_error,omitempty"`
+	LastSyncLog     string    `json:"last_sync_log,omitempty"` // tail of the last run's output
+	LastSyncBytes   int64     `json:"last_sync_bytes,omitempty"`
+	LastSyncSeconds int       `json:"last_sync_seconds,omitempty"`
+
+	// Pause/resume state (v6.7.7 time-window + user-stop). A paused sync is
+	// an interrupted-but-resumable run: rsync --partial continues where it
+	// left off. The scheduler auto-restarts it at SyncResumeAt; a manual Run
+	// always forces an immediate resume.
+	SyncPaused      bool      `json:"sync_paused,omitempty"`
+	SyncPauseReason string    `json:"sync_pause_reason,omitempty"` // "window" | "user"
+	SyncResumeAt    time.Time `json:"sync_resume_at,omitempty"`    // zero = manual resume only
+}
+
+// RsyncConfig is the one synchronization job an ExternalStorage can carry.
+type RsyncConfig struct {
+	Enabled    bool   `json:"enabled"`
+	Direction  string `json:"direction"`             // "pull" (remote→local) | "push" (local→remote)
+	RemotePath string `json:"remote_path,omitempty"` // subpath inside the mount; "" = share root
+	LocalPath  string `json:"local_path"`            // absolute local path (dataset directory)
+	// Schedule — same shape as scheduler.Policy so IsDue/NextRun are reused.
+	Frequency  string `json:"frequency"` // manual | hourly | daily | weekly | monthly
+	Hour       int    `json:"hour"`
+	Minute     int    `json:"minute"`
+	Weekday    int    `json:"weekday,omitempty"`
+	DayOfMonth int    `json:"day_of_month,omitempty"`
+	// Options
+	Delete     bool   `json:"delete,omitempty"`      // --delete (mirror deletions)
+	BWLimitKB  int    `json:"bwlimit_kb,omitempty"`  // --bwlimit=N (KB/s)
+	ExtraFlags string `json:"extra_flags,omitempty"` // appended raw rsync flags
+	// Optional daily run window ("HH:MM", both set = enabled; may wrap
+	// midnight, e.g. 22:00→06:00). A sync still running at window close is
+	// paused and auto-resumed at the next window open; a scheduled start
+	// outside the window is deferred to the next open.
+	WindowStart string `json:"window_start,omitempty"`
+	WindowEnd   string `json:"window_end,omitempty"`
 }
 
 // WebSessionPolicy controls how long a browser-side login lasts and how it

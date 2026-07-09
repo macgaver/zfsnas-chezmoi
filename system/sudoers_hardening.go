@@ -75,6 +75,7 @@ var sudoersSectionInfoMap = map[string]sudoersSectionInfo{
 	"ZFSNAS_INCUSNET":  {Label: "Incus Network Bridges (VLAN interfaces)", Optional: true},
 	"ZFSNAS_INCUS":     {Label: "Incus Compute (Proxmox Import + ISO Management)", Optional: true},
 	"ZFSNAS_SYNCOID":   {Label: "ZFS Replication (syncoid)", Optional: true},
+	"ZFSNAS_RSYNC":     {Label: "External Storage & Filesystem rsync", Optional: true},
 	"ZFSNAS_APT":       {Label: "OS Updates & Installation"},
 	"ZFSNAS_SECURITY":  {Label: "Sudoers Self-Management"},
 }
@@ -355,6 +356,13 @@ func widenWildcardsForSudoRS(s string) string {
 		{"/usr/bin/umount /tmp/znas-bkup-mount-*", "/usr/bin/umount *"},
 		{"/usr/bin/cat /tmp/znas-bkup-mount-*", "/usr/bin/cat *"},
 		{"/usr/bin/tee /tmp/znas-bkup-mount-*", "/usr/bin/tee *"},
+		// ZFSNAS_RSYNC (v6.7.7) — external-storage unmount/cleanup is
+		// path-scoped to /mnt/zfsnas-ext, whose trailing wildcard has a
+		// prefix in the same token; sudo-rs rejects that shape. Path scoping
+		// remains enforced in Go (system/extstorage.go ValidExtID + the
+		// ExtMountBase prefix check).
+		{"/usr/bin/umount /mnt/zfsnas-ext/*", "/usr/bin/umount *"},
+		{"/usr/bin/rmdir /mnt/zfsnas-ext/*", "/usr/bin/rmdir *"},
 	}
 	for _, r := range repls {
 		s = strings.Replace(s, r[0], r[1], 1)
@@ -1008,6 +1016,14 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/journalctl --since=*":                                          "Reads the systemd journal (read-only) so the VMs & Containers state watcher can attribute a Running→Stopped transition to a kernel OOM-kill (v6.5.3+, virtualization-only).",
 	"/usr/bin/journalctl *":                                                  "Read-only access to the systemd journal for the Log Viewer screen (Activity & Events → journal tabs). Runs `journalctl` with -n / -p / --since / -u / -k filters to display the kernel ring buffer and service logs from the portal. journalctl is read-only and never modifies system state.",
 	"/usr/bin/cat /proc/*/smaps_rollup":                                      "Reads /proc/<pid>/smaps_rollup so the MEM topbar gauge can show complete swap usage (incl. shmem) for QEMU/KVM workers — VmSwap in /proc/<pid>/status only counts anonymous private swap (v6.5.3+).",
+	"/usr/bin/mount -t cifs *":                                               "Mounts a remote SMB/Windows share under /mnt/zfsnas-ext for the Protect → Filesystem rsync feature (browsing + sync jobs). Credentials are read from a root-only file, never from the command line.",
+	"/usr/bin/mount -t nfs *":                                                "Mounts a remote NFS export under /mnt/zfsnas-ext for the Protect → Filesystem rsync feature (browsing + sync jobs).",
+	"/usr/bin/sshfs *":                                                       "Mounts a remote SSH/SFTP location under /mnt/zfsnas-ext for the Protect → Filesystem rsync feature (browsing + sync jobs).",
+	"/usr/bin/curlftpfs *":                                                   "Mounts a remote FTP server under /mnt/zfsnas-ext for the Protect → Filesystem rsync feature (browsing + sync jobs).",
+	"/usr/bin/umount /mnt/zfsnas-ext/*":                                      "Unmounts external storages of the Filesystem rsync feature — on-demand mounts are detached automatically after ~15 minutes idle. Path-scoped to the feature's mount directory.",
+	"/usr/bin/rmdir /mnt/zfsnas-ext/*":                                       "Removes empty external-storage mountpoint directories (connection-test probes). Path-scoped to the feature's mount directory.",
+	"/usr/bin/rsync *":                                                       "Runs the actual file synchronization between local datasets and a mounted external storage (Protect → Filesystem rsync). Needs root so file ownership and permissions are preserved on both sides.",
+	"/usr/bin/kill *":                                                        "Stops or pauses a running rsync synchronization (user Stop button, daily time-window enforcement). The rsync processes run as root, so terminating them needs root too.",
 	"/usr/bin/apt-get *":                                                     "Package installation and OS updates. Used by the Prerequisites tab and the Settings > OS Updates page.",
 	"/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get *":                  "OS package upgrade with debconf forced non-interactive (suppresses the 'unable to initialize frontend' warnings on the unattended Auto Update). Used by Settings > OS Updates.",
 	"/usr/bin/tee /etc/apt/apt.conf.d/20auto-upgrades":                       "Turns the OS automatic-background-upgrade service (unattended-upgrades) on or off from the OS Packages card. Writes the same apt periodic config that `dpkg-reconfigure unattended-upgrades` manages (v6.6.27+).",
@@ -1460,6 +1476,22 @@ Cmnd_Alias ZFSNAS_MEMCOMP = \
     /usr/sbin/modprobe -r zram, \
     /usr/bin/tee /etc/default/zramswap
 
+# ── External Storage & Filesystem rsync ──────────────────────────────────────
+# since v6.7.7 — the Protect → "Filesystem rsync" feature mounts remote
+#   SMB / NFS / FTP / SSH storage under /mnt/zfsnas-ext/<id> (the File Browser
+#   and rsync jobs both operate on that local path) and runs rsync between
+#   local datasets and the mounted remote. umount and rmdir are path-scoped
+#   to the feature's mount base.
+Cmnd_Alias ZFSNAS_RSYNC = \
+    /usr/bin/mount -t cifs *, \
+    /usr/bin/mount -t nfs *, \
+    /usr/bin/sshfs *, \
+    /usr/bin/curlftpfs *, \
+    /usr/bin/umount /mnt/zfsnas-ext/*, \
+    /usr/bin/rmdir /mnt/zfsnas-ext/*, \
+    /usr/bin/rsync *, \
+    /usr/bin/kill *
+
 # ── OS updates & service installation ────────────────────────────────────────
 # since v1.0.0 — prerequisite package install (apt-get install) and
 #   systemd service setup (tee + daemon-reload + enable)
@@ -1488,5 +1520,5 @@ Cmnd_Alias ZFSNAS_SECURITY = \
 
 # ── Grant all of the above, passwordless, to the service account ──────────────
 zfsnas ALL=(ALL) NOPASSWD: \
-    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_MINIO, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_APT, ZFSNAS_SECURITY
+    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_MINIO, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_RSYNC, ZFSNAS_APT, ZFSNAS_SECURITY
 `

@@ -70,6 +70,11 @@ const (
 	ActionCreateSchedule  = "create_schedule"
 	ActionUpdateSchedule  = "update_schedule"
 	ActionDeleteSchedule  = "delete_schedule"
+	// External storage / Filesystem rsync events (v6.7.7).
+	ActionExtStorageCreate = "extstorage_create"
+	ActionExtStorageUpdate = "extstorage_update"
+	ActionExtStorageDelete = "extstorage_delete"
+	ActionRsyncRun         = "rsync_run"
 	// Health events — logged automatically by the background health poller.
 	ActionPoolProblem         = "pool_problem"
 	ActionPoolRecovered       = "pool_recovered"
@@ -314,7 +319,30 @@ func Read() ([]Entry, error) {
 			entries = append(entries, e)
 		}
 	}
-	return entries, nil
+	return collapseLoginBursts(entries), nil
+}
+
+// collapseLoginBursts drops repeated SUCCESSFUL login entries for the same
+// user + same client (Details carries "from <ip>") that land within one
+// minute of the last kept one, so API-driven sessions and multi-tab logins
+// don't flood the Activity & Events views with identical rows. Applied at
+// Read time only — the on-disk log keeps every entry for forensics. Each
+// kept entry opens a fresh 60s window; failed logins are never collapsed
+// (a burst of failures is a signal, not noise). entries is oldest-first.
+func collapseLoginBursts(entries []Entry) []Entry {
+	lastKept := map[string]time.Time{}
+	out := entries[:0]
+	for _, e := range entries {
+		if e.Action == ActionLogin && e.Result == ResultOK {
+			key := e.User + "|" + e.Details
+			if t, ok := lastKept[key]; ok && e.Timestamp.Sub(t) < time.Minute {
+				continue
+			}
+			lastKept[key] = e.Timestamp
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // osHostname is a thin wrapper around os.Hostname so callers always get a

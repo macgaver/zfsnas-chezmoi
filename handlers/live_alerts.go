@@ -127,6 +127,24 @@ func deriveLiveAlerts(appCfg *config.AppConfig) []LiveAlert {
 		}
 	}
 
+	// --- Filesystem rsync failures (v6.7.7) ---
+	// One aggregated warn-level alert when any external storage's last sync
+	// errored. Derived server-side so it survives the All-Servers aggregate
+	// view and is reported by interlink peers.
+	var rsyncFailed []string
+	for i := range appCfg.ExternalStorages {
+		if appCfg.ExternalStorages[i].LastSyncStatus == "error" {
+			rsyncFailed = append(rsyncFailed, appCfg.ExternalStorages[i].Name)
+		}
+	}
+	if len(rsyncFailed) > 0 {
+		alerts = append(alerts, LiveAlert{
+			ID: "rsync-failed", Severity: "warn",
+			Label: "Filesystem rsync failed", Message: strings.Join(rsyncFailed, ", "),
+			Page: "snapshots", System: hostname,
+		})
+	}
+
 	// --- Sudoers hardening review pending ---
 	// Mirrors the client-side `prereqs` live alert (updatePrereqDot): when
 	// hardening is enabled and the installed sudoers file drifts from the
