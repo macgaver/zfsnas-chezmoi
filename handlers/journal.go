@@ -11,7 +11,8 @@ import (
 // HandleJournalAvailable reports whether the journal tabs should be shown in the
 // Activity & Events page. The tabs require (a) passwordless sudo for journalctl
 // and (b) an admin session — raw system logs are sensitive, so non-admins never
-// see them. The `incus` flag drives the optional "Virtualization Services" tab.
+// see them. The `incus` flag drives the optional "Virtualization Services" tab
+// and `samba` the optional "Samba" tab.
 //
 // Returns available=false (rather than 403) for non-admins so the frontend can
 // simply hide the tabs without special-casing the error.
@@ -22,13 +23,14 @@ func HandleJournalAvailable(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]bool{
 		"available": avail,
 		"incus":     avail && system.IncusInstalled(),
+		"samba":     avail && system.IsSambaInstalled(),
 	})
 }
 
 // HandleJournal returns the last N journal entries for the requested source.
 // Query params:
 //
-//	kind  — one of kernel | zfsnas | incus | all  (default kernel)
+//	kind  — one of kernel | zfsnas | samba | incus | all  (default kernel)
 //	lines — 100..500, clamped                     (default 100)
 //
 // Admin-only (registered behind RequireAdmin in the router).

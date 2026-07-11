@@ -29,11 +29,13 @@ type JournalEntry struct {
 // journalKindArgs maps a viewer tab to its journalctl source selector.
 //   - kernel : the kernel ring buffer (dmesg-style)
 //   - zfsnas : this portal's own systemd unit
+//   - samba  : the Samba daemons (smbd + nmbd; multiple -u flags are OR'd)
 //   - incus  : the virtualization daemon's unit (only meaningful when Incus is on)
 //   - all    : the full system journal
 var journalKindArgs = map[string][]string{
 	"kernel": {"-k"},
 	"zfsnas": {"-u", "zfsnas"},
+	"samba":  {"-u", "smbd", "-u", "nmbd"},
 	"incus":  {"-u", "incus"},
 	"all":    {},
 }

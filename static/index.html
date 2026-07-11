@@ -1682,7 +1682,8 @@
         <div style="display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
           <button class="cap-tab active" data-atab="events" onclick="switchActivityTab('events')">Activity &amp; Events</button>
           <button class="cap-tab" data-atab="kernel" id="act-tab-kernel" onclick="switchActivityTab('kernel')" style="display:none;">Kernel Logs</button>
-          <button class="cap-tab" data-atab="zfsnas" id="act-tab-zfsnas" onclick="switchActivityTab('zfsnas')" style="display:none;">ZFSNAS Service</button>
+          <button class="cap-tab" data-atab="zfsnas" id="act-tab-zfsnas" onclick="switchActivityTab('zfsnas')" style="display:none;">ZNAS Service</button>
+          <button class="cap-tab" data-atab="samba"  id="act-tab-samba"  onclick="switchActivityTab('samba')"  style="display:none;">Samba</button>
           <button class="cap-tab" data-atab="incus"  id="act-tab-incus"  onclick="switchActivityTab('incus')"  style="display:none;">Virtualization Services</button>
           <button class="cap-tab" data-atab="all"    id="act-tab-all"    onclick="switchActivityTab('all')"    style="display:none;">All Journals</button>
         </div>
@@ -16248,9 +16249,10 @@ async function loadAudit() {
 
 // ===== Activity & Events — journal tabs =====
 // The Activity & Events page hosts the audit log plus a set of system-journal
-// tabs (Kernel Logs, ZFSNAS Service, Virtualization Services, All Journals).
+// tabs (Kernel Logs, ZNAS Service, Samba, Virtualization Services, All Journals).
 // The journal tabs are admin-only and only appear when `sudo journalctl` works;
-// the "Virtualization Services" tab additionally requires Incus to be installed.
+// the "Virtualization Services" tab additionally requires Incus to be installed
+// and the "Samba" tab (smbd + nmbd logs) requires Samba to be installed.
 let _activityTab    = 'events';
 let _journalKind    = 'kernel';
 let _journalLive    = false;
@@ -16285,6 +16287,8 @@ async function _activityPageEnter() {
           });
           const inc = document.getElementById('act-tab-incus');
           if (inc) inc.style.display = d.incus ? '' : 'none';
+          const smb = document.getElementById('act-tab-samba');
+          if (smb) smb.style.display = d.samba ? '' : 'none';
         }
       }
     } catch (_) {}

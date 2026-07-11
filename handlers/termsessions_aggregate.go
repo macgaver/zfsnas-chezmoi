@@ -235,6 +235,12 @@ func HandleInterlinkTerminalProxyWS(appCfg *config.AppConfig) http.HandlerFunc {
 		}
 		defer browserConn.Close()
 
+		// An open peer terminal counts as user activity — keep the local web
+		// session alive or the inactivity evictor tears down this proxy's auth
+		// (and every local PTY the user owns) after IdleTimeoutMinutes.
+		stopKeepalive := wsSessionKeepalive(sess.Token)
+		defer stopKeepalive()
+
 		// Dial peer with relay HMAC headers as the current user.
 		wsBase := ls.URL
 		switch {

@@ -297,6 +297,12 @@ func HandleLXDVGAConsole(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[vga] browser WS upgraded, proxying")
 	defer browserWS.Close()
 
+	// An open VGA console counts as user activity — keep the web session
+	// alive so the inactivity evictor doesn't log the user out underneath a
+	// console they're actively looking at.
+	stopKeepalive := wsSessionKeepalive(MustSession(r).Token)
+	defer stopKeepalive()
+
 	var once sync.Once
 	done := make(chan struct{})
 

@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"zfsnas/internal/session"
 	"zfsnas/internal/termsessions"
 
 	"github.com/creack/pty"
@@ -82,6 +84,32 @@ printf '\n\033[1;32m=== Update session finished. ===\033[0m\n'`
 	})
 }
 
+// wsSessionKeepalive marks the owning web session active for as long as a
+// long-lived WebSocket stays open. Auth middleware only Touch()es the
+// session on each HTTP request, and a WS authenticates exactly once at
+// upgrade — so a client that just holds a terminal open without polling the
+// REST API (the iOS app; the SPA polls constantly and never hits this) looks
+// idle to the "inactivity" web-session mode and gets evicted after
+// IdleTimeoutMinutes (default 60), which kills every PTY the user owns
+// mid-use. Returns a stop func; call it when the WS detaches so a closed
+// terminal stops counting as activity.
+func wsSessionKeepalive(token string) func() {
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				session.Default.Touch(token)
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() { close(stop) }
+}
+
 // wsAttachOrCreate is the shared "find existing session or spawn a new
 // one, then run the attach loop" used by every PTY-backed WS handler.
 // Ownership is enforced — a session_id from another user is rejected.
@@ -126,6 +154,11 @@ func wsAttachOrCreate(ws *websocket.Conn, r *http.Request,
 	// container before any data flows).
 	cols := parseUint16(r.URL.Query().Get("cols"))
 	rows := parseUint16(r.URL.Query().Get("rows"))
+
+	// An attached terminal counts as user activity — keep the web session
+	// alive for the duration or the inactivity evictor kills this very PTY.
+	stopKeepalive := wsSessionKeepalive(MustSession(r).Token)
+	defer stopKeepalive()
 
 	// window_id identifies the browser window so multiple windows (even the same
 	// user from different computers) can each be a viewer, with one controller.
