@@ -17342,6 +17342,10 @@ function _applyVirtEventsVisibility() {
 }
 
 async function loadAlerts() {
+  // Alerts config is admin-only (GET /api/alerts is RequireAdmin). Non-admins
+  // who can open Settings (edit_settings permission) skip the fetch so they
+  // don't take a 403; the notification editor isn't shown to them anyway.
+  if (currentUser.role !== 'admin') return;
   // Init custom selects for static alert dropdowns (idempotent — safe to call each load)
   initCustomSelect('al-auth');
   initCustomSelect('al-nt-prio');

@@ -364,6 +364,26 @@ func validateBackupInterval(unit string, n int) error {
 //
 // Body (all optional): {"dest_kind","dest_server_id","dest_pool"} — when set,
 // runs an ad-hoc backup with those parameters; otherwise uses the saved policy.
+// resolveBackupNowPolicy builds the policy a manual "Run backup" fires with.
+// It starts from the saved schedule (so retention + compression are inherited)
+// and lets an explicit destination in the request override only the dest
+// fields. This is the fix for manual runs never pruning: the UI posts the
+// saved policy's own dest, which previously produced a bare policy with no
+// retention. Pure, so the merge is unit-testable.
+func resolveBackupNowPolicy(name string, saved *config.LXDBackupPolicy, destKind, destServerID, destPool string) config.LXDBackupPolicy {
+	var policy config.LXDBackupPolicy
+	if saved != nil {
+		policy = *saved
+	}
+	if destKind != "" {
+		policy.DestKind = destKind
+		policy.DestServerID = destServerID
+		policy.DestPool = destPool
+	}
+	policy.Instance = name
+	return policy
+}
+
 func HandleLXDBackupNow(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["name"]
@@ -375,30 +395,31 @@ func HandleLXDBackupNow(appCfg *config.AppConfig) http.HandlerFunc {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 
-		// Resolve policy.
-		var policy config.LXDBackupPolicy
-		if req.DestKind != "" {
-			policy = config.LXDBackupPolicy{
-				Instance:     name,
-				DestKind:     req.DestKind,
-				DestServerID: req.DestServerID,
-				DestPool:     req.DestPool,
+		// Resolve policy. Always START from the saved schedule when one exists,
+		// because it carries the RETENTION and compression the user configured.
+		// An explicit dest in the request overrides ONLY the destination fields.
+		//
+		// The bug this fixes: the "Run backup" button reads the saved schedule
+		// and posts back its dest_kind/dest_pool, which used to take a branch
+		// that built a bare policy with retention_kind="" — so a manual backup
+		// never pruned, and a keep-2 schedule quietly grew unbounded every time
+		// the user clicked Run backup (and for remote destinations retention had
+		// no effect at all pre-6.7.8). Inheriting the saved policy's retention
+		// makes a manual run honor the same keep-N as a scheduled run.
+		var saved *config.LXDBackupPolicy
+		backupSchedMu.Lock()
+		for i := range appCfg.LXDBackupPolicies {
+			if appCfg.LXDBackupPolicies[i].Instance == name {
+				p := appCfg.LXDBackupPolicies[i]
+				saved = &p
+				break
 			}
-		} else {
-			backupSchedMu.Lock()
-			found := false
-			for _, p := range appCfg.LXDBackupPolicies {
-				if p.Instance == name {
-					policy = p
-					found = true
-					break
-				}
-			}
-			backupSchedMu.Unlock()
-			if !found {
-				jsonErr(w, http.StatusBadRequest, "no backup destination — pass dest_kind/dest_pool or save a schedule first")
-				return
-			}
+		}
+		backupSchedMu.Unlock()
+		policy := resolveBackupNowPolicy(name, saved, req.DestKind, req.DestServerID, req.DestPool)
+		if policy.DestKind == "" || policy.DestPool == "" {
+			jsonErr(w, http.StatusBadRequest, "no backup destination — pass dest_kind/dest_pool or save a schedule first")
+			return
 		}
 
 		jobID, err := startBackupJob(appCfg, policy, sess.Username, sess.Role)
@@ -843,36 +864,89 @@ func runBackupJob(ctx context.Context, job *lxdBackupJob, p config.LXDBackupPoli
 	if pruned, _ := system.PruneSourceBackupAnchors(p.Instance, snapPrefix); len(pruned) > 0 {
 		logFn(fmt.Sprintf("Pruned %d older source anchor(s) (%s-*): %s", len(pruned), snapPrefix, strings.Join(pruned, ", ")))
 	}
-	// Retention on the remote runs in a future iteration; the dataset(s)
-	// land successfully which is what matters for disaster recovery today.
+	// Retention on the peer: mirror of the local applyBackupRetention, run
+	// over HMAC so the peer prunes its own destination snapshots (root fs,
+	// .block sibling, custom volumes). Non-fatal — an older peer without
+	// the endpoint keeps accumulating until it's updated; the backup itself
+	// landed, which is what matters for disaster recovery.
+	if kindArg, count, cutoffUnix, ok := remoteRetentionArgs(p); ok {
+		resp, rerr := system.InterlinkRemotePruneRetention(ls.URL, ls.SharedSecret, ls.TLSFingerprint,
+			p.DestPool, p.Instance, kindArg, count, cutoffUnix)
+		switch {
+		case rerr != nil:
+			logFn("warning: retention prune on peer failed (" + rerr.Error() +
+				") — if the peer runs an older ZNAS version, old backups accumulate there until it is updated.")
+		case resp != nil && len(resp.Pruned) > 0:
+			logFn(fmt.Sprintf("Retention: peer pruned %d old backup snapshot(s): %s",
+				len(resp.Pruned), strings.Join(resp.Pruned, ", ")))
+		}
+	}
 	return nil
 }
 
+// applyBackupRetention prunes destination snapshots beyond the policy's
+// retention. The prune runs with an EMPTY prefix — every snapshot on the
+// backup dataset is a restore point in the Backups UI, and the zfs-level
+// names vary (Incus writes "snapshot-bkp-to-…"/"snapshot-auto-…", syncoid
+// writes "syncoid_…" on custom volumes), so retention must count them all.
+// The pre-v6.7.8 code filtered for a bare "auto-*" prefix that matched none
+// of those names, which meant retention never pruned anything and backups
+// accumulated without bound.
 func applyBackupRetention(dataset string, p config.LXDBackupPolicy, logFn func(string)) {
-	if p.RetentionKind == "count" && p.RetentionCount > 0 {
-		if err := system.LXDPruneRetentionByCount(dataset, "auto", p.RetentionCount); err != nil {
-			logFn("retention prune: " + err.Error())
-		}
-		return
-	}
-	if p.RetentionKind == "age" && p.RetentionAgeN > 0 {
-		var cutoff time.Time
-		switch p.RetentionAgeU {
-		case "hours":
-			cutoff = time.Now().Add(-time.Duration(p.RetentionAgeN) * time.Hour)
-		case "days":
-			cutoff = time.Now().Add(-time.Duration(p.RetentionAgeN) * 24 * time.Hour)
-		case "weeks":
-			cutoff = time.Now().Add(-time.Duration(p.RetentionAgeN) * 7 * 24 * time.Hour)
-		case "months":
-			cutoff = time.Now().AddDate(0, -p.RetentionAgeN, 0)
-		default:
+	var pruned []string
+	var err error
+	switch {
+	case p.RetentionKind == "count" && p.RetentionCount > 0:
+		pruned, err = system.LXDPruneRetentionByCount(dataset, "", p.RetentionCount)
+	case p.RetentionKind == "age":
+		cutoff, ok := retentionCutoff(p)
+		if !ok {
 			return
 		}
-		if err := system.LXDPruneRetentionByAge(dataset, "auto", cutoff); err != nil {
-			logFn("retention prune: " + err.Error())
-		}
+		pruned, err = system.LXDPruneRetentionByAge(dataset, "", cutoff)
+	default:
+		return
 	}
+	if err != nil {
+		logFn("retention prune: " + err.Error())
+		return
+	}
+	if len(pruned) > 0 {
+		logFn(fmt.Sprintf("Retention: pruned %d old backup snapshot(s) on %s: %s",
+			len(pruned), dataset, strings.Join(pruned, ", ")))
+	}
+}
+
+// retentionCutoff converts an age-based retention policy into an absolute
+// cutoff time. ok=false when the policy is not age-based or malformed.
+func retentionCutoff(p config.LXDBackupPolicy) (time.Time, bool) {
+	if p.RetentionKind != "age" || p.RetentionAgeN < 1 {
+		return time.Time{}, false
+	}
+	switch p.RetentionAgeU {
+	case "hours":
+		return time.Now().Add(-time.Duration(p.RetentionAgeN) * time.Hour), true
+	case "days":
+		return time.Now().Add(-time.Duration(p.RetentionAgeN) * 24 * time.Hour), true
+	case "weeks":
+		return time.Now().Add(-time.Duration(p.RetentionAgeN) * 7 * 24 * time.Hour), true
+	case "months":
+		return time.Now().AddDate(0, -p.RetentionAgeN, 0), true
+	}
+	return time.Time{}, false
+}
+
+// remoteRetentionArgs flattens a policy's retention config into the wire
+// shape of the interlink prune request. ok=false when the policy has no
+// usable retention configured.
+func remoteRetentionArgs(p config.LXDBackupPolicy) (kind string, count int, cutoffUnix int64, ok bool) {
+	if p.RetentionKind == "count" && p.RetentionCount > 0 {
+		return "count", p.RetentionCount, 0, true
+	}
+	if cutoff, cok := retentionCutoff(p); cok {
+		return "age", 0, cutoff.Unix(), true
+	}
+	return "", 0, 0, false
 }
 
 func updateBackupPolicyStatus(appCfg *config.AppConfig, instance string, err error) {

@@ -1251,38 +1251,93 @@ func LXDListDatasetSnapshots(dataset, prefix string) ([]LXDSnapshotEntry, error)
 }
 
 // LXDPruneRetentionByCount keeps the newest `keep` snapshots of `dataset`
-// whose name starts with `prefix-` and destroys the rest.
-func LXDPruneRetentionByCount(dataset, prefix string, keep int) error {
+// (prefix-filtered when prefix is non-empty; "" = every snapshot, which is
+// what backup retention uses — the Backups UI lists every destination
+// snapshot as a restore point, so retention must count them all) and
+// destroys the rest. Returns the names destroyed. A snapshot that refuses
+// to die (typically because an Instant Independent Restore clone still
+// depends on it) is skipped, not fatal — it is retried on the next fire.
+func LXDPruneRetentionByCount(dataset, prefix string, keep int) ([]string, error) {
 	if keep <= 0 {
-		return nil
+		return nil, nil
 	}
 	snaps, err := LXDListDatasetSnapshots(dataset, prefix)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(snaps) <= keep {
-		return nil
+		return nil, nil
 	}
+	var pruned []string
 	for _, s := range snaps[keep:] {
 		full := dataset + "@" + s.Name
-		_ = exec.Command("sudo", "zfs", "destroy", "-r", full).Run()
-	}
-	return nil
-}
-
-// LXDPruneRetentionByAge destroys every prefix-* snapshot older than `cutoff`.
-func LXDPruneRetentionByAge(dataset, prefix string, cutoff time.Time) error {
-	snaps, err := LXDListDatasetSnapshots(dataset, prefix)
-	if err != nil {
-		return err
-	}
-	for _, s := range snaps {
-		if s.CreatedAt.Before(cutoff) {
-			full := dataset + "@" + s.Name
-			_ = exec.Command("sudo", "zfs", "destroy", "-r", full).Run()
+		if err := exec.Command("sudo", "zfs", "destroy", "-r", full).Run(); err == nil {
+			pruned = append(pruned, s.Name)
 		}
 	}
-	return nil
+	return pruned, nil
+}
+
+// LXDPruneRetentionByAge destroys every snapshot older than `cutoff` —
+// except the newest snapshot on the dataset, which always survives: it is
+// the incremental anchor for the next syncoid run, and destroying it would
+// force a full re-send whenever the schedule fires less often than the
+// retention window. Returns the names destroyed; failures (dependent
+// clones) are skipped like in the count variant.
+func LXDPruneRetentionByAge(dataset, prefix string, cutoff time.Time) ([]string, error) {
+	snaps, err := LXDListDatasetSnapshots(dataset, prefix)
+	if err != nil {
+		return nil, err
+	}
+	var pruned []string
+	for i, s := range snaps { // newest-first; index 0 is the anchor
+		if i == 0 {
+			continue
+		}
+		if s.CreatedAt.Before(cutoff) {
+			full := dataset + "@" + s.Name
+			if err := exec.Command("sudo", "zfs", "destroy", "-r", full).Run(); err == nil {
+				pruned = append(pruned, s.Name)
+			}
+		}
+	}
+	return pruned, nil
+}
+
+// WorkloadBackupPartDatasets returns every destination dataset that belongs
+// to one workload backup of `vm` on `pool`: the root-fs dataset (VM or
+// container branch), the VM's ".block" zvol sibling, and any custom-volume
+// parts (named "bkup--<vm>.<volume>" under the custom/ branch). Only
+// datasets that actually exist are returned. Used by the interlink
+// prune-retention handler so a peer can apply retention to all parts of a
+// backup it received.
+func WorkloadBackupPartDatasets(pool, vm string) []string {
+	parent := LXDWorkloadBackupParent(pool)
+	bkup := LXDBackupPrefix + vm
+	var out []string
+	for _, ds := range []string{
+		parent + "/virtual-machines/" + bkup,
+		parent + "/virtual-machines/" + bkup + ".block",
+		parent + "/containers/" + bkup,
+	} {
+		if datasetExists(ds) {
+			out = append(out, ds)
+		}
+	}
+	lsOut, err := exec.Command("zfs", "list", "-Hp", "-t", "filesystem,volume", "-o", "name", "-r", "-d", "1", parent+"/custom").Output()
+	if err == nil {
+		for _, ln := range strings.Split(string(lsOut), "\n") {
+			name := strings.TrimSpace(ln)
+			if name == "" || name == parent+"/custom" {
+				continue
+			}
+			base := name[strings.LastIndexByte(name, '/')+1:]
+			if strings.HasPrefix(base, bkup+".") {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 // LXDSnapshotName composes the standard auto-YYYY-MM-DD-HHMMSS snapshot

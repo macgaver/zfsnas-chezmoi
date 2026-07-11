@@ -992,6 +992,69 @@ func HandleInterlinkPrepChain(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
+// HandleInterlinkPruneRetention handles POST /api/lxd/interlink-prune-retention
+// — HMAC-authenticated. Applies the sender's backup-retention policy to the
+// workload backup of VM on Pool: every dataset part (root fs, VM .block
+// sibling, custom volumes) keeps only the newest Count snapshots ("count")
+// or drops snapshots older than CutoffUnix ("age"; the newest always
+// survives as the incremental anchor). The remote counterpart of the local
+// applyBackupRetention.
+func HandleInterlinkPruneRetention(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req system.LXDPruneRetentionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		age := time.Since(time.Unix(req.Timestamp, 0))
+		if age > 30*time.Second || age < -5*time.Second {
+			jsonErr(w, http.StatusUnauthorized, "request timestamp out of range")
+			return
+		}
+		matched := false
+		for _, ls := range appCfg.InterLink {
+			expected := system.LXDPruneRetentionHMAC(ls.SharedSecret, req.Timestamp, req.Nonce,
+				req.Pool, req.VM, req.Kind, req.Count, req.CutoffUnix)
+			if hmac.Equal([]byte(expected), []byte(req.HMAC)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			jsonErr(w, http.StatusUnauthorized, "invalid HMAC")
+			return
+		}
+		if req.Pool == "" || req.VM == "" {
+			jsonErr(w, http.StatusBadRequest, "pool and vm required")
+			return
+		}
+		// Same snapshot names exist on the root-fs and .block parts, so
+		// dedupe for the response — the caller logs these verbatim.
+		pruned := []string{}
+		seen := map[string]bool{}
+		for _, ds := range system.WorkloadBackupPartDatasets(req.Pool, req.VM) {
+			var names []string
+			switch req.Kind {
+			case "count":
+				if req.Count > 0 {
+					names, _ = system.LXDPruneRetentionByCount(ds, "", req.Count)
+				}
+			case "age":
+				if req.CutoffUnix > 0 {
+					names, _ = system.LXDPruneRetentionByAge(ds, "", time.Unix(req.CutoffUnix, 0))
+				}
+			}
+			for _, n := range names {
+				if !seen[n] {
+					seen[n] = true
+					pruned = append(pruned, n)
+				}
+			}
+		}
+		jsonOK(w, system.LXDPruneRetentionResponse{Pruned: pruned})
+	}
+}
+
 // HandleInterlinkPrepWorkload handles POST /api/lxd/interlink-prep-workload —
 // HMAC-authenticated. Ensures the workload parent dataset exists with the
 // requested compression on this host so the peer's syncoid push will land

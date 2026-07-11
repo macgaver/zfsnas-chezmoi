@@ -313,6 +313,85 @@ func InterlinkRemotePrepChain(remoteURL, sharedSecret, tlsFP, pool, vm string, s
 	return &r, nil
 }
 
+// ── /api/lxd/interlink-prune-retention ──────────────────────────────────────
+
+// LXDPruneRetentionHMAC signs a "prune old backup snapshots" request. All
+// retention parameters are folded in so a replay can't be redirected at a
+// different backup or with a looser policy.
+func LXDPruneRetentionHMAC(sharedSecret string, timestamp int64, nonce, pool, vm, kind string, count int, cutoffUnix int64) string {
+	key, _ := hex.DecodeString(sharedSecret)
+	if len(key) == 0 {
+		key = []byte(sharedSecret)
+	}
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte("lxd-prune-retention|" + strconv.FormatInt(timestamp, 10) + "|" + nonce + "|" +
+		pool + "|" + vm + "|" + kind + "|" + strconv.Itoa(count) + "|" + strconv.FormatInt(cutoffUnix, 10)))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// LXDPruneRetentionRequest is the HMAC-signed payload for
+// /api/lxd/interlink-prune-retention — asks a peer to apply the sender's
+// backup-retention policy to the workload backup of VM on Pool. Kind is
+// "count" (keep the newest Count snapshots) or "age" (destroy snapshots
+// older than CutoffUnix; the peer always keeps the newest snapshot as the
+// next incremental's anchor).
+type LXDPruneRetentionRequest struct {
+	Timestamp  int64  `json:"timestamp"`
+	Nonce      string `json:"nonce"`
+	Pool       string `json:"pool"`
+	VM         string `json:"vm"`
+	Kind       string `json:"kind"`
+	Count      int    `json:"count,omitempty"`
+	CutoffUnix int64  `json:"cutoff_unix,omitempty"`
+	HMAC       string `json:"hmac"`
+}
+
+// LXDPruneRetentionResponse lists the snapshot names the peer destroyed.
+type LXDPruneRetentionResponse struct {
+	Pruned []string `json:"pruned"`
+}
+
+// InterlinkRemotePruneRetention asks a peer to prune old snapshots of one
+// workload backup according to the schedule's retention policy. The remote
+// counterpart of the local applyBackupRetention.
+func InterlinkRemotePruneRetention(remoteURL, sharedSecret, tlsFP, pool, vm, kind string, count int, cutoffUnix int64) (*LXDPruneRetentionResponse, error) {
+	nonce := make([]byte, 8)
+	rand.Read(nonce) //nolint:errcheck
+	ts := time.Now().Unix()
+	nh := hex.EncodeToString(nonce)
+	req := LXDPruneRetentionRequest{
+		Timestamp:  ts,
+		Nonce:      nh,
+		Pool:       pool,
+		VM:         vm,
+		Kind:       kind,
+		Count:      count,
+		CutoffUnix: cutoffUnix,
+		HMAC:       LXDPruneRetentionHMAC(sharedSecret, ts, nh, pool, vm, kind, count, cutoffUnix),
+	}
+	body, _ := json.Marshal(req)
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-prune-retention", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var r struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&r)
+		if r.Error != "" {
+			return nil, fmt.Errorf("%s", r.Error)
+		}
+		return nil, fmt.Errorf("interlink-prune-retention returned status %d", resp.StatusCode)
+	}
+	var out LXDPruneRetentionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ── /api/lxd/interlink-backups ──────────────────────────────────────────────
 
 // RemoteBackupRecord describes one bkup--<vm> instance on a peer.

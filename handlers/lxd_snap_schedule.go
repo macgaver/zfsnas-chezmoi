@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -328,14 +329,20 @@ func runLXDSnapshotPolicy(p config.LXDSnapshotPolicy, appCfg *config.AppConfig) 
 	if err != nil {
 		return
 	}
-	// Filter to prefix-* and sort newest-first.
-	var keep []string
+	// Filter to prefix-* and sort newest-first. Don't trust the incus query
+	// ordering — if it ever came back oldest-first, the slice below would
+	// delete the NEWEST snapshots instead of the oldest.
+	matched := snaps[:0]
 	for _, s := range snaps {
 		if strings.HasPrefix(s.Name, p.NamePrefix+"-") || s.Name == p.NamePrefix {
-			keep = append(keep, s.Name)
+			matched = append(matched, s)
 		}
 	}
-	// snaps from incus query are newest-first already, but be defensive.
+	sort.Slice(matched, func(i, j int) bool { return matched[i].CreatedAt.After(matched[j].CreatedAt) })
+	var keep []string
+	for _, s := range matched {
+		keep = append(keep, s.Name)
+	}
 	if len(keep) <= p.KeepLast {
 		return
 	}

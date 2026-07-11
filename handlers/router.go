@@ -573,8 +573,13 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleGetNFSSessions))).Methods("GET")
 
 	// --- Alerts ---
+	// GET is admin-only: the alert config (recipients, server URLs, event
+	// subscriptions) is administrative, the editor UI is admin-only, and the
+	// PUT below is already admin-gated. Secrets are masked in the response
+	// regardless, but there's no reason a read-only/standard user should read
+	// the notification configuration at all.
 	r.Handle("/api/alerts",
-		RequireAuth(http.HandlerFunc(HandleGetAlerts))).Methods("GET")
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleGetAlerts)))).Methods("GET")
 	r.Handle("/api/alerts",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleUpdateAlerts)))).Methods("PUT")
 	r.Handle("/api/alerts/test",
@@ -1227,6 +1232,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.HandleFunc("/api/lxd/interlink-zfs-pools", HandleInterlinkZFSPools(appCfg)).Methods("POST")
 	r.HandleFunc("/api/lxd/interlink-prep-workload", HandleInterlinkPrepWorkload(appCfg)).Methods("POST")
 	r.HandleFunc("/api/lxd/interlink-prep-chain", HandleInterlinkPrepChain(appCfg)).Methods("POST")
+	r.HandleFunc("/api/lxd/interlink-prune-retention", HandleInterlinkPruneRetention(appCfg)).Methods("POST")
 	// Syncoid install entry (admin-only; reused by Prerequisites page).
 	r.Handle("/api/prerequisites/install-syncoid",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleInstallSyncoid)))).Methods("POST")

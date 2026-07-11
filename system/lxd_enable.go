@@ -871,6 +871,17 @@ func LXDEnableFeature(ctx context.Context, storagePool string, job *LXDEnableJob
 // dedicated entry for /etc/network/interfaces, so this only succeeds when the
 // process is root or has unrestricted sudo (NOPASSWD: ALL).
 func writeInterfacesFile(path string, data []byte) error {
+	// A `bridge_ports` / `bridge-vlan-aware` stanza is inert at boot without
+	// bridge-utils, whose /etc/network/if-pre-up.d/bridge hook is what actually
+	// creates the bridge — a bridge that was created live via iproute2 (no
+	// bridge-utils needed) can't be recreated by ifupdown at the next boot, so
+	// networking.service dies with "Cannot find device <bridge>" and the host
+	// comes up with no network (observed on a fresh Debian 13). bridge-utils is
+	// in the virt-enable package set, but the bridge write and that install are
+	// separate steps with no ordering guarantee, so we make them atomic here:
+	// every bridge/VLAN write ensures its ifupdown helper package first. Same
+	// story for `vlan-raw-device` and the `vlan` package. Idempotent.
+	ensureIfupdownHelperPkgs(string(data))
 	if os.Getuid() == 0 {
 		return os.WriteFile(path, data, 0644)
 	}
@@ -881,6 +892,42 @@ func writeInterfacesFile(path string, data []byte) error {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// ensureIfupdownHelperPkgs installs the ifupdown helper packages a bridge or
+// VLAN stanza needs to come up at boot, if the config being written uses them
+// and they are missing. Best-effort: apt-get is granted via ZFSNAS_APT so this
+// works on hardened hosts, but a transient failure (apt lock, offline mirror)
+// is non-fatal — the caller still writes the file and the daemon logs surface
+// any later `ifup` failure. Called from writeInterfacesFile so no bridge/VLAN
+// write can outrun its dependency.
+func ensureIfupdownHelperPkgs(content string) {
+	var need []string
+	for _, pkg := range ifupdownHelperPkgsFor(content) {
+		if !pkgInstalled(pkg) {
+			need = append(need, pkg)
+		}
+	}
+	if len(need) == 0 {
+		return
+	}
+	exec.Command("sudo", append([]string{"/usr/bin/apt-get", "install", "-y"}, need...)...).Run() //nolint:errcheck
+}
+
+// ifupdownHelperPkgsFor returns the ifupdown helper packages an interfaces
+// stanza needs to come up at boot: bridge-utils for a bridge stanza
+// (bridge_ports / bridge-vlan-aware), vlan for an 802.1q sub-interface
+// (vlan-raw-device). Pure — separated from the apt side effect so it's unit
+// testable.
+func ifupdownHelperPkgsFor(content string) []string {
+	var pkgs []string
+	if strings.Contains(content, "bridge_ports") || strings.Contains(content, "bridge-vlan-aware") {
+		pkgs = append(pkgs, "bridge-utils")
+	}
+	if strings.Contains(content, "vlan-raw-device") {
+		pkgs = append(pkgs, "vlan")
+	}
+	return pkgs
 }
 
 func runCmdLog(ctx context.Context, job *LXDEnableJob, name string, args ...string) error {
