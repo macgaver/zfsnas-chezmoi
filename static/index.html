@@ -55358,6 +55358,19 @@ function _applyRelayState(active, hostname) {
 // page reload so the user is never left in a half-applied state.
 async function _softRelayRefresh() {
   try {
+    // Snapshot the page + its selection BEFORE we touch any caches, so the
+    // restore step at the end can reopen the same view on the newly-viewed
+    // server when it exists there (e.g. Datastore "default" → the peer's own
+    // "default"). Selection vars aren't caches, but capturing up front keeps
+    // the intent obvious and is robust to any loader that changes the page.
+    const _relayView = {
+      page: (() => { const v = document.querySelector('.page:not(.hidden)'); return v && v.id && v.id.indexOf('page-') === 0 ? v.id.slice(5) : ''; })(),
+      datastore: typeof _currentDatastoreName !== 'undefined' ? _currentDatastoreName : '',
+      instance:  typeof _ciCurrentName        !== 'undefined' ? _ciCurrentName        : '',
+      instType:  typeof _ciCurrentType         !== 'undefined' ? _ciCurrentType         : '',
+      bridge:    typeof _currentBridgeName     !== 'undefined' ? _currentBridgeName     : '',
+    };
+
     // Reset in-memory caches that hold per-server data. Re-declared with
     // typeof guards so referencing a not-yet-defined symbol is safe.
     if (typeof datasetCache       !== 'undefined') datasetCache       = [];
@@ -55495,30 +55508,74 @@ async function _softRelayRefresh() {
       refreshActivityBar();
     }
 
-    // The current page's selection may not exist on the new server (e.g.
-    // user was on "Compute → vm-1" on Server A and the new server has no
-    // VM by that name). Bounce to the dashboard so we never show
-    // someone else's instance under the new context. Pages that *do*
-    // exist on both sides — Dashboard, Settings, Activity, etc. — are
-    // re-rendered in place.
-    const visible = document.querySelector('.page:not(.hidden)');
-    const safePages = new Set(['dashboard','capacity','settings','activity','prereqs','updates','users']);
-    if (visible && visible.id && visible.id.indexOf('page-') === 0) {
-      const name = visible.id.slice('page-'.length);
-      if (safePages.has(name)) {
-        showPage(name);
-      } else {
-        showPage('dashboard');
-      }
-    } else {
-      showPage('dashboard');
-    }
+    // Preserve the current view on the newly-viewed server when it exists
+    // there. Detail pages (a specific datastore/instance/bridge) reopen the
+    // same selection if the peer has one by that name, else fall back to their
+    // parent list page; plain feature pages are re-shown when the peer offers
+    // them. See _relayRestoreView.
+    await _relayRestoreView(_relayView);
   } catch (err) {
     // If anything blew up, fall back to the old hard reload so the user
     // doesn't end up looking at half-stale data.
     console.error('soft relay switch failed; falling back to reload:', err);
     location.reload();
   }
+}
+
+// _relayRestoreView reopens, on the now-viewed server, the view the user was
+// on before an InterLink switch — when that server has an equivalent.
+//
+//   • Detail pages (datastore-detail / compute-instance / bridge-detail): if
+//     the peer has an object with the same name, reopen it; otherwise land on
+//     that feature's parent list page (or the dashboard when the feature is
+//     absent), never on a stale/empty detail of a nonexistent object.
+//   • Plain feature pages: re-shown when the peer offers them — always-present
+//     pages unconditionally, LXD-scoped pages only when LXD is available.
+//   • Anything else falls back to the dashboard.
+//
+// Existence is probed with a fresh fetch against the peer (relay is already
+// active at the API layer by the time this runs), independent of the caches
+// the surrounding refresh repopulates asynchronously.
+async function _relayRestoreView(view) {
+  const page = view && view.page;
+  if (!page) { showPage('dashboard'); return; }
+
+  const detail = {
+    'datastore-detail': { sel: view.datastore, url: '/api/incus/storage-pools-detail', parent: 'lxd-datastores',
+      open: n => openDatastoreDetail(n) },
+    'compute-instance': { sel: view.instance, url: '/api/incus/instances', parent: 'lxd',
+      open: n => { const it = (typeof _lxdInstancesCache !== 'undefined' ? _lxdInstancesCache : []).find(x => x.name === n);
+                   openComputeInstance(n, (it && it.type) || view.instType || 'container'); } },
+    'bridge-detail':    { sel: view.bridge, url: '/api/incus/network-bridges', parent: 'lxd-networks',
+      open: n => openBridgeDetail(n) },
+  }[page];
+
+  if (detail) {
+    // Every detail page here is LXD-scoped.
+    if (!window._lxdAvailable) { showPage('dashboard'); return; }
+    if (detail.sel) {
+      try {
+        const r = await fetch(detail.url, { cache: 'no-store' });
+        const items = r.ok ? await r.json() : [];
+        if (Array.isArray(items) && items.some(it => it && it.name === detail.sel)) {
+          detail.open(detail.sel);
+          return;
+        }
+      } catch (_) {}
+    }
+    // Selection absent on the peer → the feature's list page (or dashboard).
+    showPage(window._lxdAvailable ? detail.parent : 'dashboard');
+    return;
+  }
+
+  // Plain pages present on every ZNAS host.
+  const alwaysSafe = new Set(['dashboard', 'capacity', 'settings', 'activity', 'prereqs', 'updates',
+    'users', 'datasets', 'pool', 'disks', 'shares', 'nfs']);
+  // Pages that only exist when the peer has virtualization enabled.
+  const lxdScoped = new Set(['lxd', 'lxd-networks', 'lxd-datastores', 'lxd-backups']);
+  if (alwaysSafe.has(page)) { showPage(page); return; }
+  if (lxdScoped.has(page)) { showPage(window._lxdAvailable ? page : 'dashboard'); return; }
+  showPage('dashboard');
 }
 
 // Exit relay mode — POST to the backend, then soft-refresh.
