@@ -1237,6 +1237,12 @@ body:not(.is-phone) .lxd-inst-table td[data-col="name"] .lxd-name-2 {
 
 .nav-icon { width: 18px; text-align: center; font-size: 16px; opacity: 0.8; }
 
+/* Self-hosted SVG icons (see static/icons.js). Inherit text color; align to
+   the baseline of adjacent text so they sit correctly in nav items, buttons,
+   table cells, and headings. */
+.znas-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+.nav-icon .znas-icon { vertical-align: middle; }
+
 .nav-dot {
   position: absolute !important;
   right: 5px !important;
