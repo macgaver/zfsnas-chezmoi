@@ -2939,6 +2939,14 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 .map-viewport:fullscreen .map-fs-exit{display:flex;}
 .map-viewport:-webkit-full-screen .map-fs-exit{display:flex;}
 .map-viewport.map-vp-fullwindow .map-fs-exit{display:flex;}
+/* In-fullscreen zoom control: the toolbar (with the −/%/+ buttons) is a sibling
+   of the viewport, so it's not visible once the viewport itself goes
+   fullscreen. This clone lives INSIDE the viewport and shows only in fullscreen,
+   pinned top-right beside the exit ✕. Reuses .map-zoom pill styling. */
+.map-fs-zoom{display:none;position:fixed;top:12px;right:56px;z-index:9500;}
+.map-viewport:fullscreen .map-fs-zoom{display:inline-flex;}
+.map-viewport:-webkit-full-screen .map-fs-zoom{display:inline-flex;}
+.map-viewport.map-vp-fullwindow .map-fs-zoom{display:inline-flex;}
 #map-svg{display:block;background:transparent;}
 /* Graph-paper background (v6.7.4): minor 16px squares, stronger line every
    5th. Colours derive from the theme's muted text colour so the grid stays

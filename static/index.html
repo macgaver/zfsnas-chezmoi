@@ -1494,6 +1494,11 @@
           <div id="map-viewport" class="map-viewport map-hud">
             <svg id="map-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet"></svg>
             <div id="map-empty" class="map-empty hidden">No pools detected on this server.</div>
+            <div class="map-zoom map-fs-zoom" role="group" aria-label="Zoom">
+              <button type="button" class="map-zoom-btn" onclick="mapZoom('map-svg',-1)" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" class="map-zoom-btn map-zoom-lvl map-fs-zoom-lvl" onclick="mapZoom('map-svg',0)" title="Reset zoom">100%</button>
+              <button type="button" class="map-zoom-btn" onclick="mapZoom('map-svg',1)" title="Zoom in" aria-label="Zoom in">+</button>
+            </div>
             <button type="button" class="map-fs-exit" onclick="mapFullscreen()" title="Exit full screen" aria-label="Exit full screen">&#x2715;</button>
           </div>
         </div><!-- end cap-tab-map -->
@@ -4401,6 +4406,11 @@
           <div id="brtopo-viewport" class="map-viewport map-hud">
             <svg id="brtopo-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet"></svg>
             <div id="brtopo-empty" class="map-empty hidden">No VMs or containers attached to this bridge.</div>
+            <div class="map-zoom map-fs-zoom" role="group" aria-label="Zoom">
+              <button type="button" class="map-zoom-btn" onclick="mapZoom('brtopo-svg',-1)" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" class="map-zoom-btn map-zoom-lvl map-fs-zoom-lvl" onclick="mapZoom('brtopo-svg',0)" title="Reset zoom">100%</button>
+              <button type="button" class="map-zoom-btn" onclick="mapZoom('brtopo-svg',1)" title="Zoom in" aria-label="Zoom in">+</button>
+            </div>
             <button type="button" class="map-fs-exit" onclick="mapFullscreen()" title="Exit full screen" aria-label="Exit full screen">&#x2715;</button>
           </div>
         </div>
@@ -5301,6 +5311,11 @@ Select the Console tab to load.</pre>
           <div id="vmtopo-viewport" class="map-viewport map-hud">
             <svg id="vmtopo-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet"></svg>
             <div id="vmtopo-empty" class="map-empty hidden">No related storage found for this instance.</div>
+            <div class="map-zoom map-fs-zoom" role="group" aria-label="Zoom">
+              <button type="button" class="map-zoom-btn" onclick="mapZoom('vmtopo-svg',-1)" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" class="map-zoom-btn map-zoom-lvl map-fs-zoom-lvl" onclick="mapZoom('vmtopo-svg',0)" title="Reset zoom">100%</button>
+              <button type="button" class="map-zoom-btn" onclick="mapZoom('vmtopo-svg',1)" title="Zoom in" aria-label="Zoom in">+</button>
+            </div>
             <button type="button" class="map-fs-exit" onclick="mapFullscreen()" title="Exit full screen" aria-label="Exit full screen">&#x2715;</button>
           </div>
         </div><!-- /ci-tab-content-topology -->
@@ -36614,8 +36629,15 @@ function runReplicationTask(id, name) {
   function _mapGetZoom(svgId){ return _mapZoomState[svgId] || 1; }
   function _mapZoomLabelId(svgId){ return svgId.replace('-svg','') + '-zoom-lvl'; }
   function _mapUpdateZoomLabel(svgId){
+    const txt = Math.round(_mapGetZoom(svgId)*100) + '%';
     const el = document.getElementById(_mapZoomLabelId(svgId));
-    if (el) el.textContent = Math.round(_mapGetZoom(svgId)*100) + '%';
+    if (el) el.textContent = txt;
+    // Keep the in-fullscreen zoom control's % in sync (it lives inside the
+    // viewport so it survives fullscreen, unlike the toolbar label above).
+    const svg = document.getElementById(svgId);
+    const vp = svg && svg.closest('.map-viewport');
+    const fsLvl = vp && vp.querySelector('.map-fs-zoom-lvl');
+    if (fsLvl) fsLvl.textContent = txt;
   }
   // Re-apply the stored zoom to an SVG (called after every full relayout, which
   // resets width/height to natural). Safe to call before a render has happened.

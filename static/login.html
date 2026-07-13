@@ -11,10 +11,6 @@
   <meta name="apple-mobile-web-app-title" content="ZFS NAS">
   <link rel="stylesheet" href="/static/style.css">
   <style>
-    @keyframes lxd-badge-pulse {
-      0%, 100% { opacity: 1; text-shadow: 0 0 8px #fbbf24, 0 0 16px #f59e0b, 0 0 2px #fff; }
-      50%       { opacity: .6; text-shadow: 0 0 4px #fbbf24, 0 0 8px #f59e0b; }
-    }
 
     /* ── Login backdrop ─────────────────────────────────────────────────────
        A self-hosted circuit-grid background behind the sign-in card, lit with
@@ -143,12 +139,10 @@
 
       <div class="auth-logo" style="position:relative;display:inline-block;">
         <img src="/static/logo.svg" alt="ZFS NAS" style="height:100px;width:320px;object-fit:contain;">
-        <span id="login-lxd-badge" title="Compute (LXD) available"
-          style="display:none;position:absolute;top:11px;left:142px;font-size:24px;font-weight:900;color:#fbbf24;line-height:1;pointer-events:none;text-shadow:0 0 8px #fbbf24,0 0 16px #f59e0b,0 0 2px #fff;animation:lxd-badge-pulse 2s ease-in-out infinite;">+</span>
       </div>
 
       <h1>Sign In</h1>
-      <p class="auth-subtitle">NAS Management Portal</p>
+      <p class="auth-subtitle">Management Portal</p>
 
       <div id="alert" class="alert alert-error hidden"></div>
 
@@ -198,12 +192,6 @@
   </div>
 
   <script>
-    // Show LXD badge if it was available in the last session.
-    if (localStorage.getItem('zfsnas_lxd_available') === '1') {
-      const b = document.getElementById('login-lxd-badge');
-      if (b) b.style.display = 'inline';
-    }
-
     let _pendingTotpToken = '';
 
     // Restore saved username on load.
