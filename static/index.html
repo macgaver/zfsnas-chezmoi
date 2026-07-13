@@ -1731,11 +1731,13 @@
 
       <!-- DATASETS -->
       <div class="page hidden" id="page-datasets">
-        <div class="page-header">
-          <h2>Datasets &amp; Zvol</h2>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" onclick="openCreateDataset()">+ Create Dataset</button>
-            <button class="btn btn-primary btn-sm" onclick="openCreateZVol()">+ Create ZVol</button>
+        <!-- Per-pool tabs (injected into #datasets-tab-bar by renderDatasets)
+             share one row with the create buttons; no page title. -->
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin-bottom:16px;">
+          <div id="datasets-tab-bar" style="display:flex;gap:2px;flex-wrap:wrap;"></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;">
+            <button class="btn btn-primary btn-sm" onclick="openCreateDataset()">+ Dataset</button>
+            <button class="btn btn-primary btn-sm" onclick="openCreateZVol()">+ ZVol</button>
           </div>
         </div>
         <div id="datasets-content"><div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div></div>
@@ -21304,6 +21306,8 @@ let zvolCache = [];
 async function loadDatasets() {
   const el = document.getElementById('datasets-content');
   el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div>';
+  // Clear any stale per-pool tabs from a previous server/view while (re)loading.
+  { const tb = document.getElementById('datasets-tab-bar'); if (tb) tb.innerHTML = ''; }
   // Warm the topology cache (fire-and-forget) so the detail popups' Related
   // VM/LXC buttons appear instantly — a cold /api/map/topology takes seconds.
   _dsRelatedInstances('');
@@ -21455,17 +21459,21 @@ function _datasetRow(d, showComment, showQuota, hasChildren) {
     </tr>`;
 }
 
-const _dsCollapsed = new Map();    // poolName → bool (pool section collapse)
 const _dsRowCollapsed = new Map(); // dsName → bool (per-dataset row collapse)
 let _dsFirstLoad = true;
+let _dsActivePool = '';            // name of the pool whose tab is currently shown
 
-function toggleDsSection(poolName) {
-  _dsCollapsed.set(poolName, !_dsCollapsed.get(poolName));
-  const tableEl   = document.getElementById('ds-table-' + CSS.escape(poolName));
-  const chevronEl = document.getElementById('ds-chevron-' + CSS.escape(poolName));
-  const collapsed = _dsCollapsed.get(poolName);
-  if (tableEl)   tableEl.style.display   = collapsed ? 'none' : '';
-  if (chevronEl) chevronEl.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+// Switch the Datasets & Zvol screen to the tab of the given pool — one tab per
+// ZFS pool. Panels are all rendered; we just toggle visibility so switching is
+// instant and preserves row-collapse state without a re-fetch.
+function switchDsPoolTab(poolName) {
+  _dsActivePool = poolName;
+  const root = document.getElementById('datasets-content');
+  if (!root) return;
+  root.querySelectorAll('[data-ds-pool-tab]').forEach(b =>
+    b.classList.toggle('active', b.dataset.dsPoolTab === poolName));
+  root.querySelectorAll('.ds-pool-panel').forEach(p =>
+    p.style.display = (p.dataset.dsPool === poolName) ? '' : 'none');
 }
 
 function toggleDsRow(dsName) {
@@ -21535,10 +21543,12 @@ function renderDatasets(el) {
     ...zvolCache.map(z => z.pool),
   ];
   const poolNames = [...new Set(allPoolNames)];
-  const multiPool = poolNames.length > 1;
 
-  const sections = poolNames.map(poolName => {
-    const collapsed = !!_dsCollapsed.get(poolName);
+  // One tab per ZFS pool (tab label = pool name). Keep the previously-selected
+  // tab when it still exists, otherwise default to the first pool.
+  if (!_dsActivePool || !poolNames.includes(_dsActivePool)) _dsActivePool = poolNames[0];
+
+  const panels = poolNames.map(poolName => {
     const poolDs = datasetCache.filter(d => d.name.split('/')[0] === poolName && d.depth > 0);
     const poolZVols = zvolCache.filter(z => z.pool === poolName);
     const showComment = poolDs.some(d => d.comment && d.comment.trim()) || poolZVols.some(z => z.comment && z.comment.trim());
@@ -21568,26 +21578,30 @@ function renderDatasets(el) {
       const parent = z.name.split('/').slice(0, -1).join('/');
       if (!poolDs.some(d => d.name === parent)) interleavedRows.push(_zvolRow(z, showComment, showQuota));
     });
-    const header = multiPool ? `
-      <div onclick="toggleDsSection('${esc(poolName)}')"
-           style="display:flex;align-items:center;gap:8px;margin:20px 0 8px;cursor:pointer;user-select:none;">
-        <svg id="ds-chevron-${esc(poolName)}" xmlns="http://www.w3.org/2000/svg" width="14" height="14"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-             stroke-linecap="round" stroke-linejoin="round"
-             style="color:var(--text-3);transition:transform .15s;transform:rotate(${collapsed ? '-90' : '0'}deg)">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-        <span style="font-size:14px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:4px;">🗄 ${esc(poolName)}${(()=>{ const p=allPoolsData.find(x=>x.name===poolName); return p&&p.encrypted?lockSVG(p.key_locked):''; })()}</span>
-      </div>` : '';
     const referSnapTh = `<th>Refer+Snap <i class="info-tip tip-down" data-tip="Referenced: space used by the live filesystem right now.&#10;&#10;+ Snapshot space: blocks kept alive by snapshots after files were deleted. This space cannot be reclaimed until those snapshots are destroyed.&#10;&#10;Together they equal the total Used space."></i></th>`;
     const allRows = interleavedRows.join('');
     const tableContent = allRows
       ? `<table><thead><tr><th>Dataset / ZVol</th>${referSnapTh}<th>Used</th>${showQuota ? '<th>Quota</th>' : ''}<th>Compression</th>${showComment ? '<th>Comment</th>' : ''}<th></th></tr></thead><tbody>${allRows}</tbody></table>`
       : `<div style="padding:16px 0;color:var(--text-3);font-size:13px;">No datasets or zvols yet.</div>`;
-    return `${header}<div id="ds-table-${esc(poolName)}" class="table-wrap" style="${collapsed ? 'display:none' : ''}">${tableContent}</div>`;
+    const active = poolName === _dsActivePool;
+    return `<div class="ds-pool-panel table-wrap" data-ds-pool="${esc(poolName)}" style="${active ? '' : 'display:none;'}">${tableContent}</div>`;
   }).join('');
 
-  el.innerHTML = sections;
+  // Tab bar — one tab per pool, labelled with the pool name (+ lock badge when
+  // the pool is encrypted). Injected into #datasets-tab-bar so it shares a row
+  // with the create buttons; uses the shared .cap-tab underline-tab style.
+  const tabBar = poolNames.map(poolName => {
+    const p = allPoolsData.find(x => x.name === poolName);
+    const lock = p && p.encrypted ? lockSVG(p.key_locked) : '';
+    const active = poolName === _dsActivePool;
+    return `<button class="cap-tab${active ? ' active' : ''}" data-ds-pool-tab="${esc(poolName)}"
+              onclick="switchDsPoolTab('${esc(poolName)}')"
+              style="display:inline-flex;align-items:center;gap:5px;">🗄 ${esc(poolName)}${lock}</button>`;
+  }).join('');
+  const tabBarEl = document.getElementById('datasets-tab-bar');
+  if (tabBarEl) tabBarEl.innerHTML = tabBar;
+
+  el.innerHTML = panels;
   _applyDsRowCollapse();
 }
 
