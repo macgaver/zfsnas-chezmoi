@@ -418,28 +418,40 @@ func HandleComposePutSchedule(appCfg *config.AppConfig) http.HandlerFunc {
 }
 
 // HandleComposeDeleteSchedule turns off scheduled auto-updates.
+// RemoveComposeUpdatePolicy drops the auto-update schedule for the named
+// compose stack (if any) and persists the config. Returns true when a policy
+// was actually removed. Exported so the instance-delete and stack-push flows
+// can clean up a stack's schedule when the stack leaves this host — otherwise
+// the scheduler keeps firing against an instance that no longer exists and
+// spams the log with "Instance not found" (observed after a stack was pushed
+// from one server to another). Takes composeSchedMu itself, so never call it
+// while that lock is held.
+func RemoveComposeUpdatePolicy(appCfg *config.AppConfig, name string) bool {
+	composeSchedMu.Lock()
+	defer composeSchedMu.Unlock()
+	kept := appCfg.ComposeUpdatePolicies[:0]
+	removed := false
+	for _, p := range appCfg.ComposeUpdatePolicies {
+		if p.Instance == name {
+			removed = true
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if !removed {
+		return false
+	}
+	appCfg.ComposeUpdatePolicies = kept
+	_ = config.SaveAppConfig(appCfg)
+	return true
+}
+
 // DELETE /api/incus/compose-stacks/{name}/schedule
 func HandleComposeDeleteSchedule(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.Vars(r)["name"]
 		sess := MustSession(r)
-		composeSchedMu.Lock()
-		kept := appCfg.ComposeUpdatePolicies[:0]
-		removed := false
-		for _, p := range appCfg.ComposeUpdatePolicies {
-			if p.Instance == name {
-				removed = true
-				continue
-			}
-			kept = append(kept, p)
-		}
-		appCfg.ComposeUpdatePolicies = kept
-		err := config.SaveAppConfig(appCfg)
-		composeSchedMu.Unlock()
-		if err != nil {
-			jsonErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
+		removed := RemoveComposeUpdatePolicy(appCfg, name)
 		if removed {
 			audit.Log(audit.Entry{
 				User: sess.Username, Role: sess.Role,
@@ -467,6 +479,20 @@ func composeNextRun(p config.ComposeUpdatePolicy, from time.Time) time.Time {
 		EveryN: p.EveryN, Unit: p.Unit, HourOfDay: p.HourOfDay,
 		MinuteOfHour: p.MinuteOfHour, Weekday: p.Weekday, DayOfMonth: p.DayOfMonth,
 	}, from)
+}
+
+// composeErrInstanceGone reports whether an update error means the target
+// instance no longer exists on this host (Incus phrases it "Instance not
+// found" / "Failed to fetch instance …"). Used to auto-remove orphaned
+// schedules rather than retry them forever.
+func composeErrInstanceGone(err error) bool {
+	if err == nil {
+		return false
+	}
+	m := strings.ToLower(err.Error())
+	return strings.Contains(m, "instance not found") ||
+		strings.Contains(m, "failed to fetch instance") ||
+		strings.Contains(m, "not found in project")
 }
 
 // StartComposeAutoUpdater kicks off the per-minute compose auto-update loop.
@@ -511,6 +537,25 @@ func runComposeUpdatePolicy(p config.ComposeUpdatePolicy, appCfg *config.AppConf
 	defer composeUpdateJobByStack.Delete(p.Instance)
 
 	err := system.ComposeStackUpdate(p.Instance, nil)
+
+	// Self-heal orphan schedules: if the instance no longer exists on this host
+	// (e.g. the stack was pushed/moved to another server, or deleted outside
+	// the schedule UI), drop the policy so the scheduler stops firing against a
+	// ghost instance every interval. Without this the log fills with
+	// "Failed to fetch instance … Instance not found" forever and a failure
+	// alert is sent on every tick.
+	if err != nil && composeErrInstanceGone(err) {
+		if RemoveComposeUpdatePolicy(appCfg, p.Instance) {
+			log.Printf("[compose-auto-update] %s no longer exists — removed its orphaned auto-update schedule", p.Instance)
+			audit.Log(audit.Entry{
+				User: "system", Role: "system",
+				Action: audit.ActionDeleteSchedule, Target: "compose-update-schedule:" + p.Instance,
+				Result: audit.ResultOK, Details: "auto-removed: instance no longer exists on this host",
+			})
+		}
+		return
+	}
+
 	if err == nil {
 		system.ComposeSetConfigKey(p.Instance, composeLastUpdateKey, now.Format(time.RFC3339)) //nolint:errcheck
 	}

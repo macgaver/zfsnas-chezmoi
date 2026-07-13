@@ -15,6 +15,42 @@
       0%, 100% { opacity: 1; text-shadow: 0 0 8px #fbbf24, 0 0 16px #f59e0b, 0 0 2px #fff; }
       50%       { opacity: .6; text-shadow: 0 0 4px #fbbf24, 0 0 8px #f59e0b; }
     }
+
+    /* ── Login backdrop ─────────────────────────────────────────────────────
+       A self-hosted circuit-grid background behind the sign-in card, lit with
+       neon GREEN + our Tron cyan. Pure CSS gradients + one inline SVG (no
+       external image — the page CSP blocks remote assets). Scoped to the login
+       page so it never touches the app. */
+    .login-bg {
+      position: fixed; inset: 0; z-index: 0; overflow: hidden;
+      background:
+        radial-gradient(ellipse 72% 58% at 16% 18%, rgba(16,235,150,0.22), transparent 60%),
+        radial-gradient(ellipse 68% 58% at 84% 82%, rgba(0,210,255,0.20), transparent 60%),
+        radial-gradient(ellipse 120% 90% at 50% 50%, rgba(0,240,255,0.05), transparent 72%),
+        linear-gradient(135deg, #001a12 0%, #00090f 48%, #001526 100%);
+    }
+    .login-bg-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    /* A soft vignette keeps the centre calm so the card stays legible. */
+    .login-bg::after {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 46% 52% at 50% 50%, rgba(0,6,10,0.55), transparent 70%);
+      pointer-events: none;
+    }
+    /* The card + form sit above the backdrop. */
+    .auth-page { position: relative; z-index: 1; background: transparent !important; }
+    body.light .login-bg {
+      background:
+        radial-gradient(ellipse 72% 58% at 16% 18%, rgba(16,185,129,0.18), transparent 60%),
+        radial-gradient(ellipse 68% 58% at 84% 82%, rgba(0,160,210,0.16), transparent 60%),
+        linear-gradient(135deg, #eafff6 0%, #f2fbff 50%, #e8f6ff 100%);
+    }
+    body.light .login-bg::after { background: radial-gradient(ellipse 46% 52% at 50% 50%, rgba(255,255,255,0.5), transparent 70%); }
+
+    @keyframes login-flow { to { stroke-dashoffset: -400; } }
+    @keyframes login-pulse { 0%,100% { opacity:.35 } 50% { opacity:1 } }
+    @media (prefers-reduced-motion: reduce) {
+      .login-flow-line, .login-node { animation: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -27,6 +63,81 @@
       if (effective === 'light') document.body.classList.add('light');
     })();
   </script>
+
+  <!-- Sign-in backdrop: circuit grid + neon green/Tron-cyan glow (self-hosted). -->
+  <div class="login-bg" aria-hidden="true">
+    <svg class="login-bg-svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lg-gc" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#10eb96"/>
+          <stop offset="0.55" stop-color="#00e0d0"/>
+          <stop offset="1" stop-color="#00d2ff"/>
+        </linearGradient>
+        <radialGradient id="lg-node" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stop-color="#aeffe4"/>
+          <stop offset="0.5" stop-color="#10eb96"/>
+          <stop offset="1" stop-color="#10eb96" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="lg-node2" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stop-color="#b8f4ff"/>
+          <stop offset="0.5" stop-color="#00d2ff"/>
+          <stop offset="1" stop-color="#00d2ff" stop-opacity="0"/>
+        </radialGradient>
+        <pattern id="lg-grid" width="44" height="44" patternUnits="userSpaceOnUse">
+          <path d="M44 0H0V44" fill="none" stroke="#1ee6ff" stroke-width="1" opacity="0.06"/>
+        </pattern>
+        <pattern id="lg-grid-lg" width="220" height="220" patternUnits="userSpaceOnUse">
+          <path d="M220 0H0V220" fill="none" stroke="#12d0a0" stroke-width="1.4" opacity="0.08"/>
+        </pattern>
+        <filter id="lg-glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="3.2" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- fine + coarse grid -->
+      <rect width="1440" height="900" fill="url(#lg-grid)"/>
+      <rect width="1440" height="900" fill="url(#lg-grid-lg)"/>
+
+      <!-- faint hex accents -->
+      <g fill="none" stroke="url(#lg-gc)" stroke-width="1.5" opacity="0.16">
+        <polygon points="150,120 210,120 240,172 210,224 150,224 120,172"/>
+        <polygon points="1250,690 1310,690 1340,742 1310,794 1250,794 1220,742"/>
+        <polygon points="1300,150 1345,150 1367,189 1345,228 1300,228 1278,189" opacity="0.7"/>
+      </g>
+
+      <!-- circuit traces (kept toward the edges so the centre card stays clean) -->
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#lg-glow)">
+        <path d="M-20 210 H180 L250 280 H470 L520 230" stroke="#10eb96" stroke-width="2" opacity="0.55"/>
+        <path d="M-20 340 H110 L150 300 H360" stroke="#00d2ff" stroke-width="2" opacity="0.5"/>
+        <path d="M1460 250 H1230 L1160 320 H980 L930 270" stroke="#00d2ff" stroke-width="2" opacity="0.55"/>
+        <path d="M1460 640 H1250 L1190 700 H1000" stroke="#10eb96" stroke-width="2" opacity="0.5"/>
+        <path d="M-20 720 H200 L270 650 H430" stroke="#00e0d0" stroke-width="2" opacity="0.5"/>
+        <path d="M760 940 V820 L820 760 V620" stroke="#10eb96" stroke-width="2" opacity="0.4"/>
+        <path d="M620 -20 V90 L560 150 V300" stroke="#00d2ff" stroke-width="2" opacity="0.4"/>
+      </g>
+
+      <!-- animated data pulses riding a couple of traces -->
+      <g fill="none" stroke-linecap="round">
+        <path class="login-flow-line" d="M-20 210 H180 L250 280 H470 L520 230" stroke="#aeffe4" stroke-width="2.4"
+              stroke-dasharray="26 374" opacity="0.9" style="animation: login-flow 6s linear infinite;"/>
+        <path class="login-flow-line" d="M1460 250 H1230 L1160 320 H980 L930 270" stroke="#b8f4ff" stroke-width="2.4"
+              stroke-dasharray="26 374" opacity="0.9" style="animation: login-flow 7.5s linear infinite;"/>
+      </g>
+
+      <!-- node dots at trace junctions -->
+      <g class="login-node">
+        <circle cx="250" cy="280" r="9" fill="url(#lg-node)" style="animation: login-pulse 3.4s ease-in-out infinite;"/>
+        <circle cx="520" cy="230" r="7" fill="url(#lg-node)" style="animation: login-pulse 4.1s ease-in-out infinite;"/>
+        <circle cx="1160" cy="320" r="9" fill="url(#lg-node2)" style="animation: login-pulse 3.8s ease-in-out infinite;"/>
+        <circle cx="1190" cy="700" r="8" fill="url(#lg-node)" style="animation: login-pulse 4.6s ease-in-out infinite;"/>
+        <circle cx="270" cy="650" r="7" fill="url(#lg-node2)" style="animation: login-pulse 3.1s ease-in-out infinite;"/>
+        <circle cx="820" cy="760" r="7" fill="url(#lg-node)" style="animation: login-pulse 5s ease-in-out infinite;"/>
+        <circle cx="560" cy="150" r="7" fill="url(#lg-node2)" style="animation: login-pulse 4.3s ease-in-out infinite;"/>
+      </g>
+    </svg>
+  </div>
+
   <div class="auth-page">
     <div class="auth-card">
 

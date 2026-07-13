@@ -41460,15 +41460,23 @@ let _ciComposeLogsWS = null;
 // carries its own per-stack power/update/edit/delete controls.
 function _ciApplyComposeView() {
   _ciSetFlatComposeVisible(false);
+  // The header Update button (Update now + Schedule…) is a per-stack action and
+  // must be shown for ANY compose stack, whether the modern grouped Docker card
+  // or the legacy flat card is painted. It used to be bundled with the flat
+  // card's visibility (see _ciSetFlatComposeVisible), so the modern view of a
+  // RUNNING stack hid it — which made the Auto-Update Schedule dialog
+  // unreachable (its only entry point lives in this button's dropdown). Drive
+  // its visibility off _ciIsCompose alone.
+  const upd = document.getElementById('ci-update-wrap');
+  if (upd) upd.style.display = _ciIsCompose ? '' : 'none';
 }
 
-// _ciSetFlatComposeVisible toggles the legacy flat "Stack Containers" card and
-// the header Update button together.
+// _ciSetFlatComposeVisible toggles ONLY the legacy flat "Stack Containers"
+// card. The header Update button is handled by _ciApplyComposeView so it stays
+// visible in the modern grouped view too (see the note there).
 function _ciSetFlatComposeVisible(show) {
   const card = document.getElementById('ci-compose-card');
-  const upd  = document.getElementById('ci-update-wrap');
   if (card) card.style.display = (show && _ciIsCompose) ? '' : 'none';
-  if (upd)  upd.style.display  = (show && _ciIsCompose) ? '' : 'none';
 }
 
 function _ciComposeStateColor(state) {
