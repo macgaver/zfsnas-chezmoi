@@ -11485,14 +11485,14 @@ Select the Console tab to load.</pre>
       </a>
     </div>
 
-    <!-- Donation -->
+    <!-- Support -->
     <a href="https://ko-fi.com/macgaver" target="_blank" rel="noopener"
-       style="display:flex;align-items:center;justify-content:center;gap:14px;padding:16px 20px;background:linear-gradient(135deg,rgba(255,94,91,0.18) 0%,rgba(255,149,0,0.14) 100%);border:1.5px solid rgba(255,94,91,0.45);border-radius:10px;text-decoration:none;transition:border-color .15s,box-shadow .15s;box-shadow:0 2px 12px rgba(255,94,91,0.12);"
-       onmouseover="this.style.borderColor='rgba(255,94,91,0.75)';this.style.boxShadow='0 4px 20px rgba(255,94,91,0.28)'" onmouseout="this.style.borderColor='rgba(255,94,91,0.45)';this.style.boxShadow='0 2px 12px rgba(255,94,91,0.12)'">
-      <span style="font-size:32px;line-height:1;flex-shrink:0;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></svg></span>
+       style="display:flex;align-items:center;justify-content:center;gap:14px;padding:16px 20px;background:linear-gradient(135deg,rgba(16,235,150,0.16) 0%,rgba(0,210,255,0.14) 100%);border:1.5px solid rgba(16,235,150,0.45);border-radius:10px;text-decoration:none;transition:border-color .15s,box-shadow .15s;box-shadow:0 2px 12px rgba(0,210,255,0.14);"
+       onmouseover="this.style.borderColor='rgba(0,224,208,0.8)';this.style.boxShadow='0 4px 22px rgba(0,224,208,0.3)'" onmouseout="this.style.borderColor='rgba(16,235,150,0.45)';this.style.boxShadow='0 2px 12px rgba(0,210,255,0.14)'">
+      <span style="font-size:32px;line-height:1;flex-shrink:0;color:#10eb96;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></svg></span>
       <div style="text-align:left;">
-        <div style="font-size:14px;font-weight:700;color:#ff6b6b;margin-bottom:2px;">Tip the dev team 10$</div>
-        <div style="font-size:12px;color:var(--text-3);line-height:1.4;">Support the project on Ko-fi — Thanks!</div>
+        <div style="font-size:14px;font-weight:700;color:#10eb96;margin-bottom:2px;">Enjoying ZNAS? Help it grow</div>
+        <div style="font-size:12px;color:var(--text-3);line-height:1.4;">Your support keeps new features shipping and the project independent. Back us on Ko-fi — every bit means a lot!</div>
       </div>
     </a>
   </div>
@@ -37028,7 +37028,7 @@ function runReplicationTask(id, name) {
     if (layer===3) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>', name:n.name,
       sub:`↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}`,
       sub2:`${mapBytes(n.used)} / ${mapBytes(n.usable)}`};
-    if (layer===2) return {icon:mapIcon(n), name:mapLeaf(n.name)+(n.encrypted?' <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>':''),
+    if (layer===2) return {icon:mapIcon(n), name:mapLeaf(n.name), encrypted:!!n.encrypted,
       sub:mapBytes(n.used), sub2:''};
     if (layer===0){
       if (n.kind==='docker'){ // container name + short image; status shown via the dot
@@ -37080,7 +37080,10 @@ function runReplicationTask(id, name) {
     const t = mapNodeText(n, layer);
     const titleLines = wrapName(t.name);
     let w = 0;
-    titleLines.forEach((ln,i)=> w = Math.max(w, _tw((i===0?t.icon+' ':'')+ln, 11, true)));
+    // The type icon is drawn as a separate positioned <svg> (see mapIconEl), so
+    // measure the NAME text only and reserve a fixed icon gutter on line 1 —
+    // never measure the icon's SVG markup string (that inflated boxes hugely).
+    titleLines.forEach((ln,i)=> w = Math.max(w, _tw(ln, 11, true) + (i===0 ? MAP_ICON_W+5 : 0)));
     w = Math.max(w, _tw(t.sub,9.5,false), _tw(t.sub2,9.5,false));
     if (n.kind==='docker') w += 12; // reserve top-right room for the status dot
     const rows = titleLines.length + (t.sub?1:0) + (t.sub2?1:0);
@@ -37088,7 +37091,7 @@ function runReplicationTask(id, name) {
     // Box width is clamped at MAX_W but the text was not — ellipsize the sub
     // lines to the inner width so text never renders outside the box.
     return {
-      txt: { icon:t.icon, titleLines,
+      txt: { icon:t.icon, encrypted:t.encrypted, titleLines,
              sub:  _fitLine(t.sub,  9.5, boxW-18, false),
              sub2: _fitLine(t.sub2, 9.5, boxW-18, false) },
       w: boxW,
@@ -37110,6 +37113,34 @@ function runReplicationTask(id, name) {
       case 'docker':     return '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a5 5 0 0 0 5 5h6a5 5 0 0 0 5-5v-1H3z"/><path d="M4 9h2v2H4zM7 9h2v2H7zM10 9h2v2h-2zM10 6h2v2h-2z"/><path d="M19 12c1.5 0 3-1 3-3-1 0-2 .5-2.5 1"/></svg>';
     }
     return '•';
+  }
+
+  // Reserved horizontal room (px) for a node's type icon on its first title
+  // line — used by BOTH the box-width measurement and the label layout so they
+  // agree.
+  const MAP_ICON_W = 15;
+
+  // Render a znas-icon markup string as a POSITIONED nested <svg> for placement
+  // inside the topology SVG. Critical: the icon must never go inside a <text>
+  // element — SVG <text> only holds character data, so embedding <svg> markup
+  // there renders the raw "<svg class=…>" string and hides the box name. (That
+  // is exactly what broke the topology after emoji were swapped for inline
+  // SVGs: mapIcon()/mapNodeText() started returning <svg> markup that was being
+  // concatenated into the node's <text> label.) We strip the icon's inline 1em
+  // sizing / vertical-align (meaningless in SVG) and pin explicit x/y/size, and
+  // colour it via the node's currentColor. Non-svg fallbacks (the '•' bullet)
+  // are drawn as a small <text> instead.
+  function mapIconEl(markup, x, y, size){
+    if (!markup) return '';
+    if (markup.slice(0, 4) !== '<svg') {
+      return `<text class="map-node-icon-txt" x="${x}" y="${(y+size-3).toFixed(1)}" style="fill:var(--text)">${mapEsc(markup)}</text>`;
+    }
+    const gt = markup.indexOf('>'), end = markup.lastIndexOf('</svg>');
+    if (gt < 0 || end < 0) return '';
+    const inner = markup.slice(gt + 1, end);
+    return `<svg class="map-node-icon" x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 24 24" `
+      + `fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" `
+      + `style="color:var(--text)">${inner}</svg>`;
   }
 
   // Hide the "Networking Layer" switch button when virtualization is off, and
@@ -37415,7 +37446,8 @@ function runReplicationTask(id, name) {
   function netMeasure(icon, name, subs){
     const lines = wrapName(name);
     let w = 0;
-    lines.forEach((ln,i)=> w = Math.max(w, _tw((i===0?icon+' ':'')+ln, 11, true)));
+    // Icon is a separate positioned <svg> — measure name text + fixed gutter.
+    lines.forEach((ln,i)=> w = Math.max(w, _tw(ln, 11, true) + (i===0 ? MAP_ICON_W+5 : 0)));
     (subs||[]).forEach(s=> w = Math.max(w, _tw(s, 9.5, false)));
     let cleanSubs = (subs||[]).filter(Boolean);
     const rows = lines.length + cleanSubs.length;
@@ -37429,10 +37461,12 @@ function runReplicationTask(id, name) {
   }
   function netNodeMarkup(o){
     const x = o.cx - o.w/2, y = o.cy - o.h/2;
+    // Type icon as a positioned nested <svg> (never inside <text> — see mapIconEl).
+    const iconEl = mapIconEl(o.icon, 7, 3, MAP_ICON_W);
+    const nameX0 = 7 + MAP_ICON_W + 4;
     let title = `<text class="net-node-title">`;
     o.lines.forEach((ln,i)=>{
-      const t = (i===0 ? (o.icon?o.icon+' ':'') : '') + ln;
-      title += `<tspan x="9" ${i===0?`y="16"`:`dy="14"`}>${mapEsc(t)}</tspan>`;
+      title += `<tspan x="${i===0 ? nameX0 : 9}" ${i===0?`y="16"`:`dy="14"`}>${mapEsc(ln)}</tspan>`;
     });
     title += `</text>`;
     let subs = '';
@@ -37445,7 +37479,7 @@ function runReplicationTask(id, name) {
     const tip = o.tip ? `<title>${mapEsc(o.tip)}</title>` : '';
     return `<g class="net-node ${o.cls}" data-id="${mapEsc(o.id)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})"${hue}>`
       + `<rect class="net-node-bg" width="${o.w}" height="${o.h}" rx="9"/>`
-      + tip + title + subs + dot + `</g>`;
+      + tip + iconEl + title + subs + dot + `</g>`;
   }
   function netSpokeMarkup(id, x1, y1, x2, y2, hue, kind){
     const mx = ((x1+x2)/2).toFixed(1), my = ((y1+y2)/2 - 4).toFixed(1);
@@ -38252,13 +38286,20 @@ function runReplicationTask(id, name) {
   function mapNodeMarkup(n){
     const cls = mapNodeClass(n), t = n.__txt;
     const tl = (t && t.titleLines) || [''];
-    // Title: icon + name on line 1, name continuation on further lines.
+    // Type icon: a positioned nested <svg> at the box's top-left (NOT inside the
+    // <text> — see mapIconEl). Line 1 of the name is indented past it; wrapped
+    // continuation lines sit flush at x=9. A small lock badge is drawn at the
+    // top-right for encrypted datasets.
+    const iconEl = mapIconEl(t.icon, 7, 4, MAP_ICON_W);
+    const nameX0 = 7 + MAP_ICON_W + 4;
     let title = `<text class="map-node-title">`;
     tl.forEach((ln,i)=>{
-      const txt = (i===0 ? (t.icon?t.icon+' ':'') : '') + ln;
-      title += `<tspan x="9" ${i===0 ? `y="${MAP_BASE}"` : `dy="${MAP_LINE}"`}>${mapEsc(txt)}</tspan>`;
+      title += `<tspan x="${i===0 ? nameX0 : 9}" ${i===0 ? `y="${MAP_BASE}"` : `dy="${MAP_LINE}"`}>${mapEsc(ln)}</tspan>`;
     });
     title += `</text>`;
+    const lockEl = t.encrypted
+      ? mapIconEl('<svg><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>', n.__w-19, 4, 12)
+      : '';
     const subY  = MAP_BASE + tl.length*MAP_LINE;
     const sub2Y = subY + MAP_LINE;
     // Docker nodes carry a health dot in the top-right corner (green=healthy,
@@ -38269,6 +38310,7 @@ function runReplicationTask(id, name) {
     return `<g class="map-node ${cls}" data-id="${n.id}" transform="translate(${n.__x.toFixed(1)},${n.__y.toFixed(1)})">`
       + `<rect class="map-node-base" width="${n.__w}" height="${n.__h}" rx="9"/>`
       + `<rect class="map-node-bg"   width="${n.__w}" height="${n.__h}" rx="9"/>`
+      + iconEl + lockEl
       + title
       + `<text class="map-node-sub"   x="9" y="${subY}"  data-role="sub"></text>`
       + `<text class="map-node-sub2"  x="9" y="${sub2Y}" data-role="sub2"></text>`
