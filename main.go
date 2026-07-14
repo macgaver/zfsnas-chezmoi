@@ -256,6 +256,9 @@ func main() {
 	// ===== Compose stack auto-update scheduler =====
 	handlers.StartComposeAutoUpdater(appCfg)
 
+	// v6.7.13 — coordinated ZFS snapshots for all-ZFS MergerFS unions.
+	handlers.StartMergerFSSnapshotScheduler(appCfg)
+
 	// ===== Scrub scheduler =====
 	handlers.StartScrubScheduler(appCfg)
 

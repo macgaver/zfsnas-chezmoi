@@ -1588,6 +1588,16 @@
               <span id="prereq-syncoid-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
               <button id="prereq-syncoid-btn" class="btn btn-ghost btn-sm" onclick="installSyncoid()" style="font-size:12px;white-space:nowrap;">Install syncoid</button>
             </div>
+            <!-- v6.7.13: MergerFS Support -->
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+              <div style="flex:1;">
+                <span style="color:var(--text-1);font-size:14px;font-weight:500;">MergerFS Support</span>
+                <i class="info-tip" data-tip="Union filesystem that pools several directories (e.g. multiple ZFS datasets) into one mountpoint — great for a single media library spread across disks. ZNAS downloads the correct mergerfs build for this OS from the official GitHub releases. When installed, &#x22;Datasets &amp; Zvol&#x22; becomes &#x22;Datasets &amp; FS&#x22; and gains a &#x22;+ Other&#x22; action to create a MergerFS. If every source is a ZFS dataset, ZNAS can coordinate global snapshots for the whole union."></i>
+                <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Package: mergerfs (from github.com/trapexit/mergerfs)</div>
+              </div>
+              <span id="prereq-mergerfs-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <button id="prereq-mergerfs-btn" class="btn btn-ghost btn-sm" onclick="installMergerFS()" style="font-size:12px;white-space:nowrap;">Install MergerFS</button>
+            </div>
             <div id="optfeat-lxd-enable-row" style="display:none;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
                 <span style="color:var(--text-1);font-size:14px;font-weight:500;">VMs &amp; Containers Support</span>
@@ -1743,9 +1753,16 @@
              share one row with the create buttons; no page title. -->
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin-bottom:16px;">
           <div id="datasets-tab-bar" style="display:flex;gap:2px;flex-wrap:wrap;"></div>
-          <div style="display:flex;gap:8px;padding-bottom:8px;">
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:center;">
             <button class="btn btn-primary btn-sm" onclick="openCreateDataset()">+ Dataset</button>
             <button class="btn btn-primary btn-sm" onclick="openCreateZVol()">+ ZVol</button>
+            <!-- v6.7.13: MergerFS — shown only when the feature is enabled. -->
+            <div id="ds-other-btn" style="position:relative;display:none;">
+              <button class="btn btn-ghost btn-sm" onclick="_dsToggleOtherMenu(event)">+ Other ▾</button>
+              <div id="ds-other-menu" class="hidden" style="position:absolute;right:0;top:110%;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.35);min-width:200px;z-index:300;overflow:hidden;">
+                <button onclick="_dsCloseOtherMenu();openCreateMergerFS()" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--text);">Create a MergerFS</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="datasets-content"><div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div></div>
@@ -12570,8 +12587,11 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
     // v6.4.28 — feature flags driving the Virtualization tab + Monitor tab visibility.
     window._lxdAvailable       = !!d.lxd_available;
     window._lxdMetricsEnabled  = !!d.lxd_metrics_enabled;
+    window._mergerfsInstalled  = !!d.mergerfs_installed;
+    window._mergerfsEnabled    = !!d.mergerfs_enabled;
     updateVirtTabVisibility(window._lxdAvailable);
     if (typeof updateMonitorTabVisibility === 'function') updateMonitorTabVisibility();
+    if (typeof _applyMergerFSNav === 'function') _applyMergerFSNav();
     updateSchedReplUserHint();
   }).catch(() => {}).finally(() => { _sidebarVersionCheck(); });
 
@@ -14653,6 +14673,82 @@ async function loadPrereqs() {
   _updateDiskPowerPrereqStatus();
   _updateLXDEnableStatus();
   _updateSyncoidPrereqStatus();
+  _updateMergerFSPrereqStatus();
+}
+
+// Reflects whether mergerfs is installed (v6.7.13 optional feature).
+async function _updateMergerFSPrereqStatus() {
+  const stat = document.getElementById('prereq-mergerfs-status');
+  const btn  = document.getElementById('prereq-mergerfs-btn');
+  if (!stat) return;
+  try {
+    const r = await fetch('/api/mergerfs/status');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.installed) {
+      stat.innerHTML = znasIcon('check', {size:14, style:'color:#30d158;vertical-align:-0.15em'}) + ' Installed';
+      stat.style.color = '#30d158'; stat.style.fontWeight = '600';
+      if (btn) { btn.textContent = 'Uninstall'; btn.disabled = false; btn.setAttribute('onclick','uninstallMergerFS()'); }
+    } else {
+      stat.textContent = 'Not installed'; stat.style.color = 'var(--text-3)'; stat.style.fontWeight = '';
+      if (btn) { btn.style.display = ''; btn.disabled = false; btn.textContent = 'Install MergerFS'; btn.setAttribute('onclick','installMergerFS()'); }
+    }
+  } catch (_) {}
+}
+
+// v6.7.13 — install mergerfs (fetches the correct build for this OS from GitHub).
+async function installMergerFS() {
+  const btn = document.getElementById('prereq-mergerfs-btn');
+  const stat = document.getElementById('prereq-mergerfs-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Installing…'; }
+  if (stat) stat.textContent = 'Installing… (downloading from GitHub)';
+  try {
+    const r = await fetch('/api/prerequisites/install-mergerfs', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) {
+      showToast(d.error || 'Install failed', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Install MergerFS'; }
+      if (stat) stat.textContent = 'Not installed';
+      return;
+    }
+    showToast('MergerFS installed — the Datasets menu is now Datasets & FS.', 'success');
+    // Refresh the enabled flag + nav so "Datasets & FS" + "+ Other" appear now.
+    window._mergerfsInstalled = true; window._mergerfsEnabled = true;
+    _applyMergerFSNav();
+    _updateMergerFSPrereqStatus();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); if (btn) { btn.disabled = false; btn.textContent = 'Install MergerFS'; } }
+}
+
+async function uninstallMergerFS() {
+  const ok = await new Promise(resolve => window.showConfirmModal
+    ? window.showConfirmModal({ title:'Uninstall MergerFS',
+        message:'All MergerFS unions will be unmounted and removed. Your source files (datasets/folders) are NOT touched.',
+        confirmLabel:'Uninstall', confirmDanger:true, onConfirm:()=>resolve(true), onCancel:()=>resolve(false) })
+    : resolve(window.confirm('Uninstall MergerFS?')));
+  if (!ok) return;
+  const btn = document.getElementById('prereq-mergerfs-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Uninstalling…'; }
+  try {
+    const r = await fetch('/api/prerequisites/uninstall-mergerfs', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { showToast(d.error || 'Uninstall failed', 'error'); _updateMergerFSPrereqStatus(); return; }
+    showToast('MergerFS removed.', 'success');
+    window._mergerfsInstalled = false; window._mergerfsEnabled = false;
+    _applyMergerFSNav();
+    _updateMergerFSPrereqStatus();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); _updateMergerFSPrereqStatus(); }
+}
+
+// Rename the Datasets nav + page to "Datasets & FS" when MergerFS is enabled,
+// and show/hide the "+ Other" action. Always looks identical otherwise.
+function _applyMergerFSNav() {
+  const on = !!window._mergerfsEnabled;
+  const label = document.querySelector('#nav-datasets .nav-label');
+  if (label) label.textContent = on ? ' Datasets & FS' : ' Datasets & Zvol';
+  const hdr = document.getElementById('datasets-page-title');
+  if (hdr) hdr.textContent = on ? 'Datasets & FS' : 'Datasets & Zvol';
+  const otherBtn = document.getElementById('ds-other-btn');
+  if (otherBtn) otherBtn.style.display = on ? '' : 'none';
 }
 
 // Reflects whether syncoid (sanoid package) is installed — it may have been
@@ -18689,8 +18785,12 @@ function renderPoolExists(el, pool) {
     const present = pool.member_present && pool.member_present[i];
     return st !== 'ONLINE' && present;
   });
+  // Device error counts (READ/WRITE/CKSUM) that ZFS recorded even while the pool
+  // stays ONLINE — e.g. checksum errors a scrub already repaired. These warrant a
+  // `zpool clear` (+ watch the disk) and should surface the wizard too.
+  const poolDevErrs = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.cksum_errors || 0);
   const showFixer = hasPerm('manage_pool_dataset') &&
-    (pool.health === 'SUSPENDED' || pool.health === 'DEGRADED');
+    (pool.health === 'SUSPENDED' || pool.health === 'DEGRADED' || pool.health === 'FAULTED' || poolDevErrs > 0);
   const fixerBtn = showFixer
     ? `<button class="btn btn-sm" onclick="openPoolFixerWizard()"
         style="background:linear-gradient(135deg,#6e40c9 0%,#2d7dd2 50%,#0dbbbd 100%);color:#fff;border:none;font-weight:600;letter-spacing:.02em;box-shadow:0 0 12px rgba(110,64,201,0.45);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg> Pool Fixer Wizard</button>`
@@ -20717,8 +20817,15 @@ async function openPoolFixerWizard() {
   btn.disabled = false;
   btn.style.display = '';
 
+  const devErrs = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.cksum_errors || 0);
   if (pool.health === 'SUSPENDED') {
     _openFixerSuspended(pool, btn);
+  } else if (pool.health === 'DEGRADED' || pool.health === 'FAULTED') {
+    await _openFixerDegraded(pool, btn);
+  } else if (devErrs > 0) {
+    // Pool is ONLINE but ZFS logged device errors (e.g. checksum errors a scrub
+    // already repaired). The right first step is `zpool clear`.
+    _openFixerOnlineErrors(pool, btn);
   } else {
     await _openFixerDegraded(pool, btn);
   }
@@ -20913,6 +21020,80 @@ async function _openFixerDegraded(pool, btn) {
     </div>`;
 }
 
+// ONLINE pool that has logged device errors (READ/WRITE/CKSUM) — typically
+// checksum errors a scrub already repaired. Guide the user through `zpool clear`.
+function _openFixerOnlineErrors(pool, btn) {
+  _fixerScene = 'online-clear';
+  btn.textContent = '✦ Clear Errors';
+
+  // Collect leaf devices carrying any error count, from the parsed vdev topology.
+  const errDisks = [];
+  (pool.vdevs || []).forEach(g => (g.disks || []).forEach(d => {
+    const re = d.read_err || 0, we = d.write_err || 0, ce = d.cksum_err || 0;
+    if (re + we + ce > 0) {
+      const dev = d.device || d.raw || '';
+      const short = dev.includes('/') ? dev.split('/').pop() : dev;
+      errDisks.push({ name: short || dev, full: dev, status: d.status || 'ONLINE', re, we, ce });
+    }
+  }));
+
+  const totalCksum = pool.cksum_errors || 0;
+  const totalRW = (pool.read_errors || 0) + (pool.write_errors || 0);
+  const hasData = !!pool.data_errors;
+
+  const rows = errDisks.map(d => `
+    <tr>
+      <td style="padding:6px 10px;font-family:monospace;font-size:12px;color:var(--text-1);" title="${esc(d.full)}">${esc(d.name)}</td>
+      <td style="padding:6px 10px;font-size:12px;color:${d.status === 'ONLINE' ? 'var(--text-2)' : 'var(--accent-warn)'};">${esc(d.status)}</td>
+      <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${d.re ? 'var(--accent-warn)' : 'var(--text-3)'};">${d.re}</td>
+      <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${d.we ? 'var(--accent-warn)' : 'var(--text-3)'};">${d.we}</td>
+      <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${d.ce ? 'var(--accent-warn)' : 'var(--text-3)'};">${d.ce}</td>
+    </tr>`).join('');
+
+  const dataBlock = hasData
+    ? `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:rgba(255,59,48,0.07);border:1px solid rgba(255,59,48,0.3);border-radius:var(--radius-sm);">
+         <span style="flex-shrink:0;color:var(--accent-danger);"><svg class="znas-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+         <div>
+           <div style="font-weight:600;font-size:14px;color:var(--text-1);margin-bottom:4px;">Known data errors present</div>
+           <div style="font-size:13px;color:var(--text-2);line-height:1.55;">ZFS reports <strong style="color:var(--accent-danger);">permanent data errors</strong> on this pool — some blocks could not be repaired from redundancy. Run <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;">zpool status -v ${esc(pool.name)}</code> in a terminal to list affected files and restore them from backup. Clearing the counters is still safe (it does not touch data), but it will not fix corrupted files.</div>
+         </div>
+       </div>`
+    : `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:rgba(13,187,189,0.07);border:1px solid rgba(13,187,189,0.25);border-radius:var(--radius-sm);">
+         <span style="flex-shrink:0;color:var(--accent);"><svg class="znas-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span>
+         <div>
+           <div style="font-weight:600;font-size:14px;color:var(--text-1);margin-bottom:4px;">Your data is intact — errors were repaired</div>
+           <div style="font-size:13px;color:var(--text-2);line-height:1.55;">Pool <strong>${esc(pool.name)}</strong> is <strong style="color:var(--accent-ok,#34d399);">ONLINE</strong> with <strong>no known data errors</strong>. ZFS detected ${totalCksum > 0 ? `<strong>${totalCksum}</strong> checksum error${totalCksum !== 1 ? 's' : ''}` : 'device errors'}${totalRW > 0 ? ` and ${totalRW} read/write error${totalRW !== 1 ? 's' : ''}` : ''} and repaired the affected blocks from redundancy during the last scrub. This is usually a transient glitch — a loose cable, a flaky HBA/controller, or a power blip.</div>
+         </div>
+       </div>`;
+
+  document.getElementById('pool-fixer-content').innerHTML = `
+    ${dataBlock}
+    <div style="font-size:13px;color:var(--text-2);">
+      <strong style="color:var(--text-1);">Device${errDisks.length !== 1 ? 's' : ''} with logged errors:</strong>
+      <div style="margin-top:8px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:var(--surface2);">
+            <th style="padding:6px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;">Device</th>
+            <th style="padding:6px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;">State</th>
+            <th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;">Read</th>
+            <th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;">Write</th>
+            <th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;">Cksum</th>
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="5" style="padding:10px;text-align:center;font-size:12px;color:var(--text-3);">No per-device breakdown available.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text-2);line-height:1.6;">
+      <strong style="color:var(--text-1);">Recommended action:</strong> run
+      <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;">zpool clear ${esc(pool.name)}</code> to reset the error counters. This does <strong>not</strong> modify or delete any data — it simply acknowledges that the errors were handled.
+    </div>
+    <div style="font-size:13px;color:var(--text-3);background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;line-height:1.55;">
+      <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      Keep an eye on the pool afterwards. If the <strong>same disk</strong> keeps accumulating errors after clearing (especially checksum errors), it is likely failing — replace it with the Pool Fixer's disk-replace flow or <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">zpool replace</code>. A one-time event that never returns is normal and safe to clear.
+      <a href="https://openzfs.github.io/openzfs-docs/msg/ZFS-8000-9P" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;margin-left:4px;">Learn more (ZFS-8000-9P)</a>
+    </div>`;
+}
+
 function closePoolFixerWizard() {
   document.getElementById('modal-pool-fixer').classList.add('hidden');
 }
@@ -20925,6 +21106,7 @@ async function submitPoolFixer() {
 
   const busyLabel = {
     'clear':           'Fixing…',
+    'online-clear':    'Clearing…',
     'online':          'Recovering…',
     'degraded-online': 'Bringing Online…',
     'degraded-replace':'Replacing…',
@@ -20986,6 +21168,7 @@ async function submitPoolFixer() {
   }
   const readyLabel = {
     'clear':           '✦ Fix Now',
+    'online-clear':    '✦ Clear Errors',
     'online':          '✦ Recover Pool',
     'degraded-online': '✦ Bring Online',
     'degraded-replace':'✦ Replace Disk',
@@ -21363,6 +21546,15 @@ async function loadDatasets() {
     zvolCache = await resp.json() || [];
   } catch { zvolCache = []; }
 
+  // MergerFS unions (v6.7.13) — extra tabs on the Datasets & FS page.
+  window._mergerfsPools = [];
+  if (window._mergerfsEnabled) {
+    try {
+      const r = await fetch('/api/mergerfs/pools');
+      if (r.ok) window._mergerfsPools = (await r.json()).pools || [];
+    } catch { window._mergerfsPools = []; }
+  }
+
   _applyDatasetNavDot();
 
   renderDatasets(el);
@@ -21501,6 +21693,396 @@ let _dsActivePool = '';            // name of the pool whose tab is currently sh
 // Switch the Datasets & Zvol screen to the tab of the given pool — one tab per
 // ZFS pool. Panels are all rendered; we just toggle visibility so switching is
 // instant and preserves row-collapse state without a re-fetch.
+// "+ Other ▾" dropdown (MergerFS actions) on the Datasets & FS page.
+function _dsToggleOtherMenu(ev) {
+  ev && ev.stopPropagation();
+  const m = document.getElementById('ds-other-menu');
+  if (!m) return;
+  if (!m.classList.contains('hidden')) { m.classList.add('hidden'); return; }
+  m.classList.remove('hidden');
+  setTimeout(() => {
+    const close = (e) => {
+      if (!document.getElementById('ds-other-btn')?.contains(e.target)) {
+        m.classList.add('hidden'); document.removeEventListener('click', close);
+      }
+    };
+    document.addEventListener('click', close);
+  }, 0);
+}
+function _dsCloseOtherMenu() { document.getElementById('ds-other-menu')?.classList.add('hidden'); }
+
+// ═══════════════ MergerFS (v6.7.13) create / tab panel / edit ═══════════════
+
+const _MFS_POLICIES = [
+  ['mfs',   'Most Free Space',            'Spreads new files onto the branch with the most free space, so disks fill evenly. Good default for a flat library.'],
+  ['epmfs', 'Existing Path, Most Free',   'Keeps a title with its existing folder (e.g. /movies, /tv) on one disk, choosing the emptiest among those. Best for organized libraries.'],
+  ['pfrd',  'Proportional Fill Random',   'Weighted-random by free space. Best when disks are very different sizes.'],
+];
+const _MFS_CACHE = [
+  ['off',       'Off (recommended)', 'Most consistent for a NAS; no FUSE page caching.'],
+  ['partial',   'Partial',           'Some read caching; more RAM used.'],
+  ['full',      'Full',              'Aggressive read caching; fastest re-reads, most RAM.'],
+  ['auto-full', 'Auto-full',         'Full caching but auto-invalidated on external change.'],
+];
+// ZFS compression applied uniformly to all member datasets (only offered when
+// every source is a ZFS dataset). lz4 is the recommended default.
+const _MFS_COMPRESSION = [
+  ['',       'Keep current',  "Don't change each dataset's existing compression."],
+  ['lz4',    'LZ4',           'Fast, low CPU, always-on — the standard ZFS default.'],
+  ['zstd',   'Zstd',          'Better ratio than LZ4, still fast. Great for media + documents.'],
+  ['zstd-9', 'Zstd-9',        'Higher ratio, more CPU. Good for cold/archival data.'],
+  ['gzip',   'Gzip',          'Maximum ratio, heavy CPU. Rarely worth it over Zstd.'],
+  ['off',    'Off',           'No compression.'],
+];
+function _mfsCompressionOptions(selected) {
+  return _MFS_COMPRESSION.map(([v, l, desc]) => {
+    const rec = v === 'lz4';
+    const html = `<div style="font-weight:600;">${l}${rec ? ' <span style="color:#30d158;">· Recommended</span>' : ''}</div>`
+      + `<div style="font-size:11px;color:var(--text-3);white-space:normal;line-height:1.35;margin-top:2px;">${desc}</div>`;
+    const isSel = (selected || '') === v;
+    return `<option value="${v}" data-html="${esc(html)}"${isSel ? ' selected' : ''}>${l}${rec ? ' (Recommended)' : ''}</option>`;
+  }).join('');
+}
+
+function _mfsModal(id, inner) {
+  const ex = document.getElementById(id); if (ex) ex.remove();
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop'; bd.id = id;
+  bd.onclick = (e) => { if (e.target === bd) bd.remove(); };
+  bd.innerHTML = '<div class="modal" style="max-width:660px;width:96vw;max-height:92vh;overflow:auto;">' + inner + '</div>';
+  document.body.appendChild(bd);
+  return bd;
+}
+
+// Dataset/pool source options for the branch picker (mountpoint = value).
+function _mfsSourceOptions() {
+  const seen = new Set(); let opts = '';
+  (datasetCache || []).forEach(d => {
+    const mp = d.mountpoint;
+    if (!mp || mp === 'none' || mp === 'legacy' || !mp.startsWith('/') || seen.has(mp)) return;
+    seen.add(mp);
+    opts += `<option value="${esc(mp)}">${esc(d.name)} — ${esc(mp)}</option>`;
+  });
+  return opts;
+}
+
+function _mfsBranchRowHTML() {
+  return `<div class="mfs-branch-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <select class="input mfs-branch-src" style="flex:1;" onchange="_mfsBranchSrcChange(this)">
+        <option value="">— pick a ZFS dataset —</option>
+        ${_mfsSourceOptions()}
+        <option value="__manual__">Manual path…</option>
+      </select>
+      <input class="input mfs-branch-manual" placeholder="/mnt/disk1" style="flex:1;display:none;" oninput="_mfsUpdateZfsHint()">
+      <button class="btn btn-ghost btn-sm" onclick="this.closest('.mfs-branch-row').remove();_mfsUpdateZfsHint()" title="Remove">${znasIcon('trash',{size:15})}</button>
+    </div>`;
+}
+function _mfsBranchSrcChange(sel) {
+  const manual = sel.parentElement.querySelector('.mfs-branch-manual');
+  if (sel.value === '__manual__') { manual.style.display = ''; manual.focus(); }
+  else { manual.style.display = 'none'; }
+  _mfsUpdateZfsHint();
+}
+function _mfsAddBranch() {
+  const wrap = document.getElementById('mfs-branches');
+  wrap.insertAdjacentHTML('beforeend', _mfsBranchRowHTML());
+}
+// Collect branch paths from the modal.
+function _mfsCollectBranches(root) {
+  const out = [];
+  root.querySelectorAll('.mfs-branch-row').forEach(row => {
+    const sel = row.querySelector('.mfs-branch-src').value;
+    const p = (sel === '__manual__') ? row.querySelector('.mfs-branch-manual').value.trim() : sel;
+    if (p) out.push(p);
+  });
+  return out;
+}
+// Live "all sources are ZFS?" hint — global snapshots need every branch to be a dataset.
+function _mfsUpdateZfsHint(root) {
+  root = root || document.getElementById('modal-mfs-create') || document;
+  const hint = root.querySelector('#mfs-zfs-hint'); if (!hint) return;
+  const branches = _mfsCollectBranches(root);
+  const dsMounts = (datasetCache || []).filter(d => d.mountpoint && d.mountpoint.startsWith('/')).map(d => d.mountpoint);
+  const allZFS = branches.length > 0 && branches.every(b => dsMounts.some(m => b === m || b.startsWith(m + '/')));
+  // Reveal the ZFS-compression control only when every source is a dataset.
+  const compRow = root.querySelector('#mfs-zfs-compress-row');
+  if (compRow) compRow.style.display = allZFS ? '' : 'none';
+  if (branches.length === 0) { hint.innerHTML = ''; return; }
+  hint.innerHTML = allZFS
+    ? `${znasIcon('check',{size:14,style:'color:#30d158;vertical-align:-0.15em'})} <span style="color:#30d158;">All sources are ZFS datasets — coordinated global snapshots + shared ZFS compression are available.</span>`
+    : `${znasIcon('info',{size:14,style:'vertical-align:-0.15em'})} <span style="color:var(--text-3);">Some sources are not ZFS datasets — global snapshots and shared ZFS compression won't be available for this union.</span>`;
+}
+
+function openCreateMergerFS() { _openCreateMergerFSModal(); }
+
+// Build rich <option>s for the create-policy select: a concise label for the
+// closed control (textContent) + a two-line guidance block (data-html) shown in
+// the open dropdown, so the user picks a policy that fits their use case. mfs
+// is marked Recommended and pre-selected as the safe default.
+function _mfsPolicyOptions(selected) {
+  return _MFS_POLICIES.map(([v, l, desc]) => {
+    const rec = v === 'mfs';
+    const html = `<div style="font-weight:600;">${l}${rec ? ' <span style="color:#30d158;">· Recommended</span>' : ''}</div>`
+      + `<div style="font-size:11px;color:var(--text-3);white-space:normal;line-height:1.35;margin-top:2px;">${desc}</div>`;
+    const isSel = selected ? (v === selected) : rec;
+    return `<option value="${v}" data-html="${esc(html)}"${isSel ? ' selected' : ''}>${l}${rec ? ' (Recommended)' : ''}</option>`;
+  }).join('');
+}
+
+function _openCreateMergerFSModal() {
+  const polOpts = _mfsPolicyOptions();
+  const cacheOpts = _MFS_CACHE.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+  const inner = `
+    <div class="modal-header"><h3 class="modal-title" style="display:flex;align-items:center;gap:8px;">${znasIcon('layers',{size:18,style:'vertical-align:-0.14em'})} Create a MergerFS</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-mfs-create').remove()">${znasIcon('x',{size:18})}</button></div>
+    <div style="padding:20px 24px 24px;">
+      <div id="mfs-create-alert" class="alert alert-error hidden" style="margin-bottom:14px;"></div>
+      <p style="font-size:13px;color:var(--text-3);margin:0 0 16px;">A MergerFS pools several folders into one mountpoint — ideal for one library spread over multiple disks. It never moves or copies your data; files stay on their source disk.</p>
+
+      <div class="form-group"><label class="form-label">Name</label>
+        <input class="input" id="mfs-name" placeholder="media" oninput="_mfsNameToDefaults()"></div>
+      <div class="form-group"><label class="form-label">Mount point <span style="color:var(--text-3);font-weight:400;">— must be under /mnt or a ZFS pool path</span></label>
+        <input class="input" id="mfs-mount" placeholder="/mnt/media"></div>
+
+      <div class="form-group"><label class="form-label">Source branches</label>
+        <div id="mfs-branches">${_mfsBranchRowHTML()}${_mfsBranchRowHTML()}</div>
+        <button class="btn btn-ghost btn-sm" onclick="_mfsAddBranch()">+ Add source</button>
+        <div id="mfs-zfs-hint" style="font-size:12px;margin-top:8px;"></div>
+      </div>
+
+      <div class="form-group" id="mfs-zfs-compress-row" style="display:none;">
+        <label class="form-label">ZFS compression for all sources <i class="info-tip" data-tip="Because every source is a ZFS dataset, ZNAS can set one compression algorithm on all of them so the whole union is consistent. Applies to newly-written data (ZFS compression is not retroactive)."></i></label>
+        <select class="input" id="mfs-zfs-compress">${_mfsCompressionOptions('')}</select>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:16px;"></div>
+
+      <div class="form-group"><label class="form-label">Create policy <i class="info-tip" data-tip="Where new files are placed across the branches."></i></label>
+        <select class="input" id="mfs-policy">${polOpts}</select>
+        <div id="mfs-policy-desc" style="font-size:12px;color:var(--text-3);margin-top:4px;"></div></div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:180px;"><label class="form-label">Minimum free space <i class="info-tip" data-tip="Stop writing to a branch once it drops below this (protects each disk from filling completely)."></i></label>
+          <input class="input" id="mfs-minfree" value="50G"></div>
+        <div class="form-group" style="flex:1;min-width:180px;"><label class="form-label">File cache <i class="info-tip" data-tip="FUSE page-cache behavior. Off is safest/most consistent for a NAS."></i></label>
+          <select class="input" id="mfs-cache">${cacheOpts}</select></div>
+      </div>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="mfs-moveonenospc" checked style="margin-top:3px;"><span><b>Move on out-of-space</b><br><span style="font-size:12px;color:var(--text-3);">If a write hits a full disk, transparently move the file to one with room.</span></span></label>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="mfs-dropcache" checked style="margin-top:3px;"><span><b>Drop cache on close</b><br><span style="font-size:12px;color:var(--text-3);">Free page cache when a file closes; pairs well with File cache = Off.</span></span></label>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="mfs-allowother" checked style="margin-top:3px;"><span><b>Allow other users</b><br><span style="font-size:12px;color:var(--text-3);">Let Samba / NFS / containers read the union (needs user_allow_other, set at install).</span></span></label>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-mfs-create').remove()">Cancel</button>
+        <button class="btn btn-primary" id="mfs-create-btn" onclick="_mfsSubmitCreate()">Create MergerFS</button>
+      </div>
+    </div>`;
+  const bd = _mfsModal('modal-mfs-create', inner);
+  // policy description updater (reinforces the in-dropdown guidance for the
+  // closed control)
+  const polSel = bd.querySelector('#mfs-policy');
+  const updDesc = () => { const p = _MFS_POLICIES.find(x => x[0] === polSel.value); bd.querySelector('#mfs-policy-desc').textContent = p ? p[2] : ''; };
+  polSel.addEventListener('change', updDesc); updDesc();
+  bd.querySelectorAll('.mfs-branch-src').forEach(s => s.addEventListener('change', () => _mfsUpdateZfsHint(bd)));
+  // Rich dropdown FIRST (embeds per-option guidance) — must run before the
+  // generic sweep, which is idempotent and would otherwise plain-init it.
+  if (typeof initCustomSelect === 'function') { initCustomSelect('mfs-policy', { richOpts: true }); initCustomSelect('mfs-zfs-compress', { richOpts: true }); }
+  if (typeof initAllCustomSelects === 'function') initAllCustomSelects(bd);
+  _mfsUpdateZfsHint(bd);
+}
+
+// Fill the mount-point default from the name (once, if untouched).
+function _mfsNameToDefaults() {
+  const n = document.getElementById('mfs-name'); const m = document.getElementById('mfs-mount');
+  if (n && m && (!m.value || m.dataset.auto === '1')) { m.value = n.value ? '/mnt/' + n.value : ''; m.dataset.auto = '1'; }
+}
+
+async function _mfsSubmitCreate() {
+  const bd = document.getElementById('modal-mfs-create');
+  const alertEl = bd.querySelector('#mfs-create-alert');
+  const btn = bd.querySelector('#mfs-create-btn');
+  const show = (m) => { alertEl.textContent = m; alertEl.classList.remove('hidden'); };
+  const name = bd.querySelector('#mfs-name').value.trim();
+  const mount = bd.querySelector('#mfs-mount').value.trim();
+  const branches = _mfsCollectBranches(bd);
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name)) return show('Name must be alphanumeric (dashes/underscores allowed).');
+  if (!mount.startsWith('/')) return show('Mount point is required (absolute path).');
+  if (branches.length < 1) return show('Add at least one source branch.');
+  const body = {
+    name, mountpoint: mount,
+    branches: branches.map(p => ({ path: p })),
+    create_policy: bd.querySelector('#mfs-policy').value,
+    minfreespace: bd.querySelector('#mfs-minfree').value.trim() || '50G',
+    cache_files: bd.querySelector('#mfs-cache').value,
+    moveonenospc: bd.querySelector('#mfs-moveonenospc').checked,
+    dropcacheonclose: bd.querySelector('#mfs-dropcache').checked,
+    allow_other: bd.querySelector('#mfs-allowother').checked,
+    inodecalc: 'path-hash', nofail: true, fsname: name,
+  };
+  // Shared ZFS compression — only meaningful/visible when every source is a
+  // dataset (the backend also guards on all-ZFS).
+  const compEl = bd.querySelector('#mfs-zfs-compress');
+  const compRow = bd.querySelector('#mfs-zfs-compress-row');
+  if (compEl && compRow && compRow.style.display !== 'none') body.zfs_compression = compEl.value;
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const r = await fetch('/api/mergerfs/pools', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { show(d.error || 'Create failed'); btn.disabled = false; btn.textContent = 'Create MergerFS'; return; }
+    bd.remove();
+    showToast('MergerFS "' + name + '" created.', 'success');
+    _dsActivePool = 'mfs:' + name;
+    loadDatasets();
+  } catch(e) { show('Error: ' + e.message); btn.disabled = false; btn.textContent = 'Create MergerFS'; }
+}
+
+// ── Tab panel + live status ──────────────────────────────────────────────────
+function _mergerfsPanelHTML(p) {
+  const n = esc(p.name);
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+      <div>
+        <div style="font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;">${znasIcon('layers',{size:18,style:'vertical-align:-0.14em'})} ${n}
+          <span id="mfs-state-${n}" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text-3);">…</span></div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px;font-family:monospace;">${esc(p.mountpoint)}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="openFileBrowser('mergerfs','${n}')">${znasIcon('folder-open',{size:14,style:'vertical-align:-0.14em'})} File Browser</button>
+        <span id="mfs-snap-slot-${n}"></span>
+        <button class="btn btn-ghost btn-sm" onclick="_openEditMergerFSModal('${n}')">${znasIcon('pencil',{size:14,style:'vertical-align:-0.14em'})} Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="_mfsDelete('${n}')">${znasIcon('trash',{size:14,style:'vertical-align:-0.14em'})} Delete</button>
+      </div>
+    </div>
+    <div id="mfs-cap-${n}" style="margin-bottom:16px;"></div>
+    <div id="mfs-branches-${n}"></div>`;
+}
+
+const _mfsStatusTimers = {};
+async function _mergerfsLoadStatus(name) {
+  const fill = document.getElementById('mfs-panel-' + name);
+  if (!fill) return;
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    const n = esc(name);
+    const stEl = document.getElementById('mfs-state-' + n);
+    if (stEl) {
+      stEl.textContent = s.mounted ? 'Mounted' : 'Not mounted';
+      stEl.style.background = s.mounted ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)';
+      stEl.style.color = s.mounted ? '#30d158' : '#ff453a';
+    }
+    const cap = document.getElementById('mfs-cap-' + n);
+    if (cap) {
+      const pct = s.total_bytes > 0 ? Math.round(s.used_bytes / s.total_bytes * 100) : 0;
+      cap.innerHTML = `<div style="font-size:13px;margin-bottom:5px;">Capacity: <b>${fmtBytes(s.used_bytes)}</b> used of <b>${fmtBytes(s.total_bytes)}</b> (${fmtBytes(s.free_bytes)} free)</div>
+        <div style="height:10px;border-radius:5px;background:var(--surface2);overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=90?'#ff453a':pct>=75?'#f0b429':'linear-gradient(90deg,#1f8a4c,#0dbbbd)'};"></div></div>`;
+    }
+    const br = document.getElementById('mfs-branches-' + n);
+    if (br) {
+      const rows = (s.branches || []).map(b => {
+        const pct = b.total_bytes > 0 ? Math.round(b.used_bytes / b.total_bytes * 100) : 0;
+        const zfs = b.zfs_dataset ? `<span style="font-size:10px;color:var(--accent);background:rgba(10,132,255,0.12);border-radius:3px;padding:1px 5px;margin-left:6px;">ZFS: ${esc(b.zfs_dataset)}</span>` : `<span style="font-size:10px;color:var(--text-3);margin-left:6px;">non-ZFS</span>`;
+        return `<tr style="border-top:1px solid var(--border);"><td style="padding:6px 10px;font-family:monospace;font-size:12px;">${esc(b.path)}${zfs}</td>
+          <td style="padding:6px 10px;font-size:12px;white-space:nowrap;">${fmtBytes(b.used_bytes)} / ${fmtBytes(b.total_bytes)} (${pct}%)</td></tr>`;
+      }).join('');
+      br.innerHTML = `<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Sources</div>
+        <table style="width:100%;border-collapse:collapse;"><thead><tr style="color:var(--text-3);font-size:11px;"><th style="text-align:left;padding:4px 10px;">Path</th><th style="text-align:left;padding:4px 10px;">Usage</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    // Stage 4 will populate #mfs-snap-slot-<name> with the Snapshots button when all_zfs.
+    if (typeof _mfsRenderSnapshotButton === 'function') _mfsRenderSnapshotButton(name, s);
+  } catch (_) {}
+  // Poll while this panel is the visible tab.
+  clearTimeout(_mfsStatusTimers[name]);
+  const panel = document.getElementById('mfs-panel-' + name);
+  if (panel && panel.style.display !== 'none' && !document.getElementById('page-datasets').classList.contains('hidden')) {
+    _mfsStatusTimers[name] = setTimeout(() => _mergerfsLoadStatus(name), 5000);
+  }
+}
+
+async function _mfsDelete(name) {
+  const ok = await new Promise(resolve => window.showConfirmModal
+    ? window.showConfirmModal({ title:'Delete MergerFS "' + name + '"',
+        message:'The union will be unmounted and removed. Your source files (datasets/folders) are NOT deleted.',
+        confirmLabel:'Delete', confirmDanger:true, onConfirm:()=>resolve(true), onCancel:()=>resolve(false) })
+    : resolve(window.confirm('Delete MergerFS ' + name + '?')));
+  if (!ok) return;
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name), { method:'DELETE' });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); showToast(d.error || 'Delete failed', 'error'); return; }
+    showToast('MergerFS "' + name + '" removed.', 'success');
+    _dsActivePool = null;
+    loadDatasets();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// ── Edit (runtime-settable options + branches) ───────────────────────────────
+function _openEditMergerFSModal(name) {
+  const p = (window._mergerfsPools || []).find(x => x.name === name);
+  if (!p) { showToast('MergerFS not found', 'error'); return; }
+  const polOpts = _mfsPolicyOptions(p.create_policy);
+  const cacheOpts = _MFS_CACHE.map(([v,l]) => `<option value="${v}" ${v===p.cache_files?'selected':''}>${l}</option>`).join('');
+  const branchRows = (p.branches||[]).map(b => `<div class="mfs-branch-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <input class="input mfs-branch-manual" value="${esc(b.path)}" style="flex:1;display:block;">
+      <button class="btn btn-ghost btn-sm" onclick="this.closest('.mfs-branch-row').remove()" title="Remove">${znasIcon('trash',{size:15})}</button>
+    </div>`).join('');
+  const inner = `
+    <div class="modal-header"><h3 class="modal-title" style="display:flex;align-items:center;gap:8px;">${znasIcon('pencil',{size:16,style:'vertical-align:-0.14em'})} Edit MergerFS — ${esc(name)}</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-mfs-edit').remove()">${znasIcon('x',{size:18})}</button></div>
+    <div style="padding:20px 24px 24px;">
+      <div id="mfs-edit-alert" class="alert alert-error hidden" style="margin-bottom:14px;"></div>
+      <p style="font-size:12px;color:var(--text-3);margin:0 0 14px;">These options apply immediately to the live union and persist across reboot. Mount point, fsname, allow_other and inode calc can't change after creation.</p>
+      <div class="form-group"><label class="form-label">Source branches</label>
+        <div id="mfs-edit-branches">${branchRows}</div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('mfs-edit-branches').insertAdjacentHTML('beforeend', '<div class=&quot;mfs-branch-row&quot; style=&quot;display:flex;gap:8px;align-items:center;margin-bottom:8px;&quot;><input class=&quot;input mfs-branch-manual&quot; placeholder=&quot;/mnt/disk3&quot; style=&quot;flex:1;&quot;><button class=&quot;btn btn-ghost btn-sm&quot; onclick=&quot;this.closest(\\'.mfs-branch-row\\').remove()&quot;>×</button></div>')">+ Add source</button></div>
+      <div class="form-group"><label class="form-label">Create policy</label><select class="input" id="mfs-edit-policy">${polOpts}</select></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:180px;"><label class="form-label">Minimum free space</label><input class="input" id="mfs-edit-minfree" value="${esc(p.minfreespace||'50G')}"></div>
+        <div class="form-group" style="flex:1;min-width:180px;"><label class="form-label">File cache</label><select class="input" id="mfs-edit-cache">${cacheOpts}</select></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="mfs-edit-moveonenospc" ${p.moveonenospc?'checked':''}> Move on out-of-space</label>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="mfs-edit-dropcache" ${p.dropcacheonclose?'checked':''}> Drop cache on close</label>
+      ${p.all_zfs ? `<div class="form-group"><label class="form-label">ZFS compression for all sources <i class="info-tip" data-tip="Sets one compression algorithm on every member dataset. Applies to newly-written data (not retroactive)."></i></label><select class="input" id="mfs-edit-compress">${_mfsCompressionOptions(p.zfs_compression || '')}</select></div>` : ''}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-mfs-edit').remove()">Cancel</button>
+        <button class="btn btn-primary" id="mfs-edit-btn" onclick="_mfsSubmitEdit('${esc(name)}')">Save changes</button>
+      </div>
+    </div>`;
+  const bd = _mfsModal('modal-mfs-edit', inner);
+  if (typeof initCustomSelect === 'function') {
+    initCustomSelect('mfs-edit-policy', { richOpts: true });
+    if (bd.querySelector('#mfs-edit-compress')) initCustomSelect('mfs-edit-compress', { richOpts: true });
+  }
+  if (typeof initAllCustomSelects === 'function') initAllCustomSelects(bd);
+}
+
+async function _mfsSubmitEdit(name) {
+  const bd = document.getElementById('modal-mfs-edit');
+  const alertEl = bd.querySelector('#mfs-edit-alert');
+  const btn = bd.querySelector('#mfs-edit-btn');
+  const branches = [];
+  bd.querySelectorAll('.mfs-branch-row .mfs-branch-manual').forEach(i => { const v = i.value.trim(); if (v) branches.push(v); });
+  if (branches.length < 1) { alertEl.textContent = 'At least one source branch is required.'; alertEl.classList.remove('hidden'); return; }
+  const body = {
+    branches: branches.map(p => ({ path: p })),
+    create_policy: bd.querySelector('#mfs-edit-policy').value,
+    minfreespace: bd.querySelector('#mfs-edit-minfree').value.trim() || '50G',
+    cache_files: bd.querySelector('#mfs-edit-cache').value,
+    moveonenospc: bd.querySelector('#mfs-edit-moveonenospc').checked,
+    dropcacheonclose: bd.querySelector('#mfs-edit-dropcache').checked,
+  };
+  const compEl = bd.querySelector('#mfs-edit-compress');
+  if (compEl) body.zfs_compression = compEl.value;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { alertEl.textContent = d.error || 'Save failed'; alertEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Save changes'; return; }
+    bd.remove();
+    showToast('MergerFS updated.', 'success');
+    loadDatasets();
+  } catch(e) { alertEl.textContent = 'Error: ' + e.message; alertEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Save changes'; }
+}
+
 function switchDsPoolTab(poolName) {
   _dsActivePool = poolName;
   const root = document.getElementById('datasets-content');
@@ -21509,6 +22091,152 @@ function switchDsPoolTab(poolName) {
     b.classList.toggle('active', b.dataset.dsPoolTab === poolName));
   root.querySelectorAll('.ds-pool-panel').forEach(p =>
     p.style.display = (p.dataset.dsPool === poolName) ? '' : 'none');
+  if (poolName.indexOf('mfs:') === 0) _mergerfsLoadStatus(poolName.slice(4));
+}
+
+// ── MergerFS global snapshots (v6.7.13, all-ZFS unions only) ─────────────────
+// Populates the reserved #mfs-snap-slot-<name> in the tab header with a
+// Snapshots button when the union is all-ZFS.
+function _mfsRenderSnapshotButton(name, status) {
+  const slot = document.getElementById('mfs-snap-slot-' + esc(name));
+  if (!slot) return;
+  if (status && status.all_zfs) {
+    slot.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="_openMergerFSSnapshots('${esc(name)}')">${znasIcon('camera',{size:14,style:'vertical-align:-0.14em'})} Snapshots</button>`;
+  } else {
+    slot.innerHTML = '';
+  }
+}
+
+async function _openMergerFSSnapshots(name) {
+  const inner = `
+    <div class="modal-header"><h3 class="modal-title" style="display:flex;align-items:center;gap:8px;">${znasIcon('camera',{size:16,style:'vertical-align:-0.14em'})} Global Snapshots — ${esc(name)}</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-mfs-snap').remove()">${znasIcon('x',{size:18})}</button></div>
+    <div style="padding:20px 24px 24px;">
+      <div id="mfs-snap-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+      <p style="font-size:12px;color:var(--text-3);margin:0 0 14px;">Every source is a ZFS dataset, so ZNAS snapshots them all with one shared timestamp — one coordinated snapshot of the whole union. Restore rolls every source back together.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-weight:600;">Snapshots</div>
+        <button class="btn btn-primary btn-sm" id="mfs-snap-now-btn" onclick="_mfsSnapNow('${esc(name)}')">${znasIcon('camera',{size:14,style:'vertical-align:-0.14em'})} Take snapshot now</button>
+      </div>
+      <div id="mfs-snap-list" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;"><div style="padding:16px;color:var(--text-3);font-size:13px;">Loading…</div></div>
+
+      <div style="border-top:1px solid var(--border);margin:18px 0;padding-top:16px;"></div>
+      <div style="font-weight:600;margin-bottom:10px;">Schedule</div>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="mfs-snap-enabled"> Enable scheduled global snapshots</label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;"><label class="form-label">Every</label>
+          <div style="display:flex;gap:6px;"><input class="input" id="mfs-snap-everyn" type="number" min="1" value="1" style="width:64px;">
+            <select class="input" id="mfs-snap-unit" style="width:120px;"><option value="hour">hours</option><option value="day" selected>days</option><option value="week">weeks</option><option value="month">months</option></select></div></div>
+        <div class="form-group" id="mfs-snap-time-wrap" style="margin:0;"><label class="form-label">At (hh:mm)</label>
+          <div style="display:flex;gap:4px;align-items:center;"><input class="input" id="mfs-snap-hour" type="number" min="0" max="23" value="2" style="width:56px;"><span>:</span><input class="input" id="mfs-snap-min" type="number" min="0" max="59" value="0" style="width:56px;"></div></div>
+        <div class="form-group" style="margin:0;"><label class="form-label">Keep last</label><input class="input" id="mfs-snap-keep" type="number" min="1" value="7" style="width:72px;"></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn btn-ghost" onclick="_mfsSnapDeleteSchedule('${esc(name)}')">Remove schedule</button>
+        <button class="btn btn-primary" id="mfs-snap-save-btn" onclick="_mfsSaveSchedule('${esc(name)}')">Save schedule</button>
+      </div>
+    </div>`;
+  const bd = _mfsModal('modal-mfs-snap', inner);
+  if (typeof initAllCustomSelects === 'function') initAllCustomSelects(bd);
+  // Load schedule
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snap-schedule');
+    if (r.ok) {
+      const d = await r.json(); const p = d.policy || {};
+      bd.querySelector('#mfs-snap-enabled').checked = !!(d.exists && p.enabled);
+      bd.querySelector('#mfs-snap-everyn').value = p.every_n || 1;
+      const us = bd.querySelector('#mfs-snap-unit'); us.value = p.unit || 'day'; if (typeof csRefresh==='function') csRefresh('mfs-snap-unit');
+      bd.querySelector('#mfs-snap-hour').value = p.hour_of_day || 0;
+      bd.querySelector('#mfs-snap-min').value = p.minute_of_hour || 0;
+      bd.querySelector('#mfs-snap-keep').value = p.keep_last || 7;
+    }
+  } catch(_) {}
+  _mfsLoadSnapshots(name);
+}
+
+async function _mfsLoadSnapshots(name) {
+  const list = document.getElementById('mfs-snap-list'); if (!list) return;
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snapshots');
+    const d = await r.json();
+    const snaps = (d.snapshots || []);
+    if (!snaps.length) { list.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:13px;">No snapshots yet.</div>'; return; }
+    list.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' + snaps.map(s => {
+      const partial = s.members < s.total_members;
+      return `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:8px 10px;font-family:monospace;">${esc(s.name)}${partial?` <span title="only ${s.members} of ${s.total_members} datasets" style="color:#f0b429;font-size:11px;">(partial ${s.members}/${s.total_members})</span>`:''}</td>
+        <td style="padding:8px 10px;white-space:nowrap;color:var(--text-2);">${new Date(s.created_at).toLocaleString()}</td>
+        <td style="padding:8px 10px;white-space:nowrap;">${fmtBytes(s.used_bytes)}</td>
+        <td style="padding:8px 10px;text-align:right;white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" onclick="_mfsSnapRestore('${esc(name)}','${esc(s.name)}')">Restore</button>
+          <button class="btn btn-ghost btn-sm" onclick="_mfsSnapDelete('${esc(name)}','${esc(s.name)}')">${znasIcon('trash',{size:14})}</button>
+        </td></tr>`;
+    }).join('') + '</table>';
+  } catch(e) { list.innerHTML = '<div style="padding:16px;color:var(--accent-danger);">Failed to load snapshots.</div>'; }
+}
+
+async function _mfsSnapNow(name) {
+  const btn = document.getElementById('mfs-snap-now-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Snapshotting…'; }
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snap-now', { method:'POST' });
+    const d = await r.json();
+    if (!r.ok) showToast(d.error || 'Snapshot failed', 'error'); else showToast('Snapshot ' + d.snapshot + ' taken.', 'success');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  if (btn) { btn.disabled = false; btn.innerHTML = znasIcon('camera',{size:14,style:'vertical-align:-0.14em'}) + ' Take snapshot now'; }
+  _mfsLoadSnapshots(name);
+}
+
+async function _mfsSnapDelete(name, snap) {
+  const ok = await new Promise(res => window.showConfirmModal
+    ? window.showConfirmModal({ title:'Delete snapshot', message:'Delete '+snap+' from every source dataset?', confirmLabel:'Delete', confirmDanger:true, onConfirm:()=>res(true), onCancel:()=>res(false) })
+    : res(window.confirm('Delete '+snap+'?')));
+  if (!ok) return;
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snapshots', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({snap_name: snap}) });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); showToast(d.error || 'Delete failed', 'error'); }
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  _mfsLoadSnapshots(name);
+}
+
+async function _mfsSnapRestore(name, snap) {
+  const ok = await new Promise(res => window.showConfirmModal
+    ? window.showConfirmModal({ title:'Restore global snapshot', message:'Roll ALL source datasets back to '+snap+'. Any data written since this snapshot on those datasets will be permanently lost. Continue?', confirmLabel:'Restore', confirmDanger:true, onConfirm:()=>res(true), onCancel:()=>res(false) })
+    : res(window.confirm('Restore '+snap+'? Data loss.')));
+  if (!ok) return;
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snap-restore', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({snap_name: snap}) });
+    const d = await r.json();
+    if (!r.ok) showToast(d.error || 'Restore failed', 'error'); else showToast('Rolled back to ' + snap + '.', 'success');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  _mfsLoadSnapshots(name);
+}
+
+async function _mfsSaveSchedule(name) {
+  const bd = document.getElementById('modal-mfs-snap');
+  const body = {
+    enabled: bd.querySelector('#mfs-snap-enabled').checked,
+    every_n: parseInt(bd.querySelector('#mfs-snap-everyn').value || '1', 10),
+    unit: bd.querySelector('#mfs-snap-unit').value,
+    hour_of_day: parseInt(bd.querySelector('#mfs-snap-hour').value || '0', 10),
+    minute_of_hour: parseInt(bd.querySelector('#mfs-snap-min').value || '0', 10),
+    keep_last: parseInt(bd.querySelector('#mfs-snap-keep').value || '7', 10),
+  };
+  const btn = bd.querySelector('#mfs-snap-save-btn'); btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snap-schedule', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { showToast(d.error || 'Save failed', 'error'); } else { showToast('Schedule saved.', 'success'); bd.remove(); }
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Save schedule'; }
+}
+
+async function _mfsSnapDeleteSchedule(name) {
+  try {
+    const r = await fetch('/api/mergerfs/pools/' + encodeURIComponent(name) + '/snap-schedule', { method:'DELETE' });
+    if (!r.ok) { const d = await r.json().catch(()=>({})); showToast(d.error || 'Failed', 'error'); return; }
+    showToast('Schedule removed.', 'success');
+    document.getElementById('modal-mfs-snap')?.remove();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 function toggleDsRow(dsName) {
@@ -21579,9 +22307,14 @@ function renderDatasets(el) {
   ];
   const poolNames = [...new Set(allPoolNames)];
 
-  // One tab per ZFS pool (tab label = pool name). Keep the previously-selected
-  // tab when it still exists, otherwise default to the first pool.
-  if (!_dsActivePool || !poolNames.includes(_dsActivePool)) _dsActivePool = poolNames[0];
+  // MergerFS unions (v6.7.13) render as extra tabs after the ZFS pools, keyed
+  // "mfs:<name>".
+  const mfsPools = (window._mergerfsEnabled && Array.isArray(window._mergerfsPools)) ? window._mergerfsPools : [];
+  const allTabIds = [...poolNames, ...mfsPools.map(p => 'mfs:' + p.name)];
+
+  // One tab per ZFS pool + one per MergerFS. Keep the previously-selected tab
+  // when it still exists, otherwise default to the first.
+  if (!_dsActivePool || !allTabIds.includes(_dsActivePool)) _dsActivePool = allTabIds[0];
 
   const panels = poolNames.map(poolName => {
     const poolDs = datasetCache.filter(d => d.name.split('/')[0] === poolName && d.depth > 0);
@@ -21633,11 +22366,24 @@ function renderDatasets(el) {
               onclick="switchDsPoolTab('${esc(poolName)}')"
               style="display:inline-flex;align-items:center;gap:5px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg> ${esc(poolName)}${lock}</button>`;
   }).join('');
-  const tabBarEl = document.getElementById('datasets-tab-bar');
-  if (tabBarEl) tabBarEl.innerHTML = tabBar;
+  // MergerFS tabs + panels.
+  const mfsTabs = mfsPools.map(p => {
+    const active = ('mfs:' + p.name) === _dsActivePool;
+    return `<button class="cap-tab${active ? ' active' : ''}" data-ds-pool-tab="mfs:${esc(p.name)}"
+              onclick="switchDsPoolTab('mfs:${esc(p.name)}')" style="display:inline-flex;align-items:center;gap:5px;">${znasIcon('layers', {size:14, style:'vertical-align:-0.14em'})} ${esc(p.name)}</button>`;
+  }).join('');
+  const mfsPanels = mfsPools.map(p => {
+    const active = ('mfs:' + p.name) === _dsActivePool;
+    return `<div class="ds-pool-panel" data-ds-pool="mfs:${esc(p.name)}" id="mfs-panel-${esc(p.name)}" style="${active ? '' : 'display:none;'}">${_mergerfsPanelHTML(p)}</div>`;
+  }).join('');
 
-  el.innerHTML = panels;
+  const tabBarEl = document.getElementById('datasets-tab-bar');
+  if (tabBarEl) tabBarEl.innerHTML = tabBar + mfsTabs;
+
+  el.innerHTML = panels + mfsPanels;
   _applyDsRowCollapse();
+  // Load live status for a MergerFS tab that's active on first render.
+  if (_dsActivePool && _dsActivePool.indexOf('mfs:') === 0) _mergerfsLoadStatus(_dsActivePool.slice(4));
 }
 
 function _zvolRow(z, showComment, showQuota) {
@@ -55534,6 +56280,9 @@ async function _softRelayRefresh() {
         if (d.server_ip) window._serverIP = d.server_ip;
         if (d.username)  window._serverUsername = d.username;
         _experimentalMode = !!d.experimental_mode;
+        if (typeof d.mergerfs_installed === 'boolean')   window._mergerfsInstalled = d.mergerfs_installed;
+        if (typeof d.mergerfs_enabled === 'boolean')     window._mergerfsEnabled   = d.mergerfs_enabled;
+        if (typeof _applyMergerFSNav === 'function')     _applyMergerFSNav();
         if (typeof d.lxd_available === 'boolean')        window._lxdAvailable      = d.lxd_available;
         if (typeof d.lxd_metrics_enabled === 'boolean')  window._lxdMetricsEnabled = d.lxd_metrics_enabled;
         if (typeof updateVirtTabVisibility === 'function')   updateVirtTabVisibility(window._lxdAvailable);
@@ -57005,6 +57754,11 @@ async function openFileBrowser(sourceType, sourceId, subpath) {
     if (!s || !s.path) { showToast('NFS share has no path configured', 'error'); return; }
     absPath = s.path;
     label = s.path;
+  } else if (sourceType === 'mergerfs') {
+    const p = (window._mergerfsPools || []).find(x => x.name === sourceId);
+    if (!p || !p.mountpoint) { showToast('MergerFS has no mountpoint', 'error'); return; }
+    absPath = p.mountpoint;
+    label = 'MergerFS: ' + sourceId;
   } else {
     return;
   }

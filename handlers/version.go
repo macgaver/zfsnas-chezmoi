@@ -24,8 +24,10 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 	// it can show/hide the Virtualization settings tab and the per-instance
 	// Monitor tab without an extra round-trip.
 	lxdMetricsEnabled := false
+	mergerfsEnabled := false
 	if c, err := config.LoadAppConfig(); err == nil && c != nil {
 		lxdMetricsEnabled = c.LXDMetricsEnabled
+		mergerfsEnabled = c.MergerFS.Enabled
 	}
 	jsonOK(w, map[string]interface{}{
 		"version":             version.Version,
@@ -36,6 +38,8 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 		"experimental_mode":   version.IsExperimental(),
 		"lxd_available":       system.LXDAvailable(),
 		"lxd_metrics_enabled": lxdMetricsEnabled,
+		"mergerfs_installed":  system.MergerFSInstalled(),
+		"mergerfs_enabled":    mergerfsEnabled,
 		// v6.5.19: changed across polls means the server restarted or was
 		// upgraded — frontend shows a "Server Restarted" popup with a
 		// Refresh button.

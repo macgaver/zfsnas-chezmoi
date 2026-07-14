@@ -440,6 +440,61 @@ type AppConfig struct {
 	ComposeUpdatePolicies   []ComposeUpdatePolicy `json:"compose_update_policies,omitempty"` // per-stack scheduled auto-updates
 	LXDBackupPolicies       []LXDBackupPolicy     `json:"lxd_backup_policies,omitempty"`     // v6.5.19 — per-instance scheduled syncoid backups
 	ExternalStorages        []ExternalStorage     `json:"external_storages,omitempty"`       // v6.7.7 — Filesystem rsync external storage targets
+	MergerFS                MergerFSConfig        `json:"mergerfs,omitempty"`                // v6.7.13 — optional MergerFS union-filesystem support
+	MergerFSSnapshotPolicies []MergerFSSnapshotPolicy `json:"mergerfs_snapshot_policies,omitempty"` // v6.7.13 — per-mergerfs coordinated ZFS snapshot schedules
+}
+
+// ── MergerFS (v6.7.13, optional feature) ─────────────────────────────────────
+
+// MergerFSBranch is one source path in a mergerfs union. ZFSDataset is set when
+// the path resolves to a ZFS dataset mountpoint (enables coordinated snapshots).
+type MergerFSBranch struct {
+	Path       string `json:"path"`
+	ZFSDataset string `json:"zfs_dataset,omitempty"`
+}
+
+// MergerFSPool is one mergerfs union filesystem managed by ZNAS.
+type MergerFSPool struct {
+	Name             string           `json:"name"`              // logical name / tab label / default fsname
+	Mountpoint       string           `json:"mountpoint"`        // union mount target (under /mnt or a zpool mountpoint)
+	Branches         []MergerFSBranch `json:"branches"`
+	CreatePolicy     string           `json:"create_policy"`     // mfs | epmfs | pfrd
+	MinFreeSpace     string           `json:"minfreespace"`      // e.g. "50G"
+	MoveOnENOSPC     bool             `json:"moveonenospc"`
+	CacheFiles       string           `json:"cache_files"`       // off | partial | full | auto-full
+	DropCacheOnClose bool             `json:"dropcacheonclose"`
+	AllowOther       bool             `json:"allow_other"`
+	InodeCalc        string           `json:"inodecalc"`         // path-hash | …
+	FsName           string           `json:"fsname"`
+	NoFail           bool             `json:"nofail"`
+	AllZFS           bool             `json:"all_zfs"`           // cached: every branch is a ZFS dataset → global snapshots available
+	ZFSCompression   string           `json:"zfs_compression,omitempty"` // when AllZFS: zfs compression applied to every member dataset ("" = leave as-is)
+	CreatedAt        time.Time        `json:"created_at,omitempty"`
+}
+
+// MergerFSConfig holds all persistent MergerFS settings.
+type MergerFSConfig struct {
+	Enabled bool           `json:"enabled"`
+	HideNav bool           `json:"hide_nav"`
+	Pools   []MergerFSPool `json:"pools,omitempty"`
+}
+
+// MergerFSSnapshotPolicy schedules coordinated ZFS snapshots across all member
+// datasets of an all-ZFS mergerfs. Mirrors LXDSnapshotPolicy's cadence fields.
+type MergerFSSnapshotPolicy struct {
+	Pool         string `json:"pool"`     // MergerFSPool.Name
+	Enabled      bool   `json:"enabled"`
+	EveryN       int    `json:"every_n"`
+	Unit         string `json:"unit"` // "minute"|"hour"|"day"|"week"|"month"
+	HourOfDay    int    `json:"hour_of_day,omitempty"`
+	MinuteOfHour int    `json:"minute_of_hour"`
+	Weekday      int    `json:"weekday,omitempty"`
+	DayOfMonth   int    `json:"day_of_month,omitempty"`
+	KeepLast     int    `json:"keep_last"`
+	NamePrefix   string `json:"name_prefix,omitempty"`
+	LastRun      time.Time `json:"last_run,omitempty"`
+	LastStatus   string    `json:"last_status,omitempty"`
+	LastError    string    `json:"last_error,omitempty"`
 }
 
 // ExternalStorage describes one remote filesystem target for the Protect →

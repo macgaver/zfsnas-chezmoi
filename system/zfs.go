@@ -21,6 +21,9 @@ type VdevDisk struct {
 	Present     bool   `json:"present"`                 // true if the device node exists on the system
 	SubVdevType string `json:"sub_vdev_type,omitempty"` // type of direct parent sub-vdev (e.g. "spare", "replacing") when nested inside a top-level vdev
 	SubVdevName string `json:"sub_vdev_name,omitempty"` // name of direct parent sub-vdev (e.g. "spare-2")
+	ReadErr     int    `json:"read_err"`                // READ error count from `zpool status`
+	WriteErr    int    `json:"write_err"`               // WRITE error count from `zpool status`
+	CksumErr    int    `json:"cksum_err"`               // CKSUM error count from `zpool status`
 }
 
 // VdevGroup is one top-level vdev in the pool's data section.
@@ -53,6 +56,10 @@ type Pool struct {
 	SpareStatuses       []string `json:"spare_statuses"`  // per-spare state: "AVAIL"|"INUSE"|"FAULTED" etc
 	SparePresent        []bool   `json:"spare_present"`   // per-spare: true if the device path exists in /dev
 	VdevType            string   `json:"vdev_type"`       // "stripe" | "mirror" | "raidz1" | "raidz2" | "raidz3"
+	ReadErrors          int      `json:"read_errors"`     // sum of per-device READ errors across all data vdevs
+	WriteErrors         int      `json:"write_errors"`    // sum of per-device WRITE errors across all data vdevs
+	CksumErrors         int      `json:"cksum_errors"`    // sum of per-device CKSUM errors across all data vdevs
+	DataErrors          bool     `json:"data_errors"`     // true when `zpool status` reports known (permanent) data errors
 	Operation           string   `json:"operation"`       // "" | "scrubbing" | "resilvering" | "expanding"
 	SizeStr             string   `json:"size_str"`
 	AllocStr            string   `json:"alloc_str"`
@@ -102,6 +109,7 @@ func GetPool() (*Pool, error) {
 	p.Ashift = poolAshift(p.Name)
 	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	p.Vdevs = poolVdevGroups(p.Name)
+	p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = poolErrorSummary(p.Name, p.Vdevs)
 	return p, nil
 }
 
@@ -163,6 +171,7 @@ func GetAllPools() ([]*Pool, error) {
 		p.Ashift = poolAshift(p.Name)
 		p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 		p.Vdevs = poolVdevGroups(p.Name)
+		p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = poolErrorSummary(p.Name, p.Vdevs)
 		pools = append(pools, p)
 	}
 	return pools, nil
@@ -197,6 +206,7 @@ func GetPoolByName(name string) (*Pool, error) {
 	p.Ashift = poolAshift(p.Name)
 	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	p.Vdevs = poolVdevGroups(p.Name)
+	p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = poolErrorSummary(p.Name, p.Vdevs)
 	return p, nil
 }
 
@@ -690,15 +700,19 @@ func poolVdevGroups(poolName string) []VdevGroup {
 			// Stripe disk — direct child of pool, no named vdev wrapper.
 			dev := resolveDevice(name)
 			_, statErr := os.Stat(name)
+			re, we, ce := parseVdevErrCounts(fields)
 			groups = append(groups, VdevGroup{
 				Type:   "stripe",
 				Name:   "",
 				Status: status,
 				Disks: []VdevDisk{{
-					Raw:     name,
-					Device:  dev,
-					Status:  status,
-					Present: statErr == nil,
+					Raw:      name,
+					Device:   dev,
+					Status:   status,
+					Present:  statErr == nil,
+					ReadErr:  re,
+					WriteErr: we,
+					CksumErr: ce,
 				}},
 			})
 			currentGroup = -1
@@ -713,11 +727,15 @@ func poolVdevGroups(poolName string) []VdevGroup {
 			// Leaf disk inside a named vdev.
 			dev := resolveDevice(name)
 			_, statErr := os.Stat(name)
+			re, we, ce := parseVdevErrCounts(fields)
 			d := VdevDisk{
-				Raw:     name,
-				Device:  dev,
-				Status:  status,
-				Present: statErr == nil,
+				Raw:      name,
+				Device:   dev,
+				Status:   status,
+				Present:  statErr == nil,
+				ReadErr:  re,
+				WriteErr: we,
+				CksumErr: ce,
 			}
 			// Record sub-vdev parentage when this disk is inside a spare-N / replacing-N.
 			if subVdevIndent >= 0 && indent > subVdevIndent {
@@ -728,6 +746,73 @@ func poolVdevGroups(poolName string) []VdevGroup {
 		}
 	}
 	return groups
+}
+
+// parseVdevErrCounts extracts the READ / WRITE / CKSUM error counts from a
+// `zpool status` config-line field slice ("<name> <state> <read> <write> <cksum> …").
+// zpool abbreviates large counts (e.g. "1.2K"), so parseErrCount handles suffixes.
+func parseVdevErrCounts(fields []string) (read, write, cksum int) {
+	if len(fields) >= 3 {
+		read = parseErrCount(fields[2])
+	}
+	if len(fields) >= 4 {
+		write = parseErrCount(fields[3])
+	}
+	if len(fields) >= 5 {
+		cksum = parseErrCount(fields[4])
+	}
+	return
+}
+
+// parseErrCount parses a zpool error-count token, which may carry a K/M/G/T
+// suffix (zpool abbreviates counts ≥ 1000). Returns 0 for "-" or unparseable.
+func parseErrCount(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "-" {
+		return 0
+	}
+	mult := 1.0
+	switch s[len(s)-1] {
+	case 'K', 'k':
+		mult, s = 1e3, s[:len(s)-1]
+	case 'M', 'm':
+		mult, s = 1e6, s[:len(s)-1]
+	case 'G', 'g':
+		mult, s = 1e9, s[:len(s)-1]
+	case 'T', 't':
+		mult, s = 1e12, s[:len(s)-1]
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return int(v * mult)
+}
+
+// poolErrorSummary aggregates per-device error counts from the pool's parsed
+// vdev topology and detects whether `zpool status` reports known (permanent)
+// data errors — i.e. the "errors:" line is anything other than
+// "No known data errors".
+func poolErrorSummary(poolName string, vdevs []VdevGroup) (read, write, cksum int, dataErrors bool) {
+	for _, g := range vdevs {
+		for _, d := range g.Disks {
+			read += d.ReadErr
+			write += d.WriteErr
+			cksum += d.CksumErr
+		}
+	}
+	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	if err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			tr := strings.TrimSpace(line)
+			if strings.HasPrefix(tr, "errors:") {
+				msg := strings.TrimSpace(strings.TrimPrefix(tr, "errors:"))
+				dataErrors = msg != "" && !strings.EqualFold(msg, "No known data errors")
+				break
+			}
+		}
+	}
+	return
 }
 
 func poolSpareDevs(poolName string) (raw, resolved, statuses []string) {

@@ -29,6 +29,10 @@ var experimentalSudoersAliases = map[string]bool{
 	"ZFSNAS_SYNCOID":  true, // v6.5.19 — VM/Container Backup
 }
 
+// mergerfsSudoersAlias is gated independently of virtualization: present iff
+// the MergerFS feature is installed (see RequiredSudoersContent).
+var mergerfsSudoersAlias = map[string]bool{"ZFSNAS_MERGERFS": true}
+
 // SudoersDiff is the result of comparing the installed sudoers file against
 // the required template.
 type SudoersDiff struct {
@@ -75,6 +79,7 @@ var sudoersSectionInfoMap = map[string]sudoersSectionInfo{
 	"ZFSNAS_INCUSNET":  {Label: "Incus Network Bridges (VLAN interfaces)", Optional: true},
 	"ZFSNAS_INCUS":     {Label: "Incus Compute (Proxmox Import + ISO Management)", Optional: true},
 	"ZFSNAS_SYNCOID":   {Label: "ZFS Replication (syncoid)", Optional: true},
+	"ZFSNAS_MERGERFS":  {Label: "MergerFS Support", Optional: true},
 	"ZFSNAS_RSYNC":     {Label: "External Storage & Filesystem rsync", Optional: true},
 	"ZFSNAS_APT":       {Label: "OS Updates & Installation"},
 	"ZFSNAS_SECURITY":  {Label: "Sudoers Self-Management"},
@@ -169,6 +174,13 @@ func RequiredSudoersContent() string {
 	if !IncusInstalled() {
 		s = stripExperimentalSudoersSections(s)
 	}
+	// MergerFS is gated independently of virtualization: its sudoers block is
+	// only required once the feature's binary is installed. A host can have
+	// mergerfs without incus (and vice-versa), so it gets its own gate rather
+	// than riding the virtualization one.
+	if !MergerFSInstalled() {
+		s = stripSudoersAliasSet(s, mergerfsSudoersAlias)
+	}
 	return s
 }
 
@@ -179,6 +191,14 @@ func RequiredSudoersContent() string {
 // --experimental is off so the host doesn't surface virtualisation /
 // memory-compression sudoers lines that aren't actually needed.
 func stripExperimentalSudoersSections(content string) string {
+	return stripSudoersAliasSet(content, experimentalSudoersAliases)
+}
+
+// stripSudoersAliasSet removes the Cmnd_Alias blocks named in `set` (and their
+// preceding comment block) and drops their tokens from the trailing User_Spec.
+// Used to gate optional features independently (virtualization via
+// experimentalSudoersAliases, MergerFS via mergerfsSudoersAlias).
+func stripSudoersAliasSet(content string, set map[string]bool) string {
 	var out []string
 	lines := strings.Split(content, "\n")
 	skip := false       // inside a gated Cmnd_Alias block
@@ -199,7 +219,7 @@ func stripExperimentalSudoersSections(content string) string {
 		if inUserSpec {
 			// We're inside the alias list of the User_Spec — strip gated
 			// tokens here too.
-			out = append(out, filterAliasTokensInLine(line))
+			out = append(out, filterAliasTokensInLine(line, set))
 			if !endsContinuation {
 				inUserSpec = false
 			}
@@ -209,7 +229,7 @@ func stripExperimentalSudoersSections(content string) string {
 		// Detect start of a gated Cmnd_Alias block.
 		if strings.HasPrefix(trimmed, "Cmnd_Alias ") {
 			parts := strings.Fields(trimmed)
-			if len(parts) >= 2 && experimentalSudoersAliases[parts[1]] {
+			if len(parts) >= 2 && set[parts[1]] {
 				// Also drop this block's preceding comment lines so a
 				// non-virtualization host's sudoers file carries no leftover
 				// virtualization wording (the comment block runs from its
@@ -228,7 +248,7 @@ func stripExperimentalSudoersSections(content string) string {
 		// Detect the User_Spec line. After we strip tokens from this line,
 		// keep filtering subsequent continuation lines until the spec ends.
 		if strings.HasPrefix(trimmed, "zfsnas ") && strings.Contains(line, "NOPASSWD:") {
-			out = append(out, filterAliasTokensInLine(line))
+			out = append(out, filterAliasTokensInLine(line, set))
 			if endsContinuation {
 				inUserSpec = true
 			}
@@ -243,7 +263,7 @@ func stripExperimentalSudoersSections(content string) string {
 // filterAliasTokensInLine drops gated alias names from a comma-separated alias
 // list while preserving the line's prefix, indentation, and trailing
 // continuation marker.
-func filterAliasTokensInLine(line string) string {
+func filterAliasTokensInLine(line string, set map[string]bool) string {
 	// Preserve any leading "<prefix>NOPASSWD:" (User_Spec head) verbatim.
 	prefix := ""
 	rest := line
@@ -277,7 +297,7 @@ func filterAliasTokensInLine(line string) string {
 	var kept []string
 	for _, t := range tokens {
 		name := strings.TrimSpace(t)
-		if experimentalSudoersAliases[name] {
+		if set[name] {
 			continue
 		}
 		if name == "" && len(kept) > 0 {
@@ -1362,6 +1382,27 @@ Cmnd_Alias ZFSNAS_SYNCOID = \
     /usr/bin/cat /tmp/znas-bkup-mount-*, \
     /usr/bin/tee /tmp/znas-bkup-mount-*
 
+# ── MergerFS union filesystem (v6.7.13, optional) ─────────────────────────────
+# Installs the mergerfs package/binary, writes its systemd .mount unit, and
+# mounts/unmounts the union under /mnt or a pool path. Source data is never
+# modified. Only present when the MergerFS feature is installed.
+Cmnd_Alias ZFSNAS_MERGERFS = \
+    /usr/bin/apt-get install -y /tmp/znas-mergerfs/*, \
+    /usr/bin/apt-get remove -y mergerfs, \
+    /usr/bin/tar -xzf /tmp/znas-mergerfs/* -C /usr/local *, \
+    /usr/bin/install -m0755 /tmp/znas-mergerfs/* *, \
+    /usr/bin/rm -f /usr/local/bin/mergerfs, \
+    /usr/bin/rm -f /usr/local/bin/mergerfs-fusermount, \
+    /usr/bin/tee /etc/fuse.conf, \
+    /usr/bin/tee /etc/systemd/system/*.mount, \
+    /usr/bin/rm -f /etc/systemd/system/*.mount, \
+    /usr/bin/mergerfs *, \
+    /usr/bin/setfattr -n user.mergerfs.* *, \
+    /usr/bin/mount /mnt/*, /usr/bin/umount /mnt/*, \
+    /usr/bin/systemctl daemon-reload, \
+    /usr/bin/systemctl enable --now *.mount, \
+    /usr/bin/systemctl disable --now *.mount
+
 # ── Folder usage scanning ─────────────────────────────────────────────────────
 # since v6.0.0 — Folder TreeMap feature; scans dataset mount points for per-folder sizes
 Cmnd_Alias ZFSNAS_SCAN = \
@@ -1520,5 +1561,5 @@ Cmnd_Alias ZFSNAS_SECURITY = \
 
 # ── Grant all of the above, passwordless, to the service account ──────────────
 zfsnas ALL=(ALL) NOPASSWD: \
-    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_MINIO, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_SYNCOID, ZFSNAS_RSYNC, ZFSNAS_APT, ZFSNAS_SECURITY
+    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_MINIO, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_SYNCOID, ZFSNAS_MERGERFS, ZFSNAS_RSYNC, ZFSNAS_APT, ZFSNAS_SECURITY
 `

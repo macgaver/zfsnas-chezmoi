@@ -1239,6 +1239,41 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/prerequisites/syncoid-status",
 		RequireAuth(http.HandlerFunc(HandleSyncoidStatus))).Methods("GET")
 
+	// --- MergerFS (v6.7.13, optional feature) ---
+	r.Handle("/api/mergerfs/status",
+		RequireAuth(HandleMergerFSStatus(appCfg))).Methods("GET")
+	r.Handle("/api/prerequisites/install-mergerfs",
+		RequireAuth(RequireAdmin(HandleInstallMergerFS(appCfg)))).Methods("POST")
+	r.Handle("/api/prerequisites/uninstall-mergerfs",
+		RequireAuth(RequireAdmin(HandleUninstallMergerFS(appCfg)))).Methods("POST")
+	r.Handle("/api/mergerfs/enable",
+		RequireAuth(RequireAdmin(HandleMergerFSEnable(appCfg)))).Methods("PUT")
+	r.Handle("/api/mergerfs/pools",
+		RequireAuth(HandleListMergerFSPools(appCfg))).Methods("GET")
+	r.Handle("/api/mergerfs/pools",
+		RequireAuth(RequirePermission("manage_pool_dataset")(HandleCreateMergerFSPool(appCfg)))).Methods("POST")
+	r.Handle("/api/mergerfs/pools/{name}/status",
+		RequireAuth(HandleMergerFSPoolStatus(appCfg))).Methods("GET")
+	r.Handle("/api/mergerfs/pools/{name}",
+		RequireAuth(RequirePermission("manage_pool_dataset")(HandleUpdateMergerFSPool(appCfg)))).Methods("PUT")
+	r.Handle("/api/mergerfs/pools/{name}",
+		RequireAuth(RequirePermission("manage_pool_dataset")(HandleDeleteMergerFSPool(appCfg)))).Methods("DELETE")
+	// Coordinated global snapshots (all-ZFS unions).
+	r.Handle("/api/mergerfs/pools/{name}/snapshots",
+		RequireAuth(HandleMergerFSSnapshots(appCfg))).Methods("GET")
+	r.Handle("/api/mergerfs/pools/{name}/snapshots",
+		RequireAuth(RequirePermission("manage_snapshots")(HandleMergerFSSnapDelete(appCfg)))).Methods("DELETE")
+	r.Handle("/api/mergerfs/pools/{name}/snap-now",
+		RequireAuth(RequirePermission("manage_snapshots")(HandleMergerFSSnapNow(appCfg)))).Methods("POST")
+	r.Handle("/api/mergerfs/pools/{name}/snap-restore",
+		RequireAuth(RequirePermission("manage_snapshots")(HandleMergerFSSnapRestore(appCfg)))).Methods("POST")
+	r.Handle("/api/mergerfs/pools/{name}/snap-schedule",
+		RequireAuth(HandleGetMergerFSSnapSchedule(appCfg))).Methods("GET")
+	r.Handle("/api/mergerfs/pools/{name}/snap-schedule",
+		RequireAuth(RequirePermission("manage_snapshots")(HandlePutMergerFSSnapSchedule(appCfg)))).Methods("PUT")
+	r.Handle("/api/mergerfs/pools/{name}/snap-schedule",
+		RequireAuth(RequirePermission("manage_snapshots")(HandleDeleteMergerFSSnapSchedule(appCfg)))).Methods("DELETE")
+
 	// --- Homepage widget API keys (admin only) ---
 	r.Handle("/api/settings/api-keys",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleListAPIKeys)))).Methods("GET")

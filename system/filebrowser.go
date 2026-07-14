@@ -547,6 +547,12 @@ func ResolveKnownRoots(configDir string) (map[string]string, error) {
 		roots[mp] = label
 	}
 
+	// MergerFS union mountpoints (v6.7.13) — browsable via the tab's File
+	// Browser button.
+	for mp, label := range mergerfsKnownRoots() {
+		roots[mp] = label
+	}
+
 	if len(roots) == 0 {
 		return roots, fmt.Errorf("no known roots found")
 	}
