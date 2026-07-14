@@ -22087,7 +22087,10 @@ function switchDsPoolTab(poolName) {
   _dsActivePool = poolName;
   const root = document.getElementById('datasets-content');
   if (!root) return;
-  root.querySelectorAll('[data-ds-pool-tab]').forEach(b =>
+  // The tab buttons live in #datasets-tab-bar, which is OUTSIDE
+  // #datasets-content (it shares a header row with the create buttons).
+  const tabBar = document.getElementById('datasets-tab-bar');
+  (tabBar || root).querySelectorAll('[data-ds-pool-tab]').forEach(b =>
     b.classList.toggle('active', b.dataset.dsPoolTab === poolName));
   root.querySelectorAll('.ds-pool-panel').forEach(p =>
     p.style.display = (p.dataset.dsPool === poolName) ? '' : 'none');
@@ -43047,6 +43050,19 @@ function _ciCtxNewMenu() {
   dd.style.cssText = 'position:fixed;min-width:200px;z-index:9500;';
   return dd;
 }
+// Menu labels are developer-authored constants that may begin with an inline
+// znas-icon <svg>…</svg>. Render that leading svg as markup and everything
+// after it as plain text, so no dynamic content is ever parsed as HTML.
+function _ciCtxSetLabel(el, label) {
+  const s = String(label == null ? '' : label);
+  const m = s.match(/^\s*<svg[\s\S]*?<\/svg>/i);
+  if (m) {
+    el.innerHTML = m[0];
+    el.appendChild(document.createTextNode(s.slice(m[0].length)));
+  } else {
+    el.textContent = s;
+  }
+}
 function _ciCtxFill(dd, items) {
   (items || []).forEach(it => {
     if (it.kind === 'divider') {
@@ -43055,11 +43071,11 @@ function _ciCtxFill(dd, items) {
     if (it.kind === 'header') {
       const h = document.createElement('div');
       h.style.cssText = 'padding:6px 14px 2px;font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;';
-      h.textContent = it.label; dd.appendChild(h); return;
+      _ciCtxSetLabel(h, it.label); dd.appendChild(h); return;
     }
     if (it.kind === 'submenu') { dd.appendChild(_ciCtxSubButton(dd, it)); return; }
     const b = document.createElement('button');
-    b.textContent = it.label;
+    _ciCtxSetLabel(b, it.label);
     if (it.danger) b.className = 'danger';
     if (it.enabled === false) {
       b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'default';
@@ -43076,7 +43092,7 @@ function _ciCtxSubButton(parentMenu, it) {
   const b = document.createElement('button');
   b.className = 'ci-ctx-sub';
   b.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;';
-  const lab = document.createElement('span'); lab.textContent = it.label;
+  const lab = document.createElement('span'); _ciCtxSetLabel(lab, it.label);
   const arr = document.createElement('span'); arr.textContent = '▸'; arr.style.opacity = '.55';
   b.appendChild(lab); b.appendChild(arr);
   let timer = null;
@@ -47339,7 +47355,9 @@ function _ciTermRenderTabs() {
         : (tab.control === 'mirror' ? ('controlled by ' + (tab.byLabel || 'another window') + ' — press Enter to take over') : ''));
     btn.appendChild(dot);
     const lbl = document.createElement('span');
-    lbl.textContent = displayLabel;
+    // Host-shell tab labels start with an inline znas-icon <svg>; render it as
+    // markup and the rest (hostname etc.) as text via the shared helper.
+    _ciCtxSetLabel(lbl, displayLabel);
     lbl.onclick = () => {
       // Remember the user-clicked tab so a future "click Terminal to
       // restore" lands them back on this one.
