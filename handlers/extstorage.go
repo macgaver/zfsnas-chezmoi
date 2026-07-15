@@ -555,6 +555,12 @@ func HandleExtStorageSetRsync(appCfg *config.AppConfig) http.HandlerFunc {
 				jsonErr(w, http.StatusBadRequest, "local path must be an absolute path")
 				return
 			}
+			if rc.MaxDelete < 0 {
+				rc.MaxDelete = 0
+			}
+			if !rc.Delete {
+				rc.MaxDelete = 0 // only meaningful with mirror deletions
+			}
 			switch rc.Frequency {
 			case "manual", "hourly", "daily", "weekly", "monthly":
 			default:

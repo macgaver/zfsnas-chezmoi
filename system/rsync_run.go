@@ -15,6 +15,7 @@ package system
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -251,6 +252,13 @@ func StartRsyncJob(configDir string, es *config.ExternalStorage, onFinish func(*
 	args := []string{"rsync", "-a", "--partial", "--no-inc-recursive", "--info=progress2", "--stats"}
 	if rc.Delete {
 		args = append(args, "--delete")
+		// Safety cap: stop mirroring deletions past N files, so a source that
+		// mounts successfully but is unexpectedly empty (remote data drive
+		// missing, wrong share) can't wipe the destination. rsync exits 25
+		// when the cap trips — surfaced with a dedicated message below.
+		if rc.MaxDelete > 0 {
+			args = append(args, fmt.Sprintf("--max-delete=%d", rc.MaxDelete))
+		}
 	}
 	if rc.BWLimitKB > 0 {
 		args = append(args, fmt.Sprintf("--bwlimit=%d", rc.BWLimitKB))
@@ -353,7 +361,16 @@ func StartRsyncJob(configDir string, es *config.ExternalStorage, onFinish func(*
 			job.Error = "canceled by user"
 		case err != nil:
 			job.Status = "error"
-			job.Error = firstLine(lastLines(job.lines, 3), err)
+			// Exit 25 = the --max-delete cap stopped deletions. Explain what
+			// happened instead of showing rsync's terse "code 25" line.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 25 && rc.Delete && rc.MaxDelete > 0 {
+				job.Error = fmt.Sprintf(
+					"deletion safety limit reached: this run wanted to delete more than %d files on the destination, so rsync stopped deleting (transfers still completed). If the source is intact and this mass deletion is expected, raise the limit in the sync's Advanced settings and run again.",
+					rc.MaxDelete)
+			} else {
+				job.Error = firstLine(lastLines(job.lines, 3), err)
+			}
 		default:
 			job.Status = "done"
 			job.Progress = 100

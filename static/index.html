@@ -9667,11 +9667,20 @@ Select the Console tab to load.</pre>
           </button>
           <div id="extsync-adv-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px;">
-              <input type="checkbox" id="extsync-delete" style="width:15px;height:15px;accent-color:#ff9f0a;margin-top:1px;">
+              <input type="checkbox" id="extsync-delete" onchange="extSyncUpdateDeleteFields(true)" style="width:15px;height:15px;accent-color:#ff9f0a;margin-top:1px;">
               <span>Mirror deletions <span style="color:#ff9f0a;">(--delete)</span>
                 <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Files removed on the source are also removed on the destination. Makes the destination an exact mirror — use with care.</div>
               </span>
             </label>
+            <div id="extsync-maxdel-block" style="display:none;margin:0 0 14px 23px;padding:10px 12px;background:rgba(255,159,10,0.07);border:1px solid rgba(255,159,10,0.3);border-radius:8px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;flex-wrap:wrap;">
+                Deletion safety limit
+                <input type="number" id="extsync-maxdelete" min="0" style="width:90px;" oninput="extSyncMaxDelHint()">
+                <span class="text-3 text-xs" style="font-weight:400;">files per run (0 = unlimited)</span>
+                <i class="info-tip" data-tip="Passes rsync --max-delete=N. If a run would remove more than N files on the destination, rsync stops deleting and the run is flagged as an error — the transfer itself still completes.&#10;&#10;This protects the mirror against a source that mounts successfully but is unexpectedly empty: for example the remote server is up but its data drive didn't come back after a reboot, or the share was recreated empty. Without a limit, one such run deletes everything on this side."></i>
+              </label>
+              <div id="extsync-maxdel-hint" style="font-size:11px;color:var(--text-3);margin-top:5px;">Stops a run that tries to delete more files than expected — e.g. when the remote share mounts empty because its disk is missing. Recommended: at least the number of files you'd realistically remove between two runs.</div>
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="form-group" style="margin-bottom:0;">
                 <label>Bandwidth limit <span class="text-3 text-xs">(KB/s, 0 = none)</span></label>
@@ -24502,6 +24511,29 @@ function extSyncUpdateWindowFields() {
   document.getElementById('extsync-window-fields').style.display = on ? '' : 'none';
 }
 
+// Show the deletion-safety-limit block when Mirror deletions is on. When the
+// USER just ticked the box (userAction), pre-fill a recommended limit so the
+// protection is on by default — they can still set 0 for unlimited.
+function extSyncUpdateDeleteFields(userAction) {
+  const on = document.getElementById('extsync-delete').checked;
+  document.getElementById('extsync-maxdel-block').style.display = on ? '' : 'none';
+  const inp = document.getElementById('extsync-maxdelete');
+  if (on && userAction && !(parseInt(inp.value, 10) > 0)) inp.value = 100;
+  extSyncMaxDelHint();
+}
+
+function extSyncMaxDelHint() {
+  const hint = document.getElementById('extsync-maxdel-hint');
+  const n = parseInt(document.getElementById('extsync-maxdelete').value, 10) || 0;
+  if (n > 0) {
+    hint.style.color = 'var(--text-3)';
+    hint.textContent = `A run that tries to delete more than ${n} files stops deleting and is flagged as an error — protects against the source mounting empty (e.g. its disk is missing).`;
+  } else {
+    hint.style.color = '#ff9f0a';
+    hint.textContent = 'Unlimited: if the source ever mounts empty (remote disk missing, wrong share), a single run will delete every file on the destination. Setting a limit is strongly recommended.';
+  }
+}
+
 // ── Path picker popovers ────────────────────────────────────────────────────
 // Shared builder for the sync modal's two folder pickers. `rect` MUST be
 // captured from ev.currentTarget BEFORE any await — currentTarget is null
@@ -24596,6 +24628,8 @@ function openExtSyncModal(id) {
   if (rc && rc.window_end)   document.getElementById('extsync-window-end').value   = rc.window_end;
   extSyncUpdateWindowFields();
   document.getElementById('extsync-delete').checked    = rc ? !!rc.delete : false;
+  document.getElementById('extsync-maxdelete').value   = rc ? (rc.max_delete || 0) : 0;
+  extSyncUpdateDeleteFields(false); // show/hide only — don't override a saved 0 (unlimited)
   document.getElementById('extsync-bwlimit').value     = rc ? (rc.bwlimit_kb || 0) : 0;
   document.getElementById('extsync-extraflags').value  = rc ? (rc.extra_flags || '') : '';
   document.getElementById('extsync-remove-btn').style.display = rc ? '' : 'none';
@@ -24629,6 +24663,7 @@ async function submitExtSync(ev, runNow) {
     weekday:    parseInt(document.getElementById('extsync-weekday').value, 10) || 0,
     day_of_month: parseInt(document.getElementById('extsync-dom').value, 10) || 1,
     delete:     document.getElementById('extsync-delete').checked,
+    max_delete: parseInt(document.getElementById('extsync-maxdelete').value, 10) || 0,
     bwlimit_kb: parseInt(document.getElementById('extsync-bwlimit').value, 10) || 0,
     extra_flags: document.getElementById('extsync-extraflags').value.trim(),
     window_start: document.getElementById('extsync-window-on').checked ? document.getElementById('extsync-window-start').value : '',

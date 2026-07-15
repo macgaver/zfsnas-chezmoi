@@ -551,6 +551,7 @@ type RsyncConfig struct {
 	DayOfMonth int    `json:"day_of_month,omitempty"`
 	// Options
 	Delete     bool   `json:"delete,omitempty"`      // --delete (mirror deletions)
+	MaxDelete  int    `json:"max_delete,omitempty"`  // --max-delete=N safety cap (0 = unlimited); only with Delete
 	BWLimitKB  int    `json:"bwlimit_kb,omitempty"`  // --bwlimit=N (KB/s)
 	ExtraFlags string `json:"extra_flags,omitempty"` // appended raw rsync flags
 	// Optional daily run window ("HH:MM", both set = enabled; may wrap
