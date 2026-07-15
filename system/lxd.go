@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -4042,15 +4043,21 @@ func LXDSetConfig(name string, cfg LXDInstanceConfig) error {
 				}
 			}
 
-			// ── Port-forwards sync ───────────────────────────────────────────────
-			// For each NIC in the request, replace its full set of port-forward
-			// proxy devices with the desired list. Devices are named with the
-			// "fwd-<nic>-<proto>-<src>" prefix so we can target them precisely
-			// without touching unrelated proxy devices the user may have added
-			// manually. Sent ALWAYS by the frontend (even when empty) so a
-			// drop-to-zero deletes the leftover forwards.
-			for _, nic := range cfg.NICs {
-				syncNICPortForwards(name, nic.Name, nic.PortForwards, rawDev.ExpandedDevices)
+		}
+
+		// ── Port-forwards sync ───────────────────────────────────────────────
+		// For each NIC in the request, replace its full set of port-forward
+		// proxy devices with the desired list. Devices are named with the
+		// "fwd-<nic>-<proto>-<src>" prefix so we can target them precisely
+		// without touching unrelated proxy devices the user may have added
+		// manually. Sent ALWAYS by the frontend (even when empty) so a
+		// drop-to-zero deletes the leftover forwards. Runs for BOTH containers
+		// and VMs (VMs get NAT-mode proxies — see applyNICPortForwards); it
+		// used to sit inside the !isVM block above, which silently dropped
+		// every forward edited onto a VM.
+		for _, nic := range cfg.NICs {
+			if err := syncNICPortForwards(name, nic.Name, nic.PortForwards, rawDev.ExpandedDevices); err != nil {
+				return fmt.Errorf("NIC %s: %v", nic.Name, err)
 			}
 		}
 	} // end ManageNICs guard
@@ -5250,10 +5257,9 @@ func LXDCreateVM(req LXDCreateVMRequest, logCh chan<- string) error {
 			continue // skip port-forwards on a NIC that didn't attach
 		}
 
-		// Host→VM port-forward proxy devices. For VMs the connect side
-		// runs through the Incus agent, which means the guest OS must
-		// have lxd-agent up. Built-in for Incus VM images, so this just
-		// works once the VM has booted.
+		// Host→VM port-forward proxy devices. VMs only accept NAT-mode
+		// proxies; applyNICPortForwards handles the NAT wiring (host-IP
+		// listen address + static ipv4.address pin on the NIC).
 		if len(nic.PortForwards) > 0 {
 			log(fmt.Sprintf("Adding %d port forward(s) on %s…", len(nic.PortForwards), devName))
 			if err := applyNICPortForwards(req.Name, devName, nic.PortForwards); err != nil {
@@ -6089,7 +6095,7 @@ func splitProxySpec(spec string) (string, int) {
 // are left alone. expandedDevices is the snapshot taken at the top of
 // LXDSetConfig — used to find which devices to remove without an extra
 // `incus query`.
-func syncNICPortForwards(instance, nicName string, desired []NICPortForward, expandedDevices map[string]map[string]string) {
+func syncNICPortForwards(instance, nicName string, desired []NICPortForward, expandedDevices map[string]map[string]string) error {
 	prefix := "fwd-" + nicName + "-"
 	for devName, devCfg := range expandedDevices {
 		if devCfg["type"] != "proxy" || !strings.HasPrefix(devName, prefix) {
@@ -6098,17 +6104,164 @@ func syncNICPortForwards(instance, nicName string, desired []NICPortForward, exp
 		exec.Command("incus", "config", "device", "remove", instance, devName).Run() //nolint:errcheck
 	}
 	if len(desired) > 0 {
-		_ = applyNICPortForwards(instance, nicName, desired)
+		return applyNICPortForwards(instance, nicName, desired)
 	}
+	return nil
+}
+
+// routeSrcRe extracts the source address from `ip -4 route get` output.
+var routeSrcRe = regexp.MustCompile(`\bsrc (\d+\.\d+\.\d+\.\d+)`)
+
+// hostPrimaryIPv4 returns the IPv4 address the host uses for its default
+// route. NAT-mode proxy devices (the only kind Incus allows on VMs) must
+// listen on a concrete host address — a wildcard 0.0.0.0 listen is rejected.
+func hostPrimaryIPv4() (string, error) {
+	out, err := exec.Command("ip", "-4", "route", "get", "1.1.1.1").Output()
+	if err != nil {
+		return "", fmt.Errorf("route lookup: %v", err)
+	}
+	m := routeSrcRe.FindStringSubmatch(string(out))
+	if m == nil {
+		return "", fmt.Errorf("no source address in route lookup")
+	}
+	return m[1], nil
+}
+
+// ensureNICStaticIPv4 pins an Incus-level static ipv4.address on the given
+// NIC device if it doesn't have one yet — NAT-mode proxy devices refuse to
+// start without it ("Instance has no static IPv4 address assigned to be
+// used as the connect IP"). Prefers the address the guest currently holds
+// (matched by the NIC's volatile MAC, since VMs rename eth0 → enp5s0) so
+// pinning doesn't change the VM's IP; falls back to a free address near the
+// top of the parent network's subnet, clear of dnsmasq's bottom-up range.
+func ensureNICStaticIPv4(instance, nicDevice string) error {
+	out, err := exec.Command("incus", "query", "/1.0/instances/"+instance).Output()
+	if err != nil {
+		return fmt.Errorf("query instance: %v", err)
+	}
+	var raw struct {
+		Config          map[string]string            `json:"config"`
+		ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return err
+	}
+	dev := raw.ExpandedDevices[nicDevice]
+	if dev == nil {
+		return fmt.Errorf("NIC device %s not found", nicDevice)
+	}
+	if dev["ipv4.address"] != "" {
+		return nil // already pinned
+	}
+	bridge := dev["network"]
+	if bridge == "" {
+		bridge = dev["parent"]
+	}
+
+	// Prefer the guest's live address on this NIC.
+	ip := ""
+	if stateOut, err := exec.Command("incus", "query", "/1.0/instances/"+instance+"/state").Output(); err == nil {
+		var state struct {
+			Network map[string]lxdStateNetwork `json:"network"`
+		}
+		devMAC := raw.Config["volatile."+nicDevice+".hwaddr"]
+		if devMAC == "" {
+			devMAC = dev["hwaddr"]
+		}
+		if json.Unmarshal(stateOut, &state) == nil {
+			for ifName, iface := range state.Network {
+				if ifName != nicDevice && (devMAC == "" || !strings.EqualFold(iface.HWAddr, devMAC)) {
+					continue
+				}
+				for _, a := range iface.Addresses {
+					if a.Family == "inet" && a.Scope == "global" {
+						ip = a.Address
+						break
+					}
+				}
+				if ip != "" {
+					break
+				}
+			}
+		}
+	}
+	if ip == "" {
+		ip, err = pickFreeBridgeIPv4(bridge)
+		if err != nil {
+			return fmt.Errorf("no free address on %s: %v", bridge, err)
+		}
+	}
+	if out, err := exec.Command("incus", "config", "device", "set",
+		instance, nicDevice, "ipv4.address="+ip).CombinedOutput(); err != nil {
+		return fmt.Errorf("pin static IP %s on %s: %s", ip, nicDevice, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// pickFreeBridgeIPv4 returns an unused IPv4 address on the managed bridge,
+// walking from the top of the subnet downward (dnsmasq hands out dynamic
+// leases from the bottom up, so the top stays quiet). "Used" = the bridge's
+// own address plus every current lease (dynamic and static).
+func pickFreeBridgeIPv4(bridge string) (string, error) {
+	if bridge == "" {
+		return "", fmt.Errorf("NIC has no parent network")
+	}
+	out, err := exec.Command("incus", "network", "get", bridge, "ipv4.address").Output()
+	if err != nil {
+		return "", fmt.Errorf("read %s subnet: %v", bridge, err)
+	}
+	gwIP, ipNet, err := net.ParseCIDR(strings.TrimSpace(string(out)))
+	if err != nil {
+		return "", fmt.Errorf("parse %s subnet %q: %v", bridge, strings.TrimSpace(string(out)), err)
+	}
+	used := map[string]bool{gwIP.String(): true}
+	if lo, err := exec.Command("incus", "query", "/1.0/networks/"+bridge+"/leases").Output(); err == nil {
+		var leases []struct {
+			Address string `json:"address"`
+		}
+		if json.Unmarshal(lo, &leases) == nil {
+			for _, l := range leases {
+				used[l.Address] = true
+			}
+		}
+	}
+	ip4 := ipNet.IP.To4()
+	mask := ipNet.Mask
+	if ip4 == nil || len(mask) != 4 {
+		return "", fmt.Errorf("%s is not an IPv4 subnet", bridge)
+	}
+	network := binaryBE32(ip4)
+	broadcast := network | ^binaryBE32(net.IP(mask).To4())
+	// Walk down from broadcast-1; cap the scan so a huge subnet stays cheap.
+	low := network + 1
+	for cand, tries := broadcast-1, 0; cand >= low && tries < 512; cand, tries = cand-1, tries+1 {
+		s := fmt.Sprintf("%d.%d.%d.%d", byte(cand>>24), byte(cand>>16), byte(cand>>8), byte(cand))
+		if !used[s] {
+			return s, nil
+		}
+	}
+	return "", fmt.Errorf("subnet exhausted")
+}
+
+func binaryBE32(ip net.IP) uint32 {
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
 }
 
 // applyNICPortForwards attaches one Incus `proxy` device per port-forward
-// entry to the instance. Devices listen on the host's network namespace
-// (default bind=host) and connect to 127.0.0.1:<port> inside the
-// instance's namespace — so the same wiring works for a bare LXC service
-// listening on its own loopback, a VM exposing a port, and a podman
-// container in a compose stack (podman publishes to the LXC's loopback
-// for compose-stack containers).
+// entry to the instance.
+//
+// Containers get plain proxy devices: listen on the host's network
+// namespace (default bind=host), connect to 127.0.0.1:<port> inside the
+// container's namespace — works for a bare LXC service listening on its
+// own loopback and for podman compose-stack containers (podman publishes
+// to the LXC's loopback).
+//
+// VMs only accept NAT-mode proxies ("Only NAT mode is supported for
+// proxies on VM instances"), which come with two extra requirements probed
+// live on Incus 6.x: the listen address must be a concrete host IP (no
+// wildcard), and the instance NIC must carry a static Incus-level
+// ipv4.address to use as the DNAT target — ensureNICStaticIPv4 pins the
+// VM's current address when missing.
 //
 // Devices are named "fwd-<nic>-<proto>-<src>" so a future edit / re-apply
 // can find them deterministically. Idempotent per source port: a second
@@ -6118,20 +6271,53 @@ func applyNICPortForwards(instance, nicDevice string, forwards []NICPortForward)
 	if nicDevice == "" {
 		nicDevice = "eth0"
 	}
+	valid := forwards[:0:0]
 	for _, f := range forwards {
-		if f.SourcePort <= 0 || f.SourcePort > 65535 ||
-			f.TargetPort <= 0 || f.TargetPort > 65535 {
-			continue
+		if f.SourcePort > 0 && f.SourcePort <= 65535 &&
+			f.TargetPort > 0 && f.TargetPort <= 65535 {
+			valid = append(valid, f)
 		}
+	}
+	if len(valid) == 0 {
+		return nil
+	}
+	isVM := false
+	if out, err := exec.Command("incus", "query", "/1.0/instances/"+instance).Output(); err == nil {
+		var inst struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(out, &inst) == nil {
+			isVM = inst.Type == "virtual-machine"
+		}
+	}
+	hostIP := ""
+	if isVM {
+		var err error
+		if hostIP, err = hostPrimaryIPv4(); err != nil {
+			return fmt.Errorf("port-forwards: %v", err)
+		}
+		if err := ensureNICStaticIPv4(instance, nicDevice); err != nil {
+			return fmt.Errorf("port-forwards: %v", err)
+		}
+	}
+	for _, f := range valid {
 		proto := strings.ToLower(strings.TrimSpace(f.Protocol))
 		if proto != "tcp" && proto != "udp" {
 			proto = "tcp"
 		}
 		devName := fmt.Sprintf("fwd-%s-%s-%d", nicDevice, proto, f.SourcePort)
-		listen := fmt.Sprintf("%s:0.0.0.0:%d", proto, f.SourcePort)
-		connect := fmt.Sprintf("%s:127.0.0.1:%d", proto, f.TargetPort)
-		if out, err := exec.Command("incus", "config", "device", "add", instance, devName,
-			"proxy", "listen="+listen, "connect="+connect).CombinedOutput(); err != nil {
+		args := []string{"config", "device", "add", instance, devName, "proxy"}
+		if isVM {
+			args = append(args,
+				fmt.Sprintf("listen=%s:%s:%d", proto, hostIP, f.SourcePort),
+				fmt.Sprintf("connect=%s:0.0.0.0:%d", proto, f.TargetPort),
+				"nat=true")
+		} else {
+			args = append(args,
+				fmt.Sprintf("listen=%s:0.0.0.0:%d", proto, f.SourcePort),
+				fmt.Sprintf("connect=%s:127.0.0.1:%d", proto, f.TargetPort))
+		}
+		if out, err := exec.Command("incus", args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("port-forward %d/%s: %s", f.SourcePort, proto, strings.TrimSpace(string(out)))
 		}
 	}
