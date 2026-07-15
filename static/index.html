@@ -11480,15 +11480,15 @@ Select the Console tab to load.</pre>
       now and forever.<br>No subscriptions, no licensing, no hidden costs.
     </p>
 
-    <!-- Versions -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px;">
-      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px 10px;border:1px solid var(--border);">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:5px;">Current</div>
-        <div style="font-family:'SF Mono',monospace;font-weight:700;font-size:16px;" id="about-current">v…</div>
+    <!-- Versions — single compact row per box to keep the modal short -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--surface2);border-radius:var(--radius-sm);padding:7px 10px;border:1px solid var(--border);">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);">Current</span>
+        <span style="font-family:'SF Mono',monospace;font-weight:700;font-size:13px;" id="about-current">v…</span>
       </div>
-      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px 10px;border:1px solid var(--border);">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:5px;">Latest</div>
-        <div style="font-family:'SF Mono',monospace;font-weight:700;font-size:16px;" id="about-latest">…</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--surface2);border-radius:var(--radius-sm);padding:7px 10px;border:1px solid var(--border);">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);">Latest</span>
+        <span style="font-family:'SF Mono',monospace;font-weight:700;font-size:13px;" id="about-latest">…</span>
       </div>
     </div>
 
@@ -11524,6 +11524,31 @@ Select the Console tab to load.</pre>
         <span style="font-size:15px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg></span>
         Support &amp; Issues
       </a>
+    </div>
+
+    <!-- Native ZNAS Client apps (App Store) -->
+    <div style="margin-bottom:16px;padding:12px 14px 13px;background:linear-gradient(135deg,rgba(0,180,216,0.09) 0%,rgba(102,51,153,0.09) 100%);border:1px solid var(--border);border-radius:10px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:9px;text-align:left;">Native ZNAS Client Apps</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <a href="https://apps.apple.com/ca/app/znas-client/id6788345795" target="_blank" rel="noopener"
+           style="display:flex;align-items:center;gap:11px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-decoration:none;transition:border-color .15s,box-shadow .15s;"
+           onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 3px 14px rgba(0,180,216,0.22)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+          <img src="/static/znas-client-icon.png" alt="ZNAS Client for macOS" style="width:46px;height:46px;flex-shrink:0;">
+          <div style="text-align:left;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:var(--text-1);line-height:1.25;">ZNAS Client</div>
+            <div style="font-size:11px;color:var(--text-3);line-height:1.35;">for macOS</div>
+            <div style="font-size:10.5px;color:var(--accent);font-weight:600;margin-top:1px;">Mac App Store ↗</div>
+          </div>
+        </a>
+        <div style="display:flex;align-items:center;gap:11px;padding:8px 10px;background:var(--surface2);border:1px dashed var(--border);border-radius:10px;cursor:default;" title="The iPhone & iPad app is on its way">
+          <img src="/static/znas-client-icon.png" alt="ZNAS Client for iOS — coming soon" style="width:46px;height:46px;flex-shrink:0;filter:grayscale(1);opacity:.4;">
+          <div style="text-align:left;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:var(--text-3);line-height:1.25;">ZNAS Client</div>
+            <div style="font-size:11px;color:var(--text-3);line-height:1.35;">for iOS</div>
+            <div style="display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1.5px 8px;margin-top:2px;">Coming soon</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Support -->
