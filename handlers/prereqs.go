@@ -504,6 +504,7 @@ func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 				jsonErr(w, http.StatusInternalServerError, string(out))
 				return
 			}
+			system.ForgetBinaryPresence("hdparm")
 			audit.Log(audit.Entry{
 				User:    sess.Username,
 				Role:    sess.Role,

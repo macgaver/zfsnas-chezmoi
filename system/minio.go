@@ -422,6 +422,10 @@ func UninstallMinIO() error {
 		exec.Command("sudo", "rm", "-f", f).Run()
 	}
 	exec.Command("sudo", "systemctl", "daemon-reload").Run()
+	// Drop the removed binaries from the sticky presence cache so
+	// MinIOPrereqsInstalled() reports false without a service restart.
+	ForgetBinaryPresence("minio")
+	ForgetBinaryPresence("mc")
 	return nil
 }
 

@@ -322,6 +322,9 @@ func UninstallMergerFS(pools []config.MergerFSPool) error {
 	exec.Command("sudo", "apt-get", "remove", "-y", "mergerfs").Run()      //nolint:errcheck
 	exec.Command("sudo", "rm", "-f", "/usr/local/bin/mergerfs").Run()      //nolint:errcheck
 	exec.Command("sudo", "rm", "-f", "/usr/local/bin/mergerfs-fusermount").Run() //nolint:errcheck
+	// Drop mergerfs from the sticky presence cache so MergerFSInstalled()
+	// reports false without a service restart.
+	ForgetBinaryPresence("mergerfs")
 	return nil
 }
 

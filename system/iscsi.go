@@ -72,6 +72,9 @@ func UninstallISCSI() error {
 		return fmt.Errorf("apt-get remove: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	exec.Command("sudo", "apt-get", "autoremove", "-y").Run()
+	// Drop targetcli from the sticky presence cache so ISCSIPrereqsInstalled()
+	// reports false without a service restart.
+	ForgetBinaryPresence("targetcli")
 	return nil
 }
 

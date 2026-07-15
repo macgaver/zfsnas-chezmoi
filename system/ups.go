@@ -863,6 +863,12 @@ func UninstallNUT() error {
 	exec.Command("sudo", "systemctl", "daemon-reload").Run()
 	exec.Command("sudo", "systemctl", "reset-failed").Run()
 
+	// The nut binaries are gone — drop them from the sticky presence cache so
+	// UPSPrereqsInstalled() reports false immediately (top-bar UPS icon +
+	// Optional Features page) instead of after the next service restart.
+	ForgetBinaryPresence("upsc")
+	ForgetBinaryPresence("upsd")
+
 	return nil
 }
 
