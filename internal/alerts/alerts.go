@@ -44,6 +44,7 @@ const (
 	EventVMDiskFull         EventKey = "vm_disk_full"
 	EventVMHostSaturation   EventKey = "vm_host_saturation"
 	EventComposeUpdateFailure EventKey = "compose_update_failure"
+	EventInterlinkUnreachable EventKey = "interlink_unreachable"
 	EventTest            EventKey = "test" // always passes filter
 )
 
@@ -72,6 +73,18 @@ func matchesEvent(key EventKey, ev EventConfig) bool {
 	case EventVMDiskFull:        return ev.VMDiskFull
 	case EventVMHostSaturation:  return ev.VMHostSaturation
 	case EventComposeUpdateFailure: return ev.ComposeUpdateFailure
+	case EventInterlinkUnreachable: return ev.InterlinkUnreachable
+	}
+	return false
+}
+
+// AnyTargetWants reports whether at least one enabled target subscribes to the
+// given event key. Used by background pollers to skip checks nobody would receive.
+func AnyTargetWants(cfg *AlertConfig, key EventKey) bool {
+	for _, ev := range allEnabledEvents(cfg) {
+		if matchesEvent(key, ev) {
+			return true
+		}
 	}
 	return false
 }
@@ -103,6 +116,7 @@ type EventConfig struct {
 	UserCreatedDeleted   bool `json:"user_created_deleted"`
 	ShareCreatedDeleted  bool `json:"share_created_deleted"`
 	PoolActions          bool `json:"pool_actions"`
+	InterlinkUnreachable bool `json:"interlink_unreachable"`
 
 	// Virtualization events — only meaningful when the optional LXD/Incus
 	// feature is installed. Hidden in the UI on servers without it but kept
@@ -216,6 +230,7 @@ func defaultEventConfig() EventConfig {
 		ScrubErrors:          true,
 		SnapshotFailure:      true,
 		ReplicationFailure:   true,
+		InterlinkUnreachable: true,
 	}
 }
 

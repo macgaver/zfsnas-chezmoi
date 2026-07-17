@@ -440,6 +440,12 @@ type NICPortForward struct {
 	SourcePort int    `json:"source_port"` // port on the host (listen side)
 	TargetPort int    `json:"target_port"` // port inside the instance (connect side)
 	Protocol   string `json:"protocol"`    // "tcp" | "udp"
+	// TargetAddr optionally names the instance IPv4 the forward connects to.
+	// Needed when the guest configured a static IP inside its own OS: the
+	// host-nat DHCP server has no lease for it, so the automatic address
+	// discovery in ensureNICStaticIPv4 can't find it. Empty = auto (VM: the
+	// NIC's pinned/leased address; container: 127.0.0.1).
+	TargetAddr string `json:"target_addr,omitempty"`
 }
 
 // LXDUSBDevice is a USB device to pass through to a VM.
@@ -3128,13 +3134,13 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 			parts := strings.SplitN(devName, "-", 4)
 			if len(parts) == 4 && parts[0] == "fwd" {
 				nicForName := parts[1]
-				src, dst, proto := parseProxyListenConnect(devCfg["listen"], devCfg["connect"])
+				src, dst, proto, addr := parseProxyListenConnect(devCfg["listen"], devCfg["connect"])
 				if src > 0 && dst > 0 {
 					if nicForwards == nil {
 						nicForwards = map[string][]NICPortForward{}
 					}
 					nicForwards[nicForName] = append(nicForwards[nicForName], NICPortForward{
-						SourcePort: src, TargetPort: dst, Protocol: proto,
+						SourcePort: src, TargetPort: dst, Protocol: proto, TargetAddr: addr,
 					})
 				}
 			}
@@ -6062,30 +6068,36 @@ func LXDCreateComposeStackVM(req LXDCreateVMRequest, runtime, composeYAML, compo
 	return nil
 }
 
-// parseProxyListenConnect extracts the source/target ports and protocol
-// from an Incus proxy device's `listen=` and `connect=` config values
-// (format: "<proto>:<host>:<port>"). Both values must parse successfully
-// and the protocols must agree; otherwise the call returns 0/0/"" so the
-// caller can skip a malformed proxy device cleanly.
-func parseProxyListenConnect(listen, connect string) (src, dst int, proto string) {
-	lp, ls := splitProxySpec(listen)
-	cp, cs := splitProxySpec(connect)
+// parseProxyListenConnect extracts the source/target ports, protocol and
+// explicit connect address from an Incus proxy device's `listen=` and
+// `connect=` config values (format: "<proto>:<host>:<port>"). Both values
+// must parse successfully and the protocols must agree; otherwise the call
+// returns 0/0/""/"" so the caller can skip a malformed proxy device cleanly.
+// addr is empty for the two auto forms ZNAS writes itself (VM wildcard
+// 0.0.0.0 and container loopback 127.0.0.1) so only a user-specified
+// instance IP round-trips back into the editor.
+func parseProxyListenConnect(listen, connect string) (src, dst int, proto, addr string) {
+	lp, _, ls := splitProxySpec(listen)
+	cp, ch, cs := splitProxySpec(connect)
 	if lp == "" || cp == "" || lp != cp {
-		return 0, 0, ""
+		return 0, 0, "", ""
 	}
-	return ls, cs, lp
+	if ch == "0.0.0.0" || ch == "127.0.0.1" {
+		ch = ""
+	}
+	return ls, cs, lp, ch
 }
 
-// splitProxySpec parses "<proto>:<host>:<port>" → (proto, port). Returns
-// ("", 0) when the input doesn't match.
-func splitProxySpec(spec string) (string, int) {
+// splitProxySpec parses "<proto>:<host>:<port>" → (proto, host, port).
+// Returns ("", "", 0) when the input doesn't match.
+func splitProxySpec(spec string) (string, string, int) {
 	parts := strings.Split(spec, ":")
 	if len(parts) < 3 {
-		return "", 0
+		return "", "", 0
 	}
 	port := 0
 	fmt.Sscanf(parts[len(parts)-1], "%d", &port)
-	return strings.ToLower(parts[0]), port
+	return strings.ToLower(parts[0]), strings.Join(parts[1:len(parts)-1], ":"), port
 }
 
 // syncNICPortForwards reconciles the port-forward proxy devices attached
@@ -6096,6 +6108,13 @@ func splitProxySpec(spec string) (string, int) {
 // LXDSetConfig — used to find which devices to remove without an extra
 // `incus query`.
 func syncNICPortForwards(instance, nicName string, desired []NICPortForward, expandedDevices map[string]map[string]string) error {
+	// Validate the desired set before touching anything: the remove/re-add
+	// below is not transactional, so rejecting a bad request (e.g. a
+	// malformed or conflicting target address) after the removal pass would
+	// destroy the instance's existing forwards.
+	if _, _, err := validateNICPortForwards(nicName, desired); err != nil {
+		return err
+	}
 	prefix := "fwd-" + nicName + "-"
 	for devName, devCfg := range expandedDevices {
 		if devCfg["type"] != "proxy" || !strings.HasPrefix(devName, prefix) {
@@ -6134,7 +6153,12 @@ func hostPrimaryIPv4() (string, error) {
 // (matched by the NIC's volatile MAC, since VMs rename eth0 → enp5s0) so
 // pinning doesn't change the VM's IP; falls back to a free address near the
 // top of the parent network's subnet, clear of dnsmasq's bottom-up range.
-func ensureNICStaticIPv4(instance, nicDevice string) error {
+//
+// wantIP, when non-empty, is an address the user stated explicitly (a
+// forward's TargetAddr) — typically because the guest configured a static
+// IP inside its own OS, so neither the lease table nor the live state knows
+// it. It wins over discovery and over an existing different pin.
+func ensureNICStaticIPv4(instance, nicDevice, wantIP string) error {
 	out, err := exec.Command("incus", "query", "/1.0/instances/"+instance).Output()
 	if err != nil {
 		return fmt.Errorf("query instance: %v", err)
@@ -6149,6 +6173,16 @@ func ensureNICStaticIPv4(instance, nicDevice string) error {
 	dev := raw.ExpandedDevices[nicDevice]
 	if dev == nil {
 		return fmt.Errorf("NIC device %s not found", nicDevice)
+	}
+	if wantIP != "" {
+		if dev["ipv4.address"] == wantIP {
+			return nil // already pinned to the requested address
+		}
+		if out, err := exec.Command("incus", "config", "device", "set",
+			instance, nicDevice, "ipv4.address="+wantIP).CombinedOutput(); err != nil {
+			return fmt.Errorf("pin static IP %s on %s: %s", wantIP, nicDevice, strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
 	if dev["ipv4.address"] != "" {
 		return nil // already pinned
@@ -6247,6 +6281,34 @@ func binaryBE32(ip net.IP) uint32 {
 	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
 }
 
+// validateNICPortForwards drops entries with out-of-range ports and checks
+// every explicit TargetAddr: it must parse as IPv4, and all forwards on the
+// NIC must agree on a single address (NAT-mode DNAT targets the NIC's one
+// pinned address). Returns the surviving entries plus that address ("" when
+// no forward names one).
+func validateNICPortForwards(nicDevice string, forwards []NICPortForward) (valid []NICPortForward, wantIP string, err error) {
+	valid = forwards[:0:0]
+	for _, f := range forwards {
+		if f.SourcePort <= 0 || f.SourcePort > 65535 ||
+			f.TargetPort <= 0 || f.TargetPort > 65535 {
+			continue
+		}
+		f.TargetAddr = strings.TrimSpace(f.TargetAddr)
+		if f.TargetAddr != "" {
+			ip := net.ParseIP(f.TargetAddr)
+			if ip == nil || ip.To4() == nil {
+				return nil, "", fmt.Errorf("port-forward %d: %q is not a valid IPv4 address", f.SourcePort, f.TargetAddr)
+			}
+			if wantIP != "" && wantIP != f.TargetAddr {
+				return nil, "", fmt.Errorf("port-forwards on %s name conflicting instance IPs (%s vs %s)", nicDevice, wantIP, f.TargetAddr)
+			}
+			wantIP = f.TargetAddr
+		}
+		valid = append(valid, f)
+	}
+	return valid, wantIP, nil
+}
+
 // applyNICPortForwards attaches one Incus `proxy` device per port-forward
 // entry to the instance.
 //
@@ -6271,12 +6333,9 @@ func applyNICPortForwards(instance, nicDevice string, forwards []NICPortForward)
 	if nicDevice == "" {
 		nicDevice = "eth0"
 	}
-	valid := forwards[:0:0]
-	for _, f := range forwards {
-		if f.SourcePort > 0 && f.SourcePort <= 65535 &&
-			f.TargetPort > 0 && f.TargetPort <= 65535 {
-			valid = append(valid, f)
-		}
+	valid, wantIP, err := validateNICPortForwards(nicDevice, forwards)
+	if err != nil {
+		return err
 	}
 	if len(valid) == 0 {
 		return nil
@@ -6296,7 +6355,7 @@ func applyNICPortForwards(instance, nicDevice string, forwards []NICPortForward)
 		if hostIP, err = hostPrimaryIPv4(); err != nil {
 			return fmt.Errorf("port-forwards: %v", err)
 		}
-		if err := ensureNICStaticIPv4(instance, nicDevice); err != nil {
+		if err := ensureNICStaticIPv4(instance, nicDevice, wantIP); err != nil {
 			return fmt.Errorf("port-forwards: %v", err)
 		}
 	}
@@ -6308,14 +6367,28 @@ func applyNICPortForwards(instance, nicDevice string, forwards []NICPortForward)
 		devName := fmt.Sprintf("fwd-%s-%s-%d", nicDevice, proto, f.SourcePort)
 		args := []string{"config", "device", "add", instance, devName, "proxy"}
 		if isVM {
+			// Explicit TargetAddr → connect straight to it (the NIC pin
+			// above makes Incus accept it as the DNAT target); otherwise
+			// the 0.0.0.0 wildcard resolves to the NIC's pinned address.
+			connectIP := f.TargetAddr
+			if connectIP == "" {
+				connectIP = "0.0.0.0"
+			}
 			args = append(args,
 				fmt.Sprintf("listen=%s:%s:%d", proto, hostIP, f.SourcePort),
-				fmt.Sprintf("connect=%s:0.0.0.0:%d", proto, f.TargetPort),
+				fmt.Sprintf("connect=%s:%s:%d", proto, connectIP, f.TargetPort),
 				"nat=true")
 		} else {
+			// Containers proxy inside the instance's own network namespace:
+			// default to loopback, or the stated address when the service
+			// only listens on the container's NIC IP.
+			connectIP := f.TargetAddr
+			if connectIP == "" {
+				connectIP = "127.0.0.1"
+			}
 			args = append(args,
 				fmt.Sprintf("listen=%s:0.0.0.0:%d", proto, f.SourcePort),
-				fmt.Sprintf("connect=%s:127.0.0.1:%d", proto, f.TargetPort))
+				fmt.Sprintf("connect=%s:%s:%d", proto, connectIP, f.TargetPort))
 		}
 		if out, err := exec.Command("incus", args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("port-forward %d/%s: %s", f.SourcePort, proto, strings.TrimSpace(string(out)))

@@ -233,6 +233,9 @@ func main() {
 	// ===== Health alert poller =====
 	handlers.StartHealthPoller(absConfig)
 
+	// ===== InterLink peer connectivity watcher (5-min ping + down/up alerts) =====
+	handlers.StartInterlinkWatcher(appCfg)
+
 	// ===== Auto-load encryption keys for encrypted pools =====
 	autoLoadEncryptionKeys(absConfig)
 

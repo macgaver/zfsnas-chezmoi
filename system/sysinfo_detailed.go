@@ -26,6 +26,9 @@ type DetailedSystemInfo struct {
 	GPUs         []DetailedGPU            `json:"gpus"`
 	USBDevices   []DetailedUSBDevice      `json:"usb_devices"`
 	System       DetailedSystemSummary    `json:"system"`
+	// UptimeSeconds is the host uptime from /proc/uptime; 0 when unreadable
+	// (or when the response comes from a peer running an older build).
+	UptimeSeconds int64 `json:"uptime_seconds"`
 }
 
 // DetailedGPU is a display/3D adapter from lspci, with best-effort VRAM.
@@ -143,7 +146,26 @@ func GetDetailedSystemInfo() DetailedSystemInfo {
 			info.System.Hostname = h
 		}
 	}
+	info.UptimeSeconds = hostUptimeSeconds()
 	return info
+}
+
+// hostUptimeSeconds reads /proc/uptime and returns the host uptime in whole
+// seconds, or 0 if it can't be read.
+func hostUptimeSeconds() int64 {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0
+	}
+	up, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return 0
+	}
+	return int64(up)
 }
 
 // ── CPU ───────────────────────────────────────────────────────────────────────

@@ -3211,7 +3211,7 @@
                     <label class="form-label" style="display:flex;align-items:center;gap:6px;">
                       Port Forwards
                       <span style="color:var(--text-3);font-size:11px;font-weight:400;">(host port → VM port)</span>
-                      <i class="info-tip" data-tip="Each forward is an Incus proxy device: traffic arriving on the host at the source port is forwarded to the same protocol/target-port inside the VM. The Incus agent must be running in the VM (built into the Incus VM image) for the connect side to work."></i>
+                      <i class="info-tip" data-tip="Each forward is an Incus proxy device: traffic arriving on the host at the source port is forwarded to the same protocol/target-port inside the VM. The Incus agent must be running in the VM (built into the Incus VM image) for the connect side to work.&#10;&#10;The VM port field also accepts ip:port when the guest uses a static IP that has no DHCP lease on the host-nat network."></i>
                     </label>
                     <div id="lxd-vm-nic0-pfwd-list"></div>
                     <button type="button" class="btn btn-ghost btn-sm" onclick="_vmNic0AddPFwd()"
@@ -3512,7 +3512,7 @@
                     <label class="form-label" style="display:flex;align-items:center;gap:6px;">
                       Port Forwards
                       <span style="color:var(--text-3);font-size:11px;font-weight:400;">(host port → instance port)</span>
-                      <i class="info-tip" data-tip="Each forward is an Incus proxy device: traffic arriving on the host at the source port is forwarded to the same protocol/target-port inside the instance. Useful on host-NAT bridges where the instance has a private IP not reachable from outside the host."></i>
+                      <i class="info-tip" data-tip="Each forward is an Incus proxy device: traffic arriving on the host at the source port is forwarded to the same protocol/target-port inside the instance. Useful on host-NAT bridges where the instance has a private IP not reachable from outside the host.&#10;&#10;The instance port field also accepts ip:port when the service doesn't listen on the container's loopback, or the guest uses a static IP unknown to the host-nat DHCP."></i>
                     </label>
                     <div id="lxd-ct-nic0-pfwd-list"></div>
                     <button type="button" class="btn btn-ghost btn-sm" onclick="_ctNic0AddPFwd()"
@@ -11573,7 +11573,14 @@ Select the Console tab to load.</pre>
         <span>System Hardware</span>
         <span id="sysinfo-host-label" style="margin-left:8px;font-family:'SF Mono',monospace;font-size:13px;font-weight:500;color:var(--text-3);"></span>
       </h3>
-      <button class="modal-close" onclick="closeSysInfo()" style="background:none;border:none;color:var(--text-2);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <div style="display:flex;align-items:center;gap:14px;flex-shrink:0;">
+        <div id="sysinfo-uptime" title="Time since the server was last booted" style="display:none;align-items:center;gap:8px;padding:5px 13px;border-radius:20px;background:rgba(48,209,88,0.10);border:1px solid rgba(48,209,88,0.35);">
+          <span style="color:#30d158;font-size:14px;line-height:1;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          <span style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);">Uptime</span>
+          <span id="sysinfo-uptime-val" style="font-size:13px;font-weight:700;color:var(--text-1);font-variant-numeric:tabular-nums;white-space:nowrap;"></span>
+        </div>
+        <button class="modal-close" onclick="closeSysInfo()" style="background:none;border:none;color:var(--text-2);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </div>
     </div>
     <div id="sysinfo-body" style="overflow-y:auto;flex:1;padding:18px 24px 22px;">
       <div style="text-align:center;color:var(--text-3);padding:60px 0;">Reading hardware…</div>
@@ -13728,6 +13735,10 @@ function closeAbout() {
 function openSysInfo() {
   const m = document.getElementById('modal-sysinfo');
   m.classList.remove('hidden');
+  // Hide the uptime badge until fresh data arrives — a relay switch to another
+  // server must not show the previous host's uptime.
+  const upBadge = document.getElementById('sysinfo-uptime');
+  if (upBadge) upBadge.style.display = 'none';
   document.getElementById('sysinfo-body').innerHTML =
     '<div style="text-align:center;color:var(--text-3);padding:60px 0;">' +
     '<div style="display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;"></div>' +
@@ -13742,6 +13753,20 @@ function openSysInfo() {
 }
 function closeSysInfo() {
   document.getElementById('modal-sysinfo').classList.add('hidden');
+}
+
+// Human-readable uptime: the two most significant units only ("12 days 5 h",
+// "5 h 12 min", "42 min").
+function _fmtUptimeHuman(sec) {
+  sec = Math.floor(sec);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const min = Math.floor((sec % 3600) / 60);
+  if (d >= 365) { const y = Math.floor(d / 365); return y + (y > 1 ? ' years ' : ' year ') + (d % 365) + ' d'; }
+  if (d > 0)  return d + (d > 1 ? ' days ' : ' day ') + h + ' h';
+  if (h > 0)  return h + ' h ' + min + ' min';
+  if (min > 0) return min + ' min';
+  return sec + ' s';
 }
 
 function _sysinfoBytesPretty(n) {
@@ -13766,6 +13791,20 @@ function _renderSysInfo(data) {
   if (hostLbl) {
     const id = sys.product_name || mb.product || sys.hostname || '';
     hostLbl.textContent = id ? '· ' + id : '';
+  }
+
+  // Uptime badge (top right, next to the close button). Hidden when the
+  // backend didn't report it (e.g. a relay peer on an older build).
+  const upBadge = document.getElementById('sysinfo-uptime');
+  const upVal   = document.getElementById('sysinfo-uptime-val');
+  if (upBadge && upVal) {
+    const upSec = data.uptime_seconds || 0;
+    if (upSec > 0) {
+      upVal.textContent = _fmtUptimeHuman(upSec);
+      upBadge.style.display = 'flex';
+    } else {
+      upBadge.style.display = 'none';
+    }
   }
 
   // CPU chip
@@ -17420,7 +17459,8 @@ function _buildEventSubsHTML(p) {
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-replication"><span>Replication policy failure</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-users"><span>User created / deleted</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-shares"><span>Share created / deleted</span></label>
-    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-pool-actions"><span>ZFS Pool actions (pool destroyed / disconnected / imported, dataset created / deleted, zvol created / deleted)</span></label>`;
+    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-pool-actions"><span>ZFS Pool actions (pool destroyed / disconnected / imported, dataset created / deleted, zvol created / deleted)</span></label>
+    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-interlink"><span>Interlink server unreachable <i class="info-tip tip-left tip-down" data-tip="Connectivity to every linked Interlink server is tested every 5 minutes. You are notified once when a server stops responding, and once more when it becomes reachable again."></i></span></label>`;
 }
 
 function _buildVirtEventSubsHTML(p) {
@@ -17455,6 +17495,7 @@ function _loadEventSubs(p, ev) {
   setChk(`al-${p}-ev-users`,        ev.user_created_deleted);
   setChk(`al-${p}-ev-shares`,       ev.share_created_deleted);
   setChk(`al-${p}-ev-pool-actions`, ev.pool_actions);
+  setChk(`al-${p}-ev-interlink`,    ev.interlink_unreachable);
   // Virtualization events — same EventConfig object, separate UI section.
   setChk(`al-${p}-ev-vm-start-fail`,        ev.vm_start_failure);
   setChk(`al-${p}-ev-vm-unexpected-stop`,   ev.vm_unexpected_stop);
@@ -17484,6 +17525,7 @@ function _collectEventSubs(p) {
     user_created_deleted:   chk(`al-${p}-ev-users`),
     share_created_deleted:  chk(`al-${p}-ev-shares`),
     pool_actions:           chk(`al-${p}-ev-pool-actions`),
+    interlink_unreachable:  chk(`al-${p}-ev-interlink`),
     vm_start_failure:             chk(`al-${p}-ev-vm-start-fail`),
     vm_unexpected_stop:           chk(`al-${p}-ev-vm-unexpected-stop`),
     vm_created_deleted:           chk(`al-${p}-ev-vm-created-deleted`),
@@ -47916,7 +47958,7 @@ async function loadComputeInstanceDetail(name, type) {
             `<div style="display:flex;align-items:center;gap:6px;font-family:monospace;font-size:11px;color:var(--text-2);">
               <span style="color:var(--text-3);">host:</span>${f.source_port}
               <span style="color:var(--text-3);">→</span>
-              <span style="color:var(--text-3);">guest:</span>${f.target_port}
+              <span style="color:var(--text-3);">guest:</span>${f.target_addr ? esc(f.target_addr) + ':' : ''}${f.target_port}
               <span style="background:rgba(10,132,255,0.15);color:var(--accent);border-radius:3px;padding:0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">${esc(f.protocol||'tcp')}</span>
             </div>`).join('');
           val += `<div style="margin-top:4px;padding:4px 6px;border-left:2px solid var(--accent);background:var(--bg-2,rgba(255,255,255,0.03));border-radius:2px;">
@@ -49215,7 +49257,7 @@ function lxdEditRenderNICs() {
         <label class="form-label" style="display:flex;align-items:center;gap:6px;">
           Port Forwards
           <span style="color:var(--text-3);font-size:11px;font-weight:400;">(host port → instance port)</span>
-          <i class="info-tip" data-tip="Incus proxy devices: traffic arriving at the host on a given protocol/port is forwarded to the instance. Adding or removing entries here is applied on Save."></i>
+          <i class="info-tip" data-tip="Incus proxy devices: traffic arriving at the host on a given protocol/port is forwarded to the instance. Adding or removing entries here is applied on Save.&#10;&#10;The instance port field also accepts ip:port when the guest uses a static IP that has no DHCP lease on the host-nat network."></i>
         </label>
         <div id="lxd-edit-nic-pfwd-list-${i}"></div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="_editNicAddPFwd(${i})"
@@ -49296,12 +49338,12 @@ function _editNicRenderPFwds(i) {
   }
   box.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 110px 30px;gap:8px;align-items:end;font-size:11px;color:var(--text-3);margin-bottom:4px;">
-      <div>Host port</div><div>Instance port</div><div>Protocol</div><div></div>
+      <div>Host port</div><div style="display:flex;align-items:center;gap:4px;">Instance port <i class="info-tip" data-tip="${esc(_PFWD_DST_TIP)}"></i></div><div>Protocol</div><div></div>
     </div>` +
     list.map((f, idx) => `
       <div style="display:grid;grid-template-columns:1fr 1fr 110px 30px;gap:8px;margin-bottom:6px;">
         <input type="number" class="input" min="1" max="65535" placeholder="e.g. 8080" value="${esc(String(f.src||''))}" oninput="_editNicPFwdEdit(${i},${idx},'src',this.value)">
-        <input type="number" class="input" min="1" max="65535" placeholder="e.g. 80"   value="${esc(String(f.dst||''))}" oninput="_editNicPFwdEdit(${i},${idx},'dst',this.value)">
+        <input type="text" class="input" placeholder="e.g. 80 or 10.115.107.5:80" value="${esc(String(f.dst||''))}" oninput="_editNicPFwdEdit(${i},${idx},'dst',this.value)">
         <select class="input" onchange="_editNicPFwdEdit(${i},${idx},'proto',this.value)">
           <option value="tcp"${f.proto==='udp'?'':' selected'}>TCP</option>
           <option value="udp"${f.proto==='udp'?' selected':''}>UDP</option>
@@ -50102,10 +50144,12 @@ async function openLXDEditModal(name, type) {
       ...n, _origBridge: n.bridge, _origConnected: n.connected, _new: false, _deleted: false,
       ipv4_mode: n.ipv4_mode||'', ipv4_addr: n.ipv4_addr||'', ipv4_gw: n.ipv4_gw||'',
       dns1: n.dns1||'', dns2: n.dns2||'',
-      // Port forwards arrive from the backend as [{source_port,target_port,protocol}].
-      // Keep a stable shape in the editor state plus an _orig snapshot so the
-      // submit handler can compute add/remove diffs against the live config.
-      port_forwards: (n.port_forwards || []).map(f => ({src: String(f.source_port||''), dst: String(f.target_port||''), proto: (f.protocol||'tcp').toLowerCase()})),
+      // Port forwards arrive from the backend as [{source_port,target_port,
+      // target_addr?,protocol}]. Keep a stable shape in the editor state plus
+      // an _orig snapshot so the submit handler can compute add/remove diffs
+      // against the live config. An explicit target_addr folds back into the
+      // editor's single "instance port" field as "ip:port".
+      port_forwards: (n.port_forwards || []).map(f => ({src: String(f.source_port||''), dst: (f.target_addr ? f.target_addr + ':' : '') + String(f.target_port||''), proto: (f.protocol||'tcp').toLowerCase()})),
       _origPortForwards: JSON.parse(JSON.stringify(n.port_forwards || [])),
       // Extra static IPv4 routes read back from the container's network config.
       routes: (n.routes || []).map(r => ({to: r.to || '', via: r.via || ''})),
@@ -50194,9 +50238,9 @@ async function submitLXDEdit() {
   // state — profile NICs with only port-forward changes should still be
   // sent so the backend can apply the diff.
   const _pfwdChanged = (n) => {
-    const a = (n.port_forwards || []).map(f => ({s:+f.src||0, d:+f.dst||0, p:(f.proto||'tcp').toLowerCase()})).filter(f => f.s>0 && f.d>0);
-    const b = (n._origPortForwards || []).map(f => ({s:+f.source_port||0, d:+f.target_port||0, p:(f.protocol||'tcp').toLowerCase()}));
-    const key = (f) => f.s+'/'+f.d+'/'+f.p;
+    const a = (n.port_forwards || []).map(f => { const d = _pfwdParseDst(f.dst); return {s:+f.src||0, d:d.port, a:d.addr, p:(f.proto||'tcp').toLowerCase()}; }).filter(f => f.s>0 && f.d>0);
+    const b = (n._origPortForwards || []).map(f => ({s:+f.source_port||0, d:+f.target_port||0, a:f.target_addr||'', p:(f.protocol||'tcp').toLowerCase()}));
+    const key = (f) => f.s+'/'+f.a+':'+f.d+'/'+f.p;
     if (a.length !== b.length) return true;
     const sa = a.map(key).sort(), sb = b.map(key).sort();
     for (let i=0; i<sa.length; i++) if (sa[i] !== sb[i]) return true;
@@ -50241,7 +50285,7 @@ async function submitLXDEdit() {
       // ones the user removed. Only fold-in entries where both ports are
       // sensible numbers.
       port_forwards: (n.port_forwards || [])
-        .map(f => ({source_port: parseInt(f.src)||0, target_port: parseInt(f.dst)||0, protocol: (f.proto||'tcp').toLowerCase()}))
+        .map(f => { const d = _pfwdParseDst(f.dst); return {source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase()}; })
         .filter(f => f.source_port > 0 && f.target_port > 0),
     }));
 
@@ -52735,6 +52779,16 @@ function _ctNic0BridgeChange() {
 }
 
 // ── NIC0 port-forwards state + rendering (VM modal) ──────────────────────
+// Shared helpers for the "Instance port" field of the port-forward editors
+// (VM create, container create, edit-hardware modal). The field accepts a
+// bare port ("80") or an explicit "ip:port" ("10.115.107.5:80") for guests
+// whose static IP isn't in the host-nat DHCP leases.
+const _PFWD_DST_TIP = 'Accepts a bare port (e.g. 80) or ip:port (e.g. 10.115.107.5:80).\n\nWith a bare port ZNAS finds the instance IP automatically (VM: its DHCP lease / pinned address on the host-nat network; container: its loopback).\n\nSpecify ip:port when the guest OS is configured with a static IP — the address then has no DHCP lease on the host-nat network, so it cannot be discovered and must be given explicitly.';
+function _pfwdParseDst(v) {
+  const m = String(v||'').trim().match(/^(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5})$/);
+  if (!m) return { addr: '', port: 0 };
+  return { addr: m[1] || '', port: parseInt(m[2], 10) || 0 };
+}
 let _lxdVMNic0PFwds = [];
 function _vmNic0BridgeChange() {
   const sel = document.getElementById('lxd-vm-nic0-bridge');
@@ -52760,12 +52814,12 @@ function _vmNic0RenderPFwds() {
   }
   box.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 110px 30px;gap:8px;align-items:end;font-size:11px;color:var(--text-3);margin-bottom:4px;">
-      <div>Host port</div><div>VM port</div><div>Protocol</div><div></div>
+      <div>Host port</div><div style="display:flex;align-items:center;gap:4px;">VM port <i class="info-tip" data-tip="${esc(_PFWD_DST_TIP)}"></i></div><div>Protocol</div><div></div>
     </div>` +
     _lxdVMNic0PFwds.map((f, i) => `
       <div style="display:grid;grid-template-columns:1fr 1fr 110px 30px;gap:8px;margin-bottom:6px;">
         <input type="number" class="input" min="1" max="65535" placeholder="e.g. 8080" value="${esc(String(f.src||''))}" oninput="_vmNic0PFwdEdit(${i},'src',this.value)">
-        <input type="number" class="input" min="1" max="65535" placeholder="e.g. 80"   value="${esc(String(f.dst||''))}" oninput="_vmNic0PFwdEdit(${i},'dst',this.value)">
+        <input type="text" class="input" placeholder="e.g. 80 or 10.115.107.5:80" value="${esc(String(f.dst||''))}" oninput="_vmNic0PFwdEdit(${i},'dst',this.value)">
         <select class="input" onchange="_vmNic0PFwdEdit(${i},'proto',this.value)">
           <option value="tcp"${f.proto==='udp'?'':' selected'}>TCP</option>
           <option value="udp"${f.proto==='udp'?' selected':''}>UDP</option>
@@ -52799,12 +52853,12 @@ function _ctNic0RenderPFwds() {
   }
   box.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 110px 30px;gap:8px;align-items:end;font-size:11px;color:var(--text-3);margin-bottom:4px;">
-      <div>Host port</div><div>Instance port</div><div>Protocol</div><div></div>
+      <div>Host port</div><div style="display:flex;align-items:center;gap:4px;">Instance port <i class="info-tip" data-tip="${esc(_PFWD_DST_TIP)}"></i></div><div>Protocol</div><div></div>
     </div>` +
     _lxdCTNic0PFwds.map((f, i) => `
       <div style="display:grid;grid-template-columns:1fr 1fr 110px 30px;gap:8px;margin-bottom:6px;">
         <input type="number" class="input" min="1" max="65535" placeholder="e.g. 8080" value="${esc(String(f.src||''))}" oninput="_ctNic0PFwdEdit(${i},'src',this.value)">
-        <input type="number" class="input" min="1" max="65535" placeholder="e.g. 80"   value="${esc(String(f.dst||''))}" oninput="_ctNic0PFwdEdit(${i},'dst',this.value)">
+        <input type="text" class="input" placeholder="e.g. 80 or 10.115.107.5:80" value="${esc(String(f.dst||''))}" oninput="_ctNic0PFwdEdit(${i},'dst',this.value)">
         <select class="input" onchange="_ctNic0PFwdEdit(${i},'proto',this.value)">
           <option value="tcp"${f.proto==='udp'?'':' selected'}>TCP</option>
           <option value="udp"${f.proto==='udp'?' selected':''}>UDP</option>
@@ -53449,7 +53503,7 @@ async function submitCreateVM(e) {
     const nic0 = { device_name: 'eth0', network: nic0Bridge };
     if (nic0Bridge === 'host-nat' && _lxdVMNic0PFwds.length) {
       const forwards = _lxdVMNic0PFwds
-        .map(f => ({ source_port: parseInt(f.src)||0, target_port: parseInt(f.dst)||0, protocol: (f.proto||'tcp').toLowerCase() }))
+        .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase() }; })
         .filter(f => f.source_port > 0 && f.target_port > 0);
       if (forwards.length) nic0.port_forwards = forwards;
     }
@@ -54477,7 +54531,7 @@ async function submitCreateContainer(e) {
     // for any other bridge, but be defensive and drop incomplete rows).
     if (nic0Bridge === 'host-nat' && _lxdCTNic0PFwds.length) {
       const forwards = _lxdCTNic0PFwds
-        .map(f => ({ source_port: parseInt(f.src)||0, target_port: parseInt(f.dst)||0, protocol: (f.proto||'tcp').toLowerCase() }))
+        .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase() }; })
         .filter(f => f.source_port > 0 && f.target_port > 0);
       if (forwards.length) nic0.port_forwards = forwards;
     }

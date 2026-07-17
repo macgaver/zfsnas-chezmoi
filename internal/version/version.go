@@ -10,7 +10,7 @@ import "time"
 // (see .github/workflows/release.yml). It MUST be a var, not a const — the
 // linker's -X can only set variables — and must carry NO leading "v" so it
 // compares cleanly against GitHub release tags (which are trimmed of "v").
-var Version = "6.7.13"
+var Version = "6.7.15"
 
 const ReleasesURL = "https://github.com/macgaver/zfsnas-chezmoi/releases"
 

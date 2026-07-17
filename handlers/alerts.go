@@ -385,30 +385,12 @@ func StartHealthPoller(configDir string) {
 	}()
 }
 
-// anyTargetWantsEvent returns true if at least one enabled target subscribes to the event.
+// anyTargetWantsEvent returns true if at least one enabled target subscribes to
+// the event. Delegates to the alerts package so every EventKey is covered — a
+// local copy of the matching switch only knew smart_error/wearout_exceeded,
+// which silently disabled the scrub-errors and security-updates polling gates.
 func anyTargetWantsEvent(cfg *alerts.AlertConfig, key alerts.EventKey) bool {
-	targets := []struct {
-		enabled bool
-		ev      alerts.EventConfig
-	}{
-		{cfg.Email.Enabled,     cfg.Email.Events},
-		{cfg.Ntfy.Enabled,      cfg.Ntfy.Events},
-		{cfg.Gotify.Enabled,    cfg.Gotify.Events},
-		{cfg.Pushover.Enabled,  cfg.Pushover.Events},
-		{cfg.Syslog.Enabled,    cfg.Syslog.Events},
-		{cfg.WebSocket.Enabled, cfg.WebSocket.Events},
-	}
-	for _, t := range targets {
-		if t.enabled {
-			// reuse the same matchesEvent logic via a temporary Send-like check
-			ev := t.ev
-			switch key {
-			case alerts.EventSmartError:      if ev.SmartError      { return true }
-			case alerts.EventWearoutExceeded: if ev.WearoutExceeded { return true }
-			}
-		}
-	}
-	return false
+	return alerts.AnyTargetWants(cfg, key)
 }
 
 func runHealthCheck(
