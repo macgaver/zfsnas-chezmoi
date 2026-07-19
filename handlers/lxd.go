@@ -546,6 +546,23 @@ func HandleLXDSetConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := present["existing_disks_raw"]; ok {
 		req.LXDInstanceConfig.ManageExistingDisks = true
 	}
+	// Scalar/config section (CPU, memory, description, firmware, …) is applied
+	// only when the body actually carries one of those keys — otherwise a
+	// device-only partial PUT (e.g. `{"nics":[...]}`) would unset them by
+	// writing zero-values. The web edit modal sends the full config so this is
+	// always true for normal edits.
+	for _, k := range []string{
+		"description", "cpu_limit", "cpu_pin", "cpu_sockets", "cpu_shares",
+		"cpu_limit_pct", "memory_limit", "memory_hugepages", "memory_reservation",
+		"nesting", "autostart", "force_running", "stateful_snapshots",
+		"unprivileged", "firmware", "secure_boot", "tpm", "machine_type",
+		"disable_virtual_vga", "swap_limit", "feature_keyctl",
+	} {
+		if _, ok := present[k]; ok {
+			req.LXDInstanceConfig.ManageResources = true
+			break
+		}
+	}
 	// Multi-drive path: resolve cdrom_list entries to absolute paths.
 	if len(req.CDROMList) > 0 {
 		req.LXDInstanceConfig.ApplyCDROMs = true

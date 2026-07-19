@@ -157,6 +157,10 @@ func HandleLXDSwapCDROM(w http.ResponseWriter, r *http.Request) {
 
 	cfg.CDROMs = newPaths
 	cfg.ApplyCDROMs = true
+	// cfg came from LXDGetConfig (full config), so applying the scalar section
+	// is a no-op re-write of current values — set the gate so behaviour is
+	// unchanged for the CDROM-swap path.
+	cfg.ManageResources = true
 	if err := system.LXDSetConfig(name, cfg); err != nil {
 		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDEditConfig, Target: name, Result: audit.ResultError, Details: "cdrom swap: " + err.Error()})
 		jsonErr(w, http.StatusInternalServerError, err.Error())

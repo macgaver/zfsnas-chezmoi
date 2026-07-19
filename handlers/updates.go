@@ -115,6 +115,20 @@ func HandleUnattendedSet(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	// Enabling automatic upgrades requires the unattended-upgrades package.
+	// Without /usr/bin/unattended-upgrade the apt config is inert and the
+	// status endpoint (which gates enabled on the binary's presence) would
+	// report enabled:false — contradicting a success response here and
+	// leaving a stale "1" that silently activates if the package is later
+	// installed out-of-band. Refuse enable when it isn't installed. Disable
+	// always proceeds so a stale config can be cleared regardless.
+	if body.Enabled {
+		if _, err := os.Stat("/usr/bin/unattended-upgrade"); err != nil {
+			jsonErr(w, http.StatusBadRequest, "unattended-upgrades is not installed — install it first")
+			return
+		}
+	}
+
 	val := "0"
 	if body.Enabled {
 		val = "1"

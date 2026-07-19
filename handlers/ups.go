@@ -253,8 +253,11 @@ func HandleInstallUPS(appCfg *config.AppConfig) http.HandlerFunc {
 			jsonErr(w, http.StatusInternalServerError, string(out))
 			return
 		}
-		appCfg.UPS.Enabled = true
-		_ = config.SaveAppConfig(appCfg)
+		// Do NOT set UPS.Enabled here — the package being installed doesn't mean
+		// a UPS is configured. Enabled is set by HandleUpdateUPSConfig once a
+		// device/mode is actually chosen; flipping it at install time made the
+		// persisted config disagree with the runtime status (which gates on a
+		// configured device) and left a stale Enabled=true after uninstall.
 		audit.Log(audit.Entry{
 			User:    sess.Username,
 			Role:    sess.Role,
@@ -511,5 +514,3 @@ func HandleTestNUTClient(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, map[string]interface{}{"ok": true, "status": status})
 }
-
-

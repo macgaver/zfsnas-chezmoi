@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	"zfsnas/handlers"
@@ -31,12 +31,25 @@ import (
 //go:embed static
 var embeddedStatic embed.FS
 
+// tlsNoiseFilterWriter drops the frequent `http: TLS handshake error …` lines
+// (LAN health-check probes, cert scanners connecting with plain TCP or an
+// untrusted cert) that otherwise emit one journal line every few minutes and
+// bury real server errors. Everything else passes through to stderr unchanged.
+type tlsNoiseFilterWriter struct{}
+
+func (tlsNoiseFilterWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "TLS handshake error") {
+		return len(p), nil // swallow, but report success so the logger is happy
+	}
+	return os.Stderr.Write(p)
+}
+
 func main() {
 	// ===== Flags =====
-	devMode        := flag.Bool("dev", false, "Serve static files from disk (development mode)")
-	debugMode      := flag.Bool("debug", false, "Enable verbose debug logging (lsblk details, etc.)")
-	configDir      := flag.String("config", "./config", "Path to config directory")
-	setHTTPSPort   := flag.Int("set-https-port", 0, "Persist a new HTTPS port to config and use it this run (1–65535)")
+	devMode := flag.Bool("dev", false, "Serve static files from disk (development mode)")
+	debugMode := flag.Bool("debug", false, "Enable verbose debug logging (lsblk details, etc.)")
+	configDir := flag.String("config", "./config", "Path to config directory")
+	setHTTPSPort := flag.Int("set-https-port", 0, "Persist a new HTTPS port to config and use it this run (1–65535)")
 	experimentalMode := flag.Bool("experimental", false, "Enable experimental features (e.g. LXD VM/container management)")
 	flag.Parse()
 
@@ -136,9 +149,9 @@ func main() {
 
 	// Migrate legacy server.crt/server.key → self-signed.crt/self-signed.key
 	legacyCert := filepath.Join(certsDir, "server.crt")
-	legacyKey  := filepath.Join(certsDir, "server.key")
-	selfCert   := filepath.Join(certsDir, "self-signed.crt")
-	selfKey    := filepath.Join(certsDir, "self-signed.key")
+	legacyKey := filepath.Join(certsDir, "server.key")
+	selfCert := filepath.Join(certsDir, "self-signed.crt")
+	selfKey := filepath.Join(certsDir, "self-signed.key")
 	if certgen.Exists(legacyCert, legacyKey) && !certgen.Exists(selfCert, selfKey) {
 		log.Println("Migrating server.crt/server.key → self-signed.crt/self-signed.key")
 		os.Rename(legacyCert, selfCert)
@@ -159,11 +172,11 @@ func main() {
 		activeName = "self-signed"
 	}
 	certFile := filepath.Join(certsDir, activeName+".crt")
-	keyFile  := filepath.Join(certsDir, activeName+".key")
+	keyFile := filepath.Join(certsDir, activeName+".key")
 	if !certgen.Exists(certFile, keyFile) {
 		log.Printf("WARNING: active cert %q not found, falling back to self-signed", activeName)
 		certFile = selfCert
-		keyFile  = selfKey
+		keyFile = selfKey
 	}
 
 	// ===== Disk I/O poller (5-second samples for live charts) =====
@@ -429,10 +442,14 @@ func main() {
 	alerts.ReconcileLinkedServerSubscribers(appCfg)
 
 	// ===== HTTP Server =====
+	// Route http.Server's internal error logging through a filter that drops
+	// the noisy "TLS handshake error" probe lines (keeps real errors).
+	httpErrLog := log.New(tlsNoiseFilterWriter{}, "", log.LstdFlags)
 	addr := fmt.Sprintf(":%d", appCfg.Port)
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      router,
+		Addr:              addr,
+		Handler:           router,
+		ErrorLog:          httpErrLog,
 		ReadHeaderTimeout: 15 * time.Second,
 		WriteTimeout:      300 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -448,6 +465,7 @@ func main() {
 		srv443 = &http.Server{
 			Addr:              ":443",
 			Handler:           router,
+			ErrorLog:          httpErrLog,
 			ReadHeaderTimeout: 15 * time.Second,
 			WriteTimeout:      300 * time.Second,
 			IdleTimeout:       120 * time.Second,

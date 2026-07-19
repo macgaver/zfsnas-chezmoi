@@ -1984,6 +1984,14 @@ type LXDInstanceConfig struct {
 	ManagePCIDevices         bool `json:"-"`
 	ManagePassthroughDevices bool `json:"-"`
 	ManageExistingDisks      bool `json:"-"`
+	// ManageResources gates the scalar/config section (description, CPU,
+	// memory, autostart, nesting, firmware, swap, …) the same way the flags
+	// above gate device diffs. When false, that whole block is SKIPPED so a
+	// partial PUT (e.g. just `{"nics":[...]}`) does not unset limits.memory /
+	// limits.cpu / description by writing their zero-values. HandleLXDSetConfig
+	// sets it true when the body carries any resource key; the web edit modal
+	// sends the full config so it is always true for normal edits.
+	ManageResources bool `json:"-"`
 }
 
 var lxdDevNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
@@ -3422,14 +3430,9 @@ func LXDSetConfig(name string, cfg LXDInstanceConfig) error {
 	// even attempted; on LXD 5.0.x these keys are absent and would error.
 	caps := LXDGetCapabilities()
 
-	// Description via REST PATCH.
-	descJSON, _ := json.Marshal(cfg.Description)
-	if out, err := exec.Command("incus", "query", "-X", "PATCH",
-		"/1.0/instances/"+name, "--data", fmt.Sprintf(`{"description":%s}`, descJSON)).CombinedOutput(); err != nil {
-		return fmt.Errorf("description: %s", strings.TrimSpace(string(out)))
-	}
-
-	// CPU / memory / autostart via lxc config set.
+	// applyConf sets or unsets one instance config key. Defined outside the
+	// ManageResources gate below because the device section further down also
+	// uses it (CDROM/disk writes).
 	applyConf := func(key, val string) error {
 		var out []byte
 		var err error
@@ -3452,264 +3455,277 @@ func LXDSetConfig(name string, cfg LXDInstanceConfig) error {
 		}
 		return nil
 	}
-	// CPU pinning (range string) takes precedence over bare count.
-	// LXD's limits.cpu uses two different syntaxes selected by presence of
-	// "," or "-": with separators it's a pin set (specific CPUs); without
-	// separators it's a count (number of vCPUs). A user typing a single CPU
-	// index like "5" would otherwise be interpreted as "5 vCPUs", not
-	// "pinned to CPU 5". Normalize a bare positive integer in CPUPin to
-	// "N-N" so the user's intent is preserved.
-	effectiveCPU := cfg.CPULimit
-	if cfg.CPUPin != "" {
-		effectiveCPU = normalizeCPUPin(cfg.CPUPin)
-	}
-	if err := applyConf("limits.cpu", effectiveCPU); err != nil {
-		return err
-	}
-	// CPU socket topology (VM-only).  Stored as raw.qemu override.
-	if cfg.IsVM {
-		// Read current raw.qemu so we can update sockets without clobbering other flags.
-		curRawQEMU := ""
-		if out, err := exec.Command("incus", "config", "get", name, "raw.qemu").Output(); err == nil {
-			curRawQEMU = strings.TrimSpace(string(out))
+
+	// Scalar/config section (description, CPU, memory, autostart, firmware,
+	// swap, …). Gated on ManageResources so a device-only partial PUT does
+	// not unset these by writing their zero-values. See the flag's doc.
+	if cfg.ManageResources {
+		// Description via REST PATCH.
+		descJSON, _ := json.Marshal(cfg.Description)
+		if out, err := exec.Command("incus", "query", "-X", "PATCH",
+			"/1.0/instances/"+name, "--data", fmt.Sprintf(`{"description":%s}`, descJSON)).CombinedOutput(); err != nil {
+			return fmt.Errorf("description: %s", strings.TrimSpace(string(out)))
 		}
-		newRawQEMU := updateRawQEMUSockets(curRawQEMU, cfg.CPUSockets)
-		if newRawQEMU != curRawQEMU {
-			// Use PATCH instead of lxc config set to avoid flag-parsing of '-smp ...' values.
-			lxdPatchConfig(name, "raw.qemu", newRawQEMU)
+
+		// CPU pinning (range string) takes precedence over bare count.
+		// LXD's limits.cpu uses two different syntaxes selected by presence of
+		// "," or "-": with separators it's a pin set (specific CPUs); without
+		// separators it's a count (number of vCPUs). A user typing a single CPU
+		// index like "5" would otherwise be interpreted as "5 vCPUs", not
+		// "pinned to CPU 5". Normalize a bare positive integer in CPUPin to
+		// "N-N" so the user's intent is preserved.
+		effectiveCPU := cfg.CPULimit
+		if cfg.CPUPin != "" {
+			effectiveCPU = normalizeCPUPin(cfg.CPUPin)
 		}
-	}
-	if err := applyConf("limits.memory", cfg.MemoryLimit); err != nil {
-		return err
-	}
-	hugepagesVal := ""
-	if cfg.MemoryHugepages {
-		hugepagesVal = "true"
-	}
-	if err := applyConf("limits.memory.hugepages", hugepagesVal); err != nil {
-		return err
-	}
-	if err := applyConf("user.memory_reservation", cfg.MemoryReservation); err != nil {
-		return err
-	}
-	nestingVal := ""
-	if cfg.Nesting {
-		nestingVal = "true"
-	}
-	if err := applyConf("security.nesting", nestingVal); err != nil {
-		return err
-	}
-	autostart := "false"
-	if cfg.Autostart {
-		autostart = "true"
-	}
-	if err := applyConf("boot.autostart", autostart); err != nil {
-		return err
-	}
-	// user.zfsnas.force_running — when "true", ZNAS auto-restarts the
-	// instance after an unexpected stop (guest poweroff / crash / OOM /
-	// external CLI stop). Empty string clears the key.
-	forceRunning := ""
-	if cfg.ForceRunning {
-		forceRunning = "true"
-	}
-	if err := applyConf("user.zfsnas.force_running", forceRunning); err != nil {
-		return err
-	}
-	// migration.stateful — VM-only; controls whether QEMU is initialised in a way
-	// that supports stateful (memory-including) snapshots. Can only be changed while
-	// the instance is stopped; ignore the error here so other settings still apply
-	// (the UI already warns the user about the stop requirement).
-	//
-	// Incus rules out three combinations entirely:
-	//   1. TPM + migration.stateful=true (mutually exclusive)
-	//   2. additional disks from a non-shared pool + migration.stateful=true
-	//      (ZFS is local, so any extra disk attached on a ZFS-backed host
-	//      breaks the start: "Only additional disks coming from a shared
-	//      storage pool are supported with migration.stateful=true").
-	// We force stateful off when either constraint is violated rather than
-	// letting the VM end up in a state that cannot start.
-	if cfg.IsVM {
-		hasExtraDisks := false
-		for _, d := range cfg.Disks {
-			if !d.IsRoot {
-				hasExtraDisks = true
-				break
+		if err := applyConf("limits.cpu", effectiveCPU); err != nil {
+			return err
+		}
+		// CPU socket topology (VM-only).  Stored as raw.qemu override.
+		if cfg.IsVM {
+			// Read current raw.qemu so we can update sockets without clobbering other flags.
+			curRawQEMU := ""
+			if out, err := exec.Command("incus", "config", "get", name, "raw.qemu").Output(); err == nil {
+				curRawQEMU = strings.TrimSpace(string(out))
+			}
+			newRawQEMU := updateRawQEMUSockets(curRawQEMU, cfg.CPUSockets)
+			if newRawQEMU != curRawQEMU {
+				// Use PATCH instead of lxc config set to avoid flag-parsing of '-smp ...' values.
+				lxdPatchConfig(name, "raw.qemu", newRawQEMU)
 			}
 		}
-		if !hasExtraDisks && len(cfg.ExistingDisks) > 0 {
-			hasExtraDisks = true
+		if err := applyConf("limits.memory", cfg.MemoryLimit); err != nil {
+			return err
 		}
-		// CDROMs attached via Incus-native disk devices have an external
-		// path source — Incus rejects them outright when migration.stateful
-		// is true with "Only Incus-managed disks are allowed". So as soon
-		// as the user attaches an installer ISO, we force stateful off.
-		// Without this gate the VM either won't start at all or, if the
-		// CDROM fails to attach, OVMF won't see the install medium and
-		// the user sees "boot media not found" / PXE timeout.
-		hasCDROMs := false
-		if cfg.ApplyCDROMs {
-			for _, p := range cfg.CDROMs {
-				if p != "" {
-					hasCDROMs = true
+		hugepagesVal := ""
+		if cfg.MemoryHugepages {
+			hugepagesVal = "true"
+		}
+		if err := applyConf("limits.memory.hugepages", hugepagesVal); err != nil {
+			return err
+		}
+		if err := applyConf("user.memory_reservation", cfg.MemoryReservation); err != nil {
+			return err
+		}
+		nestingVal := ""
+		if cfg.Nesting {
+			nestingVal = "true"
+		}
+		if err := applyConf("security.nesting", nestingVal); err != nil {
+			return err
+		}
+		autostart := "false"
+		if cfg.Autostart {
+			autostart = "true"
+		}
+		if err := applyConf("boot.autostart", autostart); err != nil {
+			return err
+		}
+		// user.zfsnas.force_running — when "true", ZNAS auto-restarts the
+		// instance after an unexpected stop (guest poweroff / crash / OOM /
+		// external CLI stop). Empty string clears the key.
+		forceRunning := ""
+		if cfg.ForceRunning {
+			forceRunning = "true"
+		}
+		if err := applyConf("user.zfsnas.force_running", forceRunning); err != nil {
+			return err
+		}
+		// migration.stateful — VM-only; controls whether QEMU is initialised in a way
+		// that supports stateful (memory-including) snapshots. Can only be changed while
+		// the instance is stopped; ignore the error here so other settings still apply
+		// (the UI already warns the user about the stop requirement).
+		//
+		// Incus rules out three combinations entirely:
+		//   1. TPM + migration.stateful=true (mutually exclusive)
+		//   2. additional disks from a non-shared pool + migration.stateful=true
+		//      (ZFS is local, so any extra disk attached on a ZFS-backed host
+		//      breaks the start: "Only additional disks coming from a shared
+		//      storage pool are supported with migration.stateful=true").
+		// We force stateful off when either constraint is violated rather than
+		// letting the VM end up in a state that cannot start.
+		if cfg.IsVM {
+			hasExtraDisks := false
+			for _, d := range cfg.Disks {
+				if !d.IsRoot {
+					hasExtraDisks = true
 					break
 				}
 			}
-		} else if cfg.ApplyCDROM && cfg.CDROMPath != "" {
-			hasCDROMs = true
-		}
-		wantStateful := cfg.StatefulSnapshots && !cfg.TPM && !hasExtraDisks && !hasCDROMs
-		migVal := "false"
-		if wantStateful {
-			migVal = "true"
-		}
-		applyConf("migration.stateful", migVal) //nolint: errcheck — best-effort
-		// Raise the ZFS state dataset quota to at least RAM + 20% so stateful snapshots
-		// can write the full memory image. LXD hard-codes the initial quota at 100 MiB.
-		if wantStateful {
-			lxdEnsureStateQuota(name)
-		}
-	}
-
-	// Firmware / Secure Boot (VM-only).
-	if cfg.IsVM && cfg.Firmware != "" {
-		if cfg.Firmware == "bios" {
-			applyConf("security.secureboot", "false") //nolint:errcheck
-			applyConf("security.csm", "true")         //nolint:errcheck
-		} else {
-			applyConf("security.csm", "false") //nolint:errcheck
-			sbVal := "true"
-			if !cfg.SecureBoot {
-				sbVal = "false"
+			if !hasExtraDisks && len(cfg.ExistingDisks) > 0 {
+				hasExtraDisks = true
 			}
-			if err := applyConf("security.secureboot", sbVal); err != nil {
-				if !strings.Contains(err.Error(), "isn't supported") {
-					return fmt.Errorf("secure boot: %w", err)
-				}
-				// LXD 6.x removed security.secureboot; use raw.qemu pflash flag instead.
-				if err2 := lxdSetSecureBootRawQEMU(name, cfg.SecureBoot); err2 != nil {
-					return fmt.Errorf("secure boot (raw.qemu fallback): %w", err2)
-				}
-			}
-		}
-	}
-	// TPM device (VM-only): add or remove the tpm device based on cfg.TPM.
-	if cfg.IsVM {
-		hasTPM := false
-		if out, err := exec.Command("incus", "query", "/1.0/instances/"+name).Output(); err == nil {
-			var inst struct {
-				Devices map[string]map[string]string `json:"devices"`
-			}
-			if json.Unmarshal(out, &inst) == nil {
-				for _, d := range inst.Devices {
-					if d["type"] == "tpm" {
-						hasTPM = true
+			// CDROMs attached via Incus-native disk devices have an external
+			// path source — Incus rejects them outright when migration.stateful
+			// is true with "Only Incus-managed disks are allowed". So as soon
+			// as the user attaches an installer ISO, we force stateful off.
+			// Without this gate the VM either won't start at all or, if the
+			// CDROM fails to attach, OVMF won't see the install medium and
+			// the user sees "boot media not found" / PXE timeout.
+			hasCDROMs := false
+			if cfg.ApplyCDROMs {
+				for _, p := range cfg.CDROMs {
+					if p != "" {
+						hasCDROMs = true
 						break
+					}
+				}
+			} else if cfg.ApplyCDROM && cfg.CDROMPath != "" {
+				hasCDROMs = true
+			}
+			wantStateful := cfg.StatefulSnapshots && !cfg.TPM && !hasExtraDisks && !hasCDROMs
+			migVal := "false"
+			if wantStateful {
+				migVal = "true"
+			}
+			applyConf("migration.stateful", migVal) //nolint: errcheck — best-effort
+			// Raise the ZFS state dataset quota to at least RAM + 20% so stateful snapshots
+			// can write the full memory image. LXD hard-codes the initial quota at 100 MiB.
+			if wantStateful {
+				lxdEnsureStateQuota(name)
+			}
+		}
+
+		// Firmware / Secure Boot (VM-only).
+		if cfg.IsVM && cfg.Firmware != "" {
+			if cfg.Firmware == "bios" {
+				applyConf("security.secureboot", "false") //nolint:errcheck
+				applyConf("security.csm", "true")         //nolint:errcheck
+			} else {
+				applyConf("security.csm", "false") //nolint:errcheck
+				sbVal := "true"
+				if !cfg.SecureBoot {
+					sbVal = "false"
+				}
+				if err := applyConf("security.secureboot", sbVal); err != nil {
+					if !strings.Contains(err.Error(), "isn't supported") {
+						return fmt.Errorf("secure boot: %w", err)
+					}
+					// LXD 6.x removed security.secureboot; use raw.qemu pflash flag instead.
+					if err2 := lxdSetSecureBootRawQEMU(name, cfg.SecureBoot); err2 != nil {
+						return fmt.Errorf("secure boot (raw.qemu fallback): %w", err2)
 					}
 				}
 			}
 		}
-		if cfg.TPM && !hasTPM {
-			exec.Command("incus", "config", "device", "add", name, "tpm", "tpm").Run() //nolint:errcheck
-		} else if !cfg.TPM && hasTPM {
-			exec.Command("incus", "config", "device", "remove", name, "tpm").Run() //nolint:errcheck
-		}
-	}
-	// Machine type (VM-only). Empty string unsets the override, letting LXD
-	// choose. Incus 6.0.x lacks the qemu.machine.type config key — fall back
-	// to a -machine TYPE clause inside raw.qemu when the native key is
-	// rejected so the dropdown actually works on this Incus version.
-	if cfg.IsVM {
-		if err := applyConf("qemu.machine.type", cfg.MachineType); err != nil {
-			out, _ := exec.Command("incus", "config", "get", name, "raw.qemu").Output()
-			lxdPatchConfig(name, "raw.qemu",
-				updateRawQEMUMachine(strings.TrimSpace(string(out)), cfg.MachineType))
-		} else {
-			// Native key accepted: clear any prior raw.qemu -machine override
-			// so the two paths can't disagree on subsequent edits.
-			out, _ := exec.Command("incus", "config", "get", name, "raw.qemu").Output()
-			cleaned := updateRawQEMUMachine(strings.TrimSpace(string(out)), "")
-			if strings.TrimSpace(string(out)) != cleaned {
-				lxdPatchConfig(name, "raw.qemu", cleaned)
-			}
-		}
-	}
-
-	// SMBIOS types 1, 2, and 4 (VM-only). Stored inside raw.qemu's -smbios
-	// clauses so values survive a stop/start cycle and round-trip through
-	// the GET path. Always rewrite each clause — passing a nil/empty struct
-	// strips any previously-attached clause of that type.
-	if cfg.IsVM {
-		out, _ := exec.Command("incus", "config", "get", name, "raw.qemu").Output()
-		current := strings.TrimSpace(string(out))
-		updated := updateRawQEMUSMBIOSType1(current, cfg.SMBIOS)
-		updated = updateRawQEMUSMBIOSType2(updated, cfg.SMBIOSType2)
-		updated = updateRawQEMUSMBIOSType4(updated, cfg.SMBIOSType4)
-		if updated != current {
-			lxdPatchConfig(name, "raw.qemu", updated)
-		}
-	}
-
-	// CPU scheduling priority (limits.cpu.priority) applies to VMs too. The
-	// container path sets it inside the ApplyContainerFeatures block below, but
-	// that block is skipped for VMs — so handle VMs here. 0 = unset.
-	if cfg.IsVM {
-		priority := ""
-		if cfg.CPUShares > 0 && cfg.CPUShares <= 10 {
-			priority = strconv.Itoa(cfg.CPUShares)
-		}
-		if err := applyConf("limits.cpu.priority", priority); err != nil {
-			return err
-		}
-	}
-
-	// Container-specific features (CPU throttle, swap, security, FUSE).
-	// Skipped for VMs and when the frontend sends apply_container_features=false
-	// (preserves backwards compatibility with older frontend versions).
-	if cfg.ApplyContainerFeatures {
-		allowance := ""
-		if cfg.CPULimitPct > 0 && cfg.CPULimitPct <= 100 {
-			allowance = fmt.Sprintf("%dms/100ms", cfg.CPULimitPct)
-		}
-		if err := applyConf("limits.cpu.allowance", allowance); err != nil {
-			return err
-		}
-		priority := ""
-		if cfg.CPUShares > 0 && cfg.CPUShares <= 10 {
-			priority = strconv.Itoa(cfg.CPUShares)
-		}
-		if err := applyConf("limits.cpu.priority", priority); err != nil {
-			return err
-		}
-		if err := applyConf("limits.memory.swap", normalizeSwapLimit(cfg.SwapLimit)); err != nil {
-			return err
-		}
-		privVal := ""
-		if !cfg.Unprivileged {
-			privVal = "true"
-		}
-		if err := applyConf("security.privileged", privVal); err != nil {
-			return err
-		}
-		// "Allow keyctl" must NOT be expressed via security.syscalls.allow:
-		// that key is a *whitelist* — when set to "keyctl" LXD denies every
-		// other syscall (close, read, write, ...) and the container can't
-		// boot. Use the dedicated intercept key when LXD supports it; on
-		// older LXD (5.0.x and below) the intercept key doesn't exist and
-		// the default seccomp profile already permits keyctl, so we leave
-		// the config untouched. Either way, drop any stale allow=keyctl
-		// value left by the old buggy code.
-		exec.Command("incus", "config", "unset", name, "security.syscalls.allow").Run() //nolint:errcheck
-		if cfg.FeatureKeyctl {
-			if lxdSupportsConfigKey("security.syscalls.intercept.keyctl") {
-				if err := applyConf("security.syscalls.intercept.keyctl", "true"); err != nil {
-					return err
+		// TPM device (VM-only): add or remove the tpm device based on cfg.TPM.
+		if cfg.IsVM {
+			hasTPM := false
+			if out, err := exec.Command("incus", "query", "/1.0/instances/"+name).Output(); err == nil {
+				var inst struct {
+					Devices map[string]map[string]string `json:"devices"`
+				}
+				if json.Unmarshal(out, &inst) == nil {
+					for _, d := range inst.Devices {
+						if d["type"] == "tpm" {
+							hasTPM = true
+							break
+						}
+					}
 				}
 			}
-		} else {
-			exec.Command("incus", "config", "unset", name, "security.syscalls.intercept.keyctl").Run() //nolint:errcheck
+			if cfg.TPM && !hasTPM {
+				exec.Command("incus", "config", "device", "add", name, "tpm", "tpm").Run() //nolint:errcheck
+			} else if !cfg.TPM && hasTPM {
+				exec.Command("incus", "config", "device", "remove", name, "tpm").Run() //nolint:errcheck
+			}
 		}
-	}
+		// Machine type (VM-only). Empty string unsets the override, letting LXD
+		// choose. Incus 6.0.x lacks the qemu.machine.type config key — fall back
+		// to a -machine TYPE clause inside raw.qemu when the native key is
+		// rejected so the dropdown actually works on this Incus version.
+		if cfg.IsVM {
+			if err := applyConf("qemu.machine.type", cfg.MachineType); err != nil {
+				out, _ := exec.Command("incus", "config", "get", name, "raw.qemu").Output()
+				lxdPatchConfig(name, "raw.qemu",
+					updateRawQEMUMachine(strings.TrimSpace(string(out)), cfg.MachineType))
+			} else {
+				// Native key accepted: clear any prior raw.qemu -machine override
+				// so the two paths can't disagree on subsequent edits.
+				out, _ := exec.Command("incus", "config", "get", name, "raw.qemu").Output()
+				cleaned := updateRawQEMUMachine(strings.TrimSpace(string(out)), "")
+				if strings.TrimSpace(string(out)) != cleaned {
+					lxdPatchConfig(name, "raw.qemu", cleaned)
+				}
+			}
+		}
+
+		// SMBIOS types 1, 2, and 4 (VM-only). Stored inside raw.qemu's -smbios
+		// clauses so values survive a stop/start cycle and round-trip through
+		// the GET path. Always rewrite each clause — passing a nil/empty struct
+		// strips any previously-attached clause of that type.
+		if cfg.IsVM {
+			out, _ := exec.Command("incus", "config", "get", name, "raw.qemu").Output()
+			current := strings.TrimSpace(string(out))
+			updated := updateRawQEMUSMBIOSType1(current, cfg.SMBIOS)
+			updated = updateRawQEMUSMBIOSType2(updated, cfg.SMBIOSType2)
+			updated = updateRawQEMUSMBIOSType4(updated, cfg.SMBIOSType4)
+			if updated != current {
+				lxdPatchConfig(name, "raw.qemu", updated)
+			}
+		}
+
+		// CPU scheduling priority (limits.cpu.priority) applies to VMs too. The
+		// container path sets it inside the ApplyContainerFeatures block below, but
+		// that block is skipped for VMs — so handle VMs here. 0 = unset.
+		if cfg.IsVM {
+			priority := ""
+			if cfg.CPUShares > 0 && cfg.CPUShares <= 10 {
+				priority = strconv.Itoa(cfg.CPUShares)
+			}
+			if err := applyConf("limits.cpu.priority", priority); err != nil {
+				return err
+			}
+		}
+
+		// Container-specific features (CPU throttle, swap, security, FUSE).
+		// Skipped for VMs and when the frontend sends apply_container_features=false
+		// (preserves backwards compatibility with older frontend versions).
+		if cfg.ApplyContainerFeatures {
+			allowance := ""
+			if cfg.CPULimitPct > 0 && cfg.CPULimitPct <= 100 {
+				allowance = fmt.Sprintf("%dms/100ms", cfg.CPULimitPct)
+			}
+			if err := applyConf("limits.cpu.allowance", allowance); err != nil {
+				return err
+			}
+			priority := ""
+			if cfg.CPUShares > 0 && cfg.CPUShares <= 10 {
+				priority = strconv.Itoa(cfg.CPUShares)
+			}
+			if err := applyConf("limits.cpu.priority", priority); err != nil {
+				return err
+			}
+			if err := applyConf("limits.memory.swap", normalizeSwapLimit(cfg.SwapLimit)); err != nil {
+				return err
+			}
+			privVal := ""
+			if !cfg.Unprivileged {
+				privVal = "true"
+			}
+			if err := applyConf("security.privileged", privVal); err != nil {
+				return err
+			}
+			// "Allow keyctl" must NOT be expressed via security.syscalls.allow:
+			// that key is a *whitelist* — when set to "keyctl" LXD denies every
+			// other syscall (close, read, write, ...) and the container can't
+			// boot. Use the dedicated intercept key when LXD supports it; on
+			// older LXD (5.0.x and below) the intercept key doesn't exist and
+			// the default seccomp profile already permits keyctl, so we leave
+			// the config untouched. Either way, drop any stale allow=keyctl
+			// value left by the old buggy code.
+			exec.Command("incus", "config", "unset", name, "security.syscalls.allow").Run() //nolint:errcheck
+			if cfg.FeatureKeyctl {
+				if lxdSupportsConfigKey("security.syscalls.intercept.keyctl") {
+					if err := applyConf("security.syscalls.intercept.keyctl", "true"); err != nil {
+						return err
+					}
+				}
+			} else {
+				exec.Command("incus", "config", "unset", name, "security.syscalls.intercept.keyctl").Run() //nolint:errcheck
+			}
+		}
+	} // end ManageResources
 
 	// Fetch current instance-level devices for diff.
 	rawOut, err := exec.Command("incus", "query", "/1.0/instances/"+name).Output()

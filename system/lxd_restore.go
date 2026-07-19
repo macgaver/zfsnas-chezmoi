@@ -206,10 +206,10 @@ func resolveCloneSnapshot(dataset, preferred string) string {
 // snapshot (the hallmark of an Instant Independent Restore).
 type BackupOrigin struct {
 	Dataset    string `json:"dataset"`
-	Origin     string `json:"origin"`        // full "<ds>@<snap>" the clone hangs off
-	BackupVMID string `json:"backup_vm_id"`  // the bkup--<vm> name
-	BackupPool string `json:"backup_pool"`   // ZFS pool holding the backup
-	Snapshot   string `json:"snapshot"`      // short snapshot name
+	Origin     string `json:"origin"`       // full "<ds>@<snap>" the clone hangs off
+	BackupVMID string `json:"backup_vm_id"` // the bkup--<vm> name
+	BackupPool string `json:"backup_pool"`  // ZFS pool holding the backup
+	Snapshot   string `json:"snapshot"`     // short snapshot name
 }
 
 // LXDInstanceBackupOrigins returns the datasets of instance `name` whose ZFS
@@ -288,10 +288,11 @@ func LXDPromoteToFullCopy(ctx context.Context, name, dstDatastore string, logFn 
 	if len(origins) == 0 {
 		return fmt.Errorf("%s is not running off a backup clone — nothing to promote", name)
 	}
-	dstSource := getLXDPoolSource(dstDatastore)
+	incusPool, dstSource := resolveDstDatastore(dstDatastore)
 	if dstSource == "" {
-		return fmt.Errorf("destination datastore %q has no zfs source", dstDatastore)
+		return fmt.Errorf("destination datastore %q is neither an Incus storage pool nor a ZFS pool backed by one", dstDatastore)
 	}
+	dstDatastore = incusPool // normalize (caller may pass the ZFS pool name)
 	parts, err := LXDInstanceBackupDatasets(name)
 	if err != nil {
 		return fmt.Errorf("enumerate instance datasets: %w", err)
@@ -417,6 +418,19 @@ func findWorkloadBackup(backupName, zfsPool string) (string, string) {
 // findIncusPoolForZFSPool returns the (Incus pool name, its zfs `source`)
 // for the Incus storage pool that uses `zfsPool` as its top-level pool.
 // Returns ("","") when none is configured (or Incus isn't installed).
+// resolveDstDatastore accepts a restore destination that may be given as either
+// an Incus storage-pool name (e.g. "default") or a ZFS pool name (e.g.
+// "nvmepool") and returns the canonical (incusPool, source). This lets API
+// callers pass the ZFS pool name for dst_datastore consistently with the
+// backup path's dest_pool / restore src_datastore (both ZFS pool names),
+// instead of only the Incus pool name. Returns ("","") when neither resolves.
+func resolveDstDatastore(dstDatastore string) (incusPool, source string) {
+	if src := getLXDPoolSource(dstDatastore); src != "" {
+		return dstDatastore, src // already an Incus storage-pool name
+	}
+	return findIncusPoolForZFSPool(dstDatastore) // maybe a ZFS pool name
+}
+
 func findIncusPoolForZFSPool(zfsPool string) (string, string) {
 	pools, _ := LXDListStoragePools()
 	want := strings.ToLower(zfsPool)
@@ -463,10 +477,11 @@ func LXDCloneRestoreLocal(ctx context.Context, vmID, srcDatastore, dstDatastore,
 		return fmt.Errorf("instance %q already exists", cloneName)
 	}
 
-	dstSource := getLXDPoolSource(dstDatastore)
+	incusPool, dstSource := resolveDstDatastore(dstDatastore)
 	if dstSource == "" {
-		return fmt.Errorf("destination datastore %q has no zfs source", dstDatastore)
+		return fmt.Errorf("destination datastore %q is neither an Incus storage pool nor a ZFS pool backed by one", dstDatastore)
 	}
+	dstDatastore = incusPool // normalize (caller may pass the ZFS pool name)
 
 	backupName := LXDBackupPrefix + vmID
 
@@ -727,10 +742,11 @@ func LXDCloneRestoreRemote(ctx context.Context, srcHost, srcUser, srcDataset, ds
 		return fmt.Errorf("instance %q already exists", cloneName)
 	}
 
-	dstSource := getLXDPoolSource(dstDatastore)
+	incusPool, dstSource := resolveDstDatastore(dstDatastore)
 	if dstSource == "" {
-		return fmt.Errorf("destination datastore %q has no zfs source", dstDatastore)
+		return fmt.Errorf("destination datastore %q is neither an Incus storage pool nor a ZFS pool backed by one", dstDatastore)
 	}
+	dstDatastore = incusPool // normalize (caller may pass the ZFS pool name)
 
 	// Heuristic to find the kind from the source dataset path: look for the
 	// "virtual-machines" or "containers" segment.

@@ -26524,7 +26524,7 @@ function _refreshShareUsersUI() {
   const sel = document.getElementById('share-add-user-select');
   const available = _shareAllUsers.filter(u => !addedUsernames.includes(u.username));
   sel.innerHTML = available.length
-    ? '<option value="">— Add a user —</option>' + available.map(u => `<option value="${esc(u.username)}">${esc(u.username)} (${esc(u.role)})</option>`).join('')
+    ? '<option value="">— Add a user —</option>' + available.map(u => `<option value="${esc(u.username)}">${esc(u.username)}${u.role ? ' (' + esc(u.role) + ')' : ''}</option>`).join('')
     : '<option value="">— All users added —</option>';
   csRefresh('share-add-user-select');
 }
@@ -36913,7 +36913,10 @@ function runReplicationTask(id, name) {
     svg.addEventListener('mouseout', e=>{
       const g = e.target.closest && e.target.closest('.map-node, .net-node'); if(!g) return;
       if (e.relatedTarget && g.contains(e.relatedTarget)) return; // moving within same node
-      mapHoverHide(); mapClearHighlight();
+      // Grace-period hide (not immediate): the card sits ~12px away from the
+      // node, so the user must be able to cross that gap to hover the card and
+      // read its live charts. The card's own mouseenter cancels this timer.
+      mapHoverHideSoon();
     });
     // Right-click anywhere in the map background → shared options menu (both
     // layers). Bound to the VIEWPORT (the whole right pane), not just the SVG,
@@ -36932,7 +36935,13 @@ function runReplicationTask(id, name) {
     const relayout = ()=>{ if(!_mapData) return;
       const panel=document.getElementById(_mapCtx.panel);
       if(panel && panel.offsetParent!==null){ _mapSig=''; renderMap(_mapData); } };
-    new MutationObserver(relayout).observe(document.body, {attributes:true, attributeFilter:['class']});
+    // The class flip can trigger a first-time load of the theme's web font
+    // (e.g. Orbitron): the immediate relayout then measures with the fallback
+    // font and boxes come out too narrow. fonts.ready returns a fresh promise
+    // while loads are pending, so re-relayout once the real font is in.
+    new MutationObserver(()=>{ relayout();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+    }).observe(document.body, {attributes:true, attributeFilter:['class']});
     // Web fonts load async; relayout once they're ready so widths are correct.
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
   }
@@ -36985,10 +36994,20 @@ function runReplicationTask(id, name) {
   const _mapVmMetrics = {}; // instance name → live metrics (CPU/mem/fs)
   function _mapCardEl(){
     let c=document.getElementById('map-hovercard');
-    if(!c){ c=document.createElement('div'); c.id='map-hovercard'; c.className='map-hovercard hidden'; document.body.appendChild(c); }
+    if(!c){ c=document.createElement('div'); c.id='map-hovercard'; c.className='map-hovercard hidden'; document.body.appendChild(c);
+      // The card is hoverable (pointer-events:auto) so the user can move onto
+      // it to read/interact with the live charts; entering it cancels the
+      // pending grace-period hide, leaving it re-arms it.
+      c.addEventListener('mouseenter', _mapCancelHide);
+      c.addEventListener('mouseleave', mapHoverHideSoon);
+    }
     return c;
   }
-  function mapHoverHide(){ _mapStopIo(); _mapHoverId=null; _mapHoverEl=null; const c=document.getElementById('map-hovercard'); if(c) c.classList.add('hidden'); }
+  let _mapHideTimer=null;
+  function _mapCancelHide(){ if(_mapHideTimer){ clearTimeout(_mapHideTimer); _mapHideTimer=null; } }
+  function mapHoverHideSoon(){ _mapCancelHide();
+    _mapHideTimer=setTimeout(()=>{ _mapHideTimer=null; mapHoverHide(); mapClearHighlight(); }, 280); }
+  function mapHoverHide(){ _mapCancelHide(); _mapStopIo(); _mapHoverId=null; _mapHoverEl=null; const c=document.getElementById('map-hovercard'); if(c) c.classList.add('hidden'); }
   function _mapPositionCard(c, g){
     const r=g.getBoundingClientRect();
     c.classList.remove('hidden'); c.style.visibility='hidden';
@@ -37015,6 +37034,7 @@ function runReplicationTask(id, name) {
   // Pick the hovercard HTML for the active layer.
   function _hoverHTML(id){ return (_mapEffLayer()==='network') ? netHoverHTML(id) : mapHoverHTML(id); }
   function mapHoverShow(id, g){
+    _mapCancelHide();                     // re-entered a node before the grace hide fired
     if(id===_mapHoverId) return;          // already showing this node
     _mapStopIo();                         // tear down any previous live iostat stream
     const html=_hoverHTML(id);
@@ -37896,8 +37916,13 @@ function runReplicationTask(id, name) {
   // wrapped onto multiple lines (below) so boxes stay narrow.
   function mapNodeText(n, layer){
     if (layer===4) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>', name:n.dev,
-      sub:[n.size_str,n.disk_type].filter(Boolean).join(' '),
-      sub2:`↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}`};
+      // File-backed vdevs have no size/type line — promote the io line into
+      // `sub` so the markup's fixed sub2 row (subY+MAP_LINE) never renders a
+      // line that mapNodeLayout's row count didn't reserve height for.
+      sub:[n.size_str,n.disk_type].filter(Boolean).join(' ')
+          || `↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}`,
+      sub2:[n.size_str,n.disk_type].filter(Boolean).join(' ')
+          ? `↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}` : ''};
     if (layer===3) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>', name:n.name,
       sub:`↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}`,
       sub2:`${mapBytes(n.used)} / ${mapBytes(n.usable)}`};
@@ -50261,6 +50286,19 @@ async function submitLXDEdit() {
     for (let i=0; i<sa.length; i++) if (sa[i] !== sb[i]) return true;
     return false;
   };
+  // Validate port-forward rows across all NICs before saving — a mistyped
+  // instance port must block the save (with a message), not be silently
+  // dropped by the payload builder below.
+  for (const n of _lxdEditNICs) {
+    if (n._deleted) continue;
+    const _pfErr = _pfwdValidate(n.port_forwards);
+    if (_pfErr) {
+      alertEl.textContent = (n.name ? n.name + ': ' : '') + _pfErr;
+      alertEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Save';
+      return;
+    }
+  }
   // Collect NICs: include instance-level ones + profile NICs whose bridge, connection, port forwards, or routes changed
   const nics = _lxdEditNICs
     .filter(n => !n._deleted && (!n.from_profile || n.bridge !== n._origBridge || n.connected !== n._origConnected || _pfwdChanged(n) || _routesChanged(n)))
@@ -52789,6 +52827,28 @@ function _pfwdParseDst(v) {
   if (!m) return { addr: '', port: 0 };
   return { addr: m[1] || '', port: parseInt(m[2], 10) || 0 };
 }
+// _pfwdValidate returns '' when every port-forward row is valid, else a human
+// error string. A fully-empty row (both fields blank) is ignored; any row with
+// either field filled must be complete and in range — so a typo (e.g. "8080O",
+// "70000", "10.0.0.5:") is reported and blocks the save instead of being
+// silently dropped by the payload builders' `.filter(...)`.
+function _pfwdValidate(list) {
+  const rows = list || [];
+  for (let i = 0; i < rows.length; i++) {
+    const srcRaw = String(rows[i].src || '').trim();
+    const dstRaw = String(rows[i].dst || '').trim();
+    if (!srcRaw && !dstRaw) continue;
+    const src = parseInt(srcRaw, 10);
+    if (String(src) !== srcRaw || src < 1 || src > 65535) {
+      return 'Port forward row ' + (i + 1) + ': host port must be a number 1-65535.';
+    }
+    const d = _pfwdParseDst(dstRaw);
+    if (d.port < 1 || d.port > 65535) {
+      return 'Port forward row ' + (i + 1) + ': instance port must be a port (1-65535) or ip:port (e.g. 10.0.0.5:80).';
+    }
+  }
+  return '';
+}
 let _lxdVMNic0PFwds = [];
 function _vmNic0BridgeChange() {
   const sel = document.getElementById('lxd-vm-nic0-bridge');
@@ -53502,6 +53562,8 @@ async function submitCreateVM(e) {
   if (nic0Bridge && nic0Connected) {
     const nic0 = { device_name: 'eth0', network: nic0Bridge };
     if (nic0Bridge === 'host-nat' && _lxdVMNic0PFwds.length) {
+      const _pfErr = _pfwdValidate(_lxdVMNic0PFwds);
+      if (_pfErr) { alertEl.textContent = _pfErr; alertEl.classList.remove('hidden'); btn.disabled = false; return; }
       const forwards = _lxdVMNic0PFwds
         .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase() }; })
         .filter(f => f.source_port > 0 && f.target_port > 0);
@@ -54530,6 +54592,8 @@ async function submitCreateContainer(e) {
     // Port forwards (only meaningful on host-nat; the UI hides the table
     // for any other bridge, but be defensive and drop incomplete rows).
     if (nic0Bridge === 'host-nat' && _lxdCTNic0PFwds.length) {
+      const _pfErr = _pfwdValidate(_lxdCTNic0PFwds);
+      if (_pfErr) { alertEl.textContent = _pfErr; alertEl.classList.remove('hidden'); btn.disabled = false; return; }
       const forwards = _lxdCTNic0PFwds
         .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase() }; })
         .filter(f => f.source_port > 0 && f.target_port > 0);

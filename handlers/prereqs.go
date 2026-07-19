@@ -459,6 +459,9 @@ func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 			}
 			appCfg.MinIO.Enabled = false
 			appCfg.MinIO.TLS = false
+			// Re-hide the nav entry so an uninstalled feature doesn't linger in
+			// the sidebar; install sets HideNav=false to reveal it.
+			appCfg.MinIO.HideNav = true
 			_ = config.SaveAppConfig(appCfg)
 			audit.Log(audit.Entry{
 				User:    sess.Username,
@@ -473,6 +476,9 @@ func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 				return
 			}
 			appCfg.ISCSI.Enabled = false
+			// Re-hide the nav entry so an uninstalled feature doesn't linger in
+			// the sidebar; install sets HideNav=false to reveal it.
+			appCfg.ISCSI.HideNav = true
 			_ = config.SaveAppConfig(appCfg)
 			audit.Log(audit.Entry{
 				User:    sess.Username,

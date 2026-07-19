@@ -1,5 +1,13 @@
 /* ===== ZFS NAS Portal — Global Design System ===== */
 
+/* Tron Legacy / Matrix Reload theme fonts (Orbitron + Share Tech Mono).
+   ⚠ This @import MUST stay above every style rule in this file: per the CSS
+   spec an @import that follows any rule is ignored by the browser. A
+   `html, body { touch-action }` rule was once added above this line, which
+   silently disabled these theme fonts for several releases — keep the import
+   first (only @charset may precede it). */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap');
+
 /* Fixed page zoom on touch devices: pan gestures only. The viewport meta's
    maximum-scale/user-scalable lock is ignored by newer iOS Safari for
    accessibility, but touch-action IS honoured — together they pin the page
@@ -7,9 +15,6 @@
    handling (topology map, terminal, resize handles) override this locally
    with touch-action:none. */
 html, body { touch-action: pan-x pan-y; }
-
-/* Tron theme fonts — loaded only when the browser renders the Tron theme */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap');
 
 :root {
   --bg:          #0d0d0f;
@@ -127,8 +132,7 @@ body.tron-legacy button {
 body.tron-legacy code,
 body.tron-legacy pre,
 body.tron-legacy .font-mono,
-body.tron-legacy [style*="font-family:monospace"],
-body.tron-legacy [style*="font-family: monospace"] {
+body.tron-legacy [style*="monospace"] {
   font-family: 'Share Tech Mono', 'Courier New', monospace !important;
   letter-spacing: 0.04em;
   color: #00f0ff;
@@ -141,6 +145,15 @@ body.tron-legacy h1, body.tron-legacy h2, body.tron-legacy h3, body.tron-legacy 
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-shadow: 0 0 8px rgba(0, 210, 255, 0.55), 0 0 20px rgba(0, 210, 255, 0.2);
+}
+/* Orbitron is ~15% wider than the base UI font and these labels are uppercased,
+   which wrapped 2-word nav items onto a second line. Trim the size + tracking
+   so even the longest labels (CAPACITY TREND, ABOUT / SUPPORT) stay single-line
+   and keep the same row height as other themes. */
+body.tron-legacy .nav-item,
+body.tron-legacy .nav-label {
+  font-size: 11px;
+  letter-spacing: 0.01em;
 }
 body.tron-legacy .sidebar-section {
   color: #00d2ff;
@@ -366,8 +379,7 @@ body.matrix-reload button {
 body.matrix-reload code,
 body.matrix-reload pre,
 body.matrix-reload .font-mono,
-body.matrix-reload [style*="font-family:monospace"],
-body.matrix-reload [style*="font-family: monospace"] {
+body.matrix-reload [style*="monospace"] {
   font-family: 'Share Tech Mono', 'Courier New', monospace !important;
   letter-spacing: 0.04em;
   color: #39ff14;
@@ -380,6 +392,12 @@ body.matrix-reload h1, body.matrix-reload h2, body.matrix-reload h3, body.matrix
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-shadow: 0 0 8px rgba(0, 255, 65, 0.55), 0 0 20px rgba(0, 255, 65, 0.2);
+}
+/* Keep Orbitron nav labels single-line (see tron-legacy note above). */
+body.matrix-reload .nav-item,
+body.matrix-reload .nav-label {
+  font-size: 11px;
+  letter-spacing: 0.01em;
 }
 body.matrix-reload .sidebar-section {
   color: #00c832;
@@ -2993,6 +3011,11 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
    transform="translate(x,y)" attribute, snapping the node to the origin and
    causing a hover shake loop. Hover feedback is glow-only. */
 .map-node{--hue:var(--map-remote);cursor:default;}
+/* Box widths come from canvas measureText (_tw), which cannot see CSS
+   letter-spacing — the fancy themes' body-level tracking (e.g. 0.03em) would
+   inherit into SVG text and make glyphs wider than measured, so long names
+   spill past the box edge. Dense map text never wants tracking anyway. */
+.map-node text,.net-node text{letter-spacing:normal;}
 /* Actionable nodes (open detail / edit / instance view) show a pointer. */
 .map-node--dataset,.map-node--consumer,.map-node--vm{cursor:pointer;}
 /* Opaque base occludes any link drawn behind the box, so conduits read as
@@ -3153,7 +3176,7 @@ body.light .net-node--docker .net-node-sub, body.dawn .net-node--docker .net-nod
 }
 
 /* ── Map hovercard (hightech info + live metrics) ── */
-.map-hovercard{position:fixed;z-index:5000;pointer-events:none;max-width:300px;min-width:210px;
+.map-hovercard{position:fixed;z-index:5000;pointer-events:auto;max-width:300px;min-width:210px;
   opacity:1;transition:opacity .12s ease;}
 .map-hovercard.hidden{opacity:0;visibility:hidden;}
 .mhc{--hue:var(--map-remote);position:relative;border-radius:12px;padding:11px 13px 12px;overflow:hidden;

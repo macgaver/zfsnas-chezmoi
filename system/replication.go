@@ -166,7 +166,15 @@ func RunReplication(task *config.ReplicationTask, send func(string), existingSna
 		}
 	}
 
-	if sendWaitErr != nil {
+	// A broken pipe on `zfs send` means the ssh receiver closed the pipe
+	// first — i.e. ssh failed (auth/unreachable host, remote `zfs receive`
+	// error) and the send is only reporting the downstream symptom. When
+	// that's the case, surface the ssh error (the real cause) instead of the
+	// misleading "zfs send failed: signal: broken pipe". Only a send failure
+	// that is NOT a broken pipe (dataset missing, local permission, …) is
+	// reported as a send failure ahead of ssh.
+	sendBrokenPipe := sendWaitErr != nil && strings.Contains(sendWaitErr.Error(), "broken pipe")
+	if sendWaitErr != nil && !sendBrokenPipe {
 		if msg := strings.TrimSpace(sendStderr.String()); msg != "" {
 			return "", fmt.Errorf("zfs send failed: %w: %s", sendWaitErr, msg)
 		}
@@ -179,6 +187,11 @@ func RunReplication(task *config.ReplicationTask, send func(string), existingSna
 			return "", fmt.Errorf("SSH host key not trusted for %s. Accept it first: ssh-keyscan %s >> ~/.ssh/known_hosts", task.RemoteHost, task.RemoteHost)
 		}
 		return "", fmt.Errorf("replication failed: %w: %s", sshWaitErr, sshErrMsg)
+	}
+	// Broken-pipe send with no ssh error recorded (rare): still surface it
+	// rather than returning success.
+	if sendWaitErr != nil {
+		return "", fmt.Errorf("zfs send failed: %w", sendWaitErr)
 	}
 
 	return snapSuffix, nil

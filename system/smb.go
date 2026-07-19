@@ -43,8 +43,8 @@ type SMBShare struct {
 	TMQuotaGB   int  `json:"tm_quota_gb"` // 0 = unlimited
 
 	// Recycle Bin
-	RecycleBin         bool `json:"recycle_bin"`
-	RecycleRetainDays  int  `json:"recycle_retain_days"` // 0 = keep forever
+	RecycleBin        bool `json:"recycle_bin"`
+	RecycleRetainDays int  `json:"recycle_retain_days"` // 0 = keep forever
 
 	// SMB2/3 Durable Handles (posix locking = no)
 	DurableHandles bool `json:"durable_handles"`
@@ -52,7 +52,8 @@ type SMBShare struct {
 	// Apple-style character encoding (vfs catia)
 	AppleEncoding bool `json:"apple_encoding"`
 
-	// Windows ACL compatibility (NFSv4 ACLs on ZFS + acl_xattr VFS module)
+	// Windows ACL compatibility (native ZFS NFSv4 ACLs surfaced to Windows via
+	// the zfsacl VFS module + nfs4:* mapping params; dataset set to acltype=nfsv4)
 	WindowsACL bool `json:"windows_acl"`
 
 	// Shadow Copy (VSS Previous Versions via vfs_shadow_copy2)
@@ -327,6 +328,12 @@ func applySMBConf(shares []SMBShare) error {
 		if s.RecycleBin {
 			vfsObjs = append(vfsObjs, "recycle")
 		}
+		if s.WindowsACL {
+			// Native ZFS NFSv4 ACLs (the dataset is set to acltype=nfsv4 when
+			// this option is enabled) are surfaced to Windows via the zfsacl
+			// module; without it Samba maps NT ACLs to POSIX mode bits instead.
+			vfsObjs = append(vfsObjs, "zfsacl")
+		}
 		if s.TimeMachine || s.WindowsACL || s.AppleEncoding {
 			vfsObjs = append(vfsObjs, "fruit", "streams_xattr")
 		}
@@ -345,9 +352,16 @@ func applySMBConf(shares []SMBShare) error {
 			sb.WriteString("   shadow:localtime = no\n")
 		}
 
-		// Windows ACL compatibility — ensures executables keep the execute bit.
+		// Windows ACL compatibility — ensures executables keep the execute bit,
+		// and wires Samba to map NT ACLs to the dataset's native ZFS NFSv4 ACLs
+		// via the zfsacl module added above (nt acl support is on by default;
+		// set explicitly for clarity).
 		if s.WindowsACL {
 			sb.WriteString("   force create mode = 0755\n")
+			sb.WriteString("   nt acl support = yes\n")
+			sb.WriteString("   nfs4:mode = special\n")
+			sb.WriteString("   nfs4:acedup = merge\n")
+			sb.WriteString("   nfs4:chown = yes\n")
 		}
 
 		// Apple-style character encoding (catia) + fruit settings for macOS
@@ -480,8 +494,8 @@ func ApplySmbGlobal(configDir string, maxSmbdProcesses int, workgroup string, cu
 	commentOut := []string{"global"}
 	removeOut := []string(nil)
 	if cleanDefaults {
-		removeOut   = []string{"printers", "print$"}
-		commentOut  = append(commentOut, "homes")
+		removeOut = []string{"printers", "print$"}
+		commentOut = append(commentOut, "homes")
 	} else if homeDataset != "" {
 		commentOut = append(commentOut, "homes")
 	}
@@ -526,7 +540,7 @@ func ExtractExternalGlobalParams() (string, error) {
 	lines := strings.Split(string(existing), "\n")
 	var out strings.Builder
 	inManaged := false
-	inGlobal  := false
+	inGlobal := false
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -534,12 +548,12 @@ func ExtractExternalGlobalParams() (string, error) {
 		// Track managed section boundaries.
 		if strings.Contains(line, smbBeginMarker) || strings.Contains(line, smbGlobalBeginMarker) {
 			inManaged = true
-			inGlobal  = false
+			inGlobal = false
 			continue
 		}
 		if strings.Contains(line, smbEndMarker) || strings.Contains(line, smbGlobalEndMarker) {
 			inManaged = false
-			inGlobal  = false
+			inGlobal = false
 			continue
 		}
 		if inManaged {
@@ -574,7 +588,7 @@ func ExtractExternalGlobalParams() (string, error) {
 }
 
 func removeSectionsOutsideManaged(conf, managedBegin, managedEnd string, removeSections, commentSections []string) string {
-	remove  := make(map[string]bool, len(removeSections))
+	remove := make(map[string]bool, len(removeSections))
 	comment := make(map[string]bool, len(commentSections))
 	for _, s := range removeSections {
 		remove[strings.ToLower(s)] = true
@@ -585,14 +599,14 @@ func removeSectionsOutsideManaged(conf, managedBegin, managedEnd string, removeS
 
 	lines := strings.Split(conf, "\n")
 	var out strings.Builder
-	inManaged  := false
-	inRemove   := false
-	inComment  := false
+	inManaged := false
+	inRemove := false
+	inComment := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.Contains(line, managedBegin) {
 			inManaged = true
-			inRemove  = false
+			inRemove = false
 			inComment = false
 			out.WriteString(line + "\n")
 			continue
@@ -613,7 +627,7 @@ func removeSectionsOutsideManaged(conf, managedBegin, managedEnd string, removeS
 		}
 		if strings.HasPrefix(sectionLine, "[") && strings.HasSuffix(sectionLine, "]") {
 			section := strings.ToLower(strings.TrimSpace(sectionLine[1 : len(sectionLine)-1]))
-			inRemove  = remove[section]
+			inRemove = remove[section]
 			inComment = !inRemove && comment[section]
 		}
 		if inRemove {

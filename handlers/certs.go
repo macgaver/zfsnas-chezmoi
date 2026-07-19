@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,8 +27,8 @@ func HandleListCerts(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 		jsonOK(w, map[string]interface{}{
-			"certs":          certs,
-			"active_cert":    appCfg.ActiveCertName,
+			"certs":           certs,
+			"active_cert":     appCfg.ActiveCertName,
 			"pending_restart": appCfg.PendingCertRestart,
 		})
 	}
@@ -66,13 +67,18 @@ func HandleUploadCert(appCfg *config.AppConfig) http.HandlerFunc {
 		}
 		defer keyFile.Close()
 
-		certBytes := make([]byte, 2<<20)
-		n, _ := certFile.Read(certBytes)
-		certBytes = certBytes[:n]
-
-		keyBytes := make([]byte, 2<<20)
-		n, _ = keyFile.Read(keyBytes)
-		keyBytes = keyBytes[:n]
+		// Read the whole part — a single Read() can short-read a multipart file
+		// that spilled to a temp file, silently importing a truncated cert/key.
+		certBytes, err := io.ReadAll(certFile)
+		if err != nil {
+			jsonErr(w, http.StatusBadRequest, "failed to read cert_file")
+			return
+		}
+		keyBytes, err := io.ReadAll(keyFile)
+		if err != nil {
+			jsonErr(w, http.StatusBadRequest, "failed to read key_file")
+			return
+		}
 
 		certsDir := filepath.Join(appCfg.ConfigDir, "certs")
 		if err := certgen.ImportCert(certsDir, name, certBytes, keyBytes); err != nil {
@@ -91,11 +97,11 @@ func HandleUploadCert(appCfg *config.AppConfig) http.HandlerFunc {
 
 		sess := MustSession(r)
 		audit.Log(audit.Entry{
-			User:   sess.Username,
-			Role:   sess.Role,
-			Action: audit.ActionUpdateSettings,
-			Result: audit.ResultOK,
-			Target: "cert:" + name,
+			User:    sess.Username,
+			Role:    sess.Role,
+			Action:  audit.ActionUpdateSettings,
+			Result:  audit.ResultOK,
+			Target:  "cert:" + name,
 			Details: "certificate imported",
 		})
 
@@ -128,11 +134,11 @@ func HandleDeleteCert(appCfg *config.AppConfig) http.HandlerFunc {
 
 		sess := MustSession(r)
 		audit.Log(audit.Entry{
-			User:   sess.Username,
-			Role:   sess.Role,
-			Action: audit.ActionUpdateSettings,
-			Result: audit.ResultOK,
-			Target: "cert:" + name,
+			User:    sess.Username,
+			Role:    sess.Role,
+			Action:  audit.ActionUpdateSettings,
+			Result:  audit.ResultOK,
+			Target:  "cert:" + name,
 			Details: "certificate deleted",
 		})
 
@@ -195,11 +201,11 @@ func HandleActivateCert(appCfg *config.AppConfig) http.HandlerFunc {
 
 		sess := MustSession(r)
 		audit.Log(audit.Entry{
-			User:   sess.Username,
-			Role:   sess.Role,
-			Action: audit.ActionUpdateSettings,
-			Result: audit.ResultOK,
-			Target: "cert:" + name,
+			User:    sess.Username,
+			Role:    sess.Role,
+			Action:  audit.ActionUpdateSettings,
+			Result:  audit.ResultOK,
+			Target:  "cert:" + name,
 			Details: "certificate activated",
 		})
 
@@ -216,11 +222,11 @@ func HandleCertRestart(appCfg *config.AppConfig) http.HandlerFunc {
 
 		sess := MustSession(r)
 		audit.Log(audit.Entry{
-			User:   sess.Username,
-			Role:   sess.Role,
-			Action: audit.ActionUpdateSettings,
-			Result: audit.ResultOK,
-			Target: "cert-restart",
+			User:    sess.Username,
+			Role:    sess.Role,
+			Action:  audit.ActionUpdateSettings,
+			Result:  audit.ResultOK,
+			Target:  "cert-restart",
 			Details: "portal restarting to apply new certificate",
 		})
 

@@ -66,6 +66,26 @@ func HandleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Non-admins reach this only to build a name list (e.g. a standard user
+	// with manage_smb populating an SMB share's valid-users picker). They get
+	// id+username ONLY — never email, role, 2FA status, created-at, or
+	// permissions. Exposing those to any authenticated user leaked PII and
+	// told an attacker which accounts are admin / lack 2FA. Admins still get
+	// the full records for the Users settings page.
+	sess := MustSession(r)
+	if sess.Role != config.RoleAdmin {
+		type minimalUser struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		}
+		out := make([]minimalUser, len(users))
+		for i, u := range users {
+			out[i] = minimalUser{ID: u.ID, Username: u.Username}
+		}
+		jsonOK(w, out)
+		return
+	}
+
 	type safeUser struct {
 		ID            string                      `json:"id"`
 		Username      string                      `json:"username"`

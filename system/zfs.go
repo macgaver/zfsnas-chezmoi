@@ -2872,6 +2872,12 @@ func zfsNormalizeCompression(c string) string {
 
 // EditZVol updates mutable properties on an existing ZVol.
 func EditZVol(req ZVolEditRequest) error {
+	// ZFS cannot shrink a zvol. Reject an explicit shrink up front rather than
+	// silently ignoring it (which returned a misleading "zvol updated" success);
+	// only fires when a new size is given and it's smaller than the current one.
+	if req.NewVolSizeBytes > 0 && req.VolSizeBytes > 0 && req.NewVolSizeBytes < req.VolSizeBytes {
+		return fmt.Errorf("zvols cannot be shrunk (current %d bytes, requested %d bytes)", req.VolSizeBytes, req.NewVolSizeBytes)
+	}
 	props := map[string]string{}
 	if req.Compression != "" {
 		props["compression"] = zfsNormalizeCompression(req.Compression)
