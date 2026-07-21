@@ -34859,8 +34859,9 @@ function _showApplyBinaryWrap(serviceInstalled, ver) {
   const noSvcMsg  = document.getElementById('btn-apply-binary-nosvc');
   if (!applyWrap) return;
   applyWrap.classList.remove('hidden');
-  const label = ver ? '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg> Instant Update to v' + ver : '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg> Instant Update Now';
-  if (activeBtn) activeBtn.textContent = label;
+  const boltIcon = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>';
+  const label = ver ? boltIcon + ' Instant Update to v' + esc(ver) : boltIcon + ' Instant Update Now';
+  if (activeBtn) activeBtn.innerHTML = label;
   if (serviceInstalled) {
     if (activeBtn) activeBtn.style.display = '';
     if (noSvcMsg)  noSvcMsg.style.display  = 'none';
