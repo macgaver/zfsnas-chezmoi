@@ -293,6 +293,15 @@ func main() {
 		log.Printf("WARNING: smb.conf deduplication: %v", err)
 	}
 
+	// ===== Repair smb.conf files written by v6.7.15–v6.7.22, which reference
+	//       the zfsacl VFS module. That module does not exist on Debian or
+	//       Ubuntu, so smbd refused every connection to the affected shares.
+	//       The managed block below is regenerated anyway; this also cleans
+	//       copies sitting outside the managed markers. =====
+	if err := system.RepairSMBConfZfsacl(); err != nil {
+		log.Printf("WARNING: smb.conf zfsacl repair: %v", err)
+	}
+
 	// ===== Reapply smb.conf and /etc/exports from JSON on startup =====
 	// This keeps the config files in sync with the JSON store even if a
 	// previous write was interrupted or the binary was updated.

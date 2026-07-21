@@ -256,9 +256,10 @@ func removeShareDuplicatesOutsideManaged(conf string, shares []SMBShare) string 
 	return strings.TrimSuffix(result, "\n")
 }
 
-// applySMBConf writes the managed section into /etc/samba/smb.conf.
-func applySMBConf(shares []SMBShare) error {
-	// Build the managed block.
+// renderManagedShares builds the managed shares block that gets written into
+// /etc/samba/smb.conf. Kept a pure function so the emitted directives — in
+// particular the VFS module stack — are unit-testable without touching /etc.
+func renderManagedShares(shares []SMBShare) string {
 	var sb strings.Builder
 	sb.WriteString(smbBeginMarker + "\n")
 	for _, s := range shares {
@@ -329,10 +330,12 @@ func applySMBConf(shares []SMBShare) error {
 			vfsObjs = append(vfsObjs, "recycle")
 		}
 		if s.WindowsACL {
-			// Native ZFS NFSv4 ACLs (the dataset is set to acltype=nfsv4 when
-			// this option is enabled) are surfaced to Windows via the zfsacl
-			// module; without it Samba maps NT ACLs to POSIX mode bits instead.
-			vfsObjs = append(vfsObjs, "zfsacl")
+			// NFSv4-style ACLs are surfaced to Windows via nfs4acl_xattr.
+			// NOT zfsacl: that module is FreeBSD/illumos-only and is absent
+			// from Debian and Ubuntu samba packaging, so smbd failed to load
+			// it and the share refused every tree connect (see the tests in
+			// smb_windows_acl_test.go).
+			vfsObjs = append(vfsObjs, "nfs4acl_xattr")
 		}
 		if s.TimeMachine || s.WindowsACL || s.AppleEncoding {
 			vfsObjs = append(vfsObjs, "fruit", "streams_xattr")
@@ -353,15 +356,38 @@ func applySMBConf(shares []SMBShare) error {
 		}
 
 		// Windows ACL compatibility — ensures executables keep the execute bit,
-		// and wires Samba to map NT ACLs to the dataset's native ZFS NFSv4 ACLs
-		// via the zfsacl module added above (nt acl support is on by default;
-		// set explicitly for clarity).
+		// and wires Samba to store NT ACLs as NFSv4 ACLs via the nfs4acl_xattr
+		// module added above (nt acl support is on by default; set explicitly
+		// for clarity).
 		if s.WindowsACL {
 			sb.WriteString("   force create mode = 0755\n")
 			sb.WriteString("   nt acl support = yes\n")
-			sb.WriteString("   nfs4:mode = special\n")
+			// "special" is deprecated in vfs_nfs4acl_xattr(8); simple is the
+			// recommended (and default) mapping for OWNER@/GROUP@.
+			sb.WriteString("   nfs4:mode = simple\n")
 			sb.WriteString("   nfs4:acedup = merge\n")
 			sb.WriteString("   nfs4:chown = yes\n")
+			// Pin the marshaling format: the default has moved between Samba
+			// releases and each encoding stores the blob under a different
+			// xattr, so drift would orphan every previously saved ACL.
+			// "nfs" encoding is deliberately NOT used — it reads/writes
+			// system.nfs4_acl, which OpenZFS on Linux answers with EOPNOTSUPP.
+			sb.WriteString("   nfs4acl_xattr:encoding = ndr\n")
+			sb.WriteString("   nfs4acl_xattr:version = 41\n")
+			// Synthesize from the POSIX mode when a file has no ACL blob yet;
+			// the module default ("everyone") would hand out full control.
+			sb.WriteString("   nfs4acl_xattr:default acl style = posix\n")
+			// validate_mode defaults to yes for ndr/xdr and then DISCARDS the
+			// stored ACL unless the mode is exactly 0777/0666 — which our
+			// create mask = 0744 / directory mask = 0775 never produce.
+			sb.WriteString("   nfs4acl_xattr:validate_mode = no\n")
+			// Keep the ACL blob out of the security.* namespace. Writes there
+			// need CAP_SYS_ADMIN and smbd runs as the connecting user, so the
+			// module's default xattr makes every "Apply" from Windows fail
+			// with ACCESS_DENIED ("can't store acl in xattr: Operation not
+			// permitted"). vfs_acl_xattr elevates for this; nfs4acl_xattr does
+			// not, so store the blob where the file's owner may write it.
+			sb.WriteString("   nfs4acl_xattr:xattr_name = user.nfs4acl_ndr\n")
 		}
 
 		// Apple-style character encoding (catia) + fruit settings for macOS
@@ -394,7 +420,77 @@ func applySMBConf(shares []SMBShare) error {
 		}
 	}
 	sb.WriteString("\n" + smbEndMarker + "\n")
-	managed := sb.String()
+	return sb.String()
+}
+
+// stripZfsaclVFSObject removes the zfsacl module from every "vfs objects" line
+// in conf, leaving the rest of the file byte-identical. Versions 6.7.15–6.7.22
+// wrote "vfs objects = zfsacl …" for Windows ACL shares; zfsacl.so does not
+// exist on Debian or Ubuntu, so smbd answered tree connects to those shares
+// with NT_STATUS_BAD_NETWORK_NAME.
+//
+// The managed block is regenerated from shares.json on every startup and so
+// heals itself, but a stale zfsacl can also sit OUTSIDE the managed markers —
+// in a hand-written share, or in a managed block whose markers were damaged.
+// Those copies would keep breaking their shares forever, hence this pass.
+func stripZfsaclVFSObject(conf string) string {
+	lines := strings.Split(conf, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		key, value, ok := strings.Cut(line, "=")
+		// Normalize whitespace/case so "VFS OBJECTS", "vfs objects" and
+		// "vfs  objects" all match, then require an exact parameter match so
+		// a [zfsacl] share or a path containing the word is never touched.
+		if !ok || strings.Join(strings.Fields(strings.ToLower(key)), " ") != "vfs objects" {
+			out = append(out, line)
+			continue
+		}
+		kept := make([]string, 0, len(strings.Fields(value)))
+		var found bool
+		for _, mod := range strings.Fields(value) {
+			if strings.EqualFold(mod, "zfsacl") {
+				found = true
+				continue
+			}
+			kept = append(kept, mod)
+		}
+		if !found {
+			out = append(out, line)
+			continue
+		}
+		if len(kept) == 0 {
+			// zfsacl was the only module — drop the line entirely rather than
+			// leave an empty "vfs objects =" for Samba to complain about.
+			continue
+		}
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		out = append(out, indent+strings.TrimSpace(key)+" = "+strings.Join(kept, " "))
+	}
+	return strings.Join(out, "\n")
+}
+
+// RepairSMBConfZfsacl rewrites /etc/samba/smb.conf if it still references the
+// unloadable zfsacl VFS module. Safe to run on every startup: it is a no-op
+// (no write at all) when the file is already clean.
+func RepairSMBConfZfsacl() error {
+	existing, err := os.ReadFile(smbConfPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read smb.conf: %w", err)
+	}
+	repaired := stripZfsaclVFSObject(string(existing))
+	if repaired == string(existing) {
+		return nil
+	}
+	log.Printf("smb.conf: removing unloadable zfsacl VFS module (shares using it refused all connections)")
+	return writeFileSudo(smbConfPath, repaired)
+}
+
+// applySMBConf writes the managed section into /etc/samba/smb.conf.
+func applySMBConf(shares []SMBShare) error {
+	managed := renderManagedShares(shares)
 
 	// Read existing smb.conf (readable without sudo on most systems).
 	existing, err := os.ReadFile(smbConfPath)
