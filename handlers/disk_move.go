@@ -5,7 +5,7 @@ package handlers
 // Mirrors the proxmox_import.go pattern: an in-memory job map indexed by
 // job_id, with start / progress / cancel endpoints. Each job runs in its
 // own goroutine, accumulates log lines for the modal terminal, and is
-// cancellable via context.CancelFunc so the activity-bar ✕ can SIGKILL
+// cancellable via context.CancelFunc so the activity-bar cancel button can SIGKILL
 // the underlying `incus` process. State is intentionally in-memory only
 // — same caveat as the Proxmox importer: a zfsnas restart kills the
 // transfer (Incus rolls back any partial volume copy itself).
@@ -122,7 +122,7 @@ func HandleDiskMoveStart(w http.ResponseWriter, r *http.Request) {
 		result := audit.ResultOK
 		details := ""
 		if err != nil {
-			// A canceled context is the user clicking ✕, not a failure.
+			// A canceled context is the user cancelling, not a failure.
 			// Preserve job.Status = "canceled" (already set by cancel())
 			// rather than overwriting with "error".
 			if job.Status != "canceled" {

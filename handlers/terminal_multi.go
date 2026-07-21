@@ -103,7 +103,7 @@ const terminalMultiPageHTML = `<!DOCTYPE html>
   #tabs .addbtn:hover { color:var(--text); background:var(--bg-2); }
   #tabs-spacer { flex:1 1 auto; }
   #tabs .gearbtn {
-    /* Flex-center the ⚙ glyph inside the stretched tab-bar cell — without
+    /* Flex-center the gear icon inside the stretched tab-bar cell — without
        this the icon hugs the top edge because #tabs uses align-items:stretch.
        No left border: the gear sits alone on the right with whitespace as
        its visual separator. */
@@ -190,13 +190,13 @@ const terminalMultiPageHTML = `<!DOCTYPE html>
   <div class="addbtn" id="add-btn" title="Open a new terminal">+</div>
   <div id="add-menu"></div>
   <div id="tabs-spacer"></div>
-  <div class="gearbtn" id="gear-btn" title="Terminal settings">⚙</div>
+  <div class="gearbtn" id="gear-btn" title="Terminal settings"><svg class="znas-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
 </div>
 <div id="panes">
   <div class="empty" id="empty-state">No terminal sessions. Click <b>+</b> to start one.</div>
 </div>
 
-<script>
+<script>` + znasIconsJS + `
 // ── Session model ──────────────────────────────────────────────────────────
 // Each tab maps to one termsessions.Session on the server. The browser
 // holds an xterm.js instance + a WebSocket per tab; close-and-reopen here
@@ -430,7 +430,11 @@ function openGearMenu() {
   ftList.style.display = 'none';
   const renderFtCur = (open) => {
     const cur = ftHdr.querySelector('#ft-cur');
-    cur.textContent = fontFamilyLabel(getFontFamily()) + (open ? ' ▾' : ' ▸');
+    // NB: this function scope declares its own 'const esc' (the Escape-key
+    // handler) further down, which shadows the global esc() helper for the
+    // whole body — so set the label as text and append the icon as markup.
+    cur.textContent = fontFamilyLabel(getFontFamily()) + ' ';
+    cur.insertAdjacentHTML('beforeend', ico(open ? 'chevron-down' : 'chevron-right', {size:11}));
     cur.style.fontFamily = getFontFamily();
   };
   FONT_FAMILIES.forEach(f => {
@@ -438,7 +442,7 @@ function openGearMenu() {
     row.className = 'theme-row' + (f.css === getFontFamily() ? ' active' : '');
     row.style.fontFamily = f.css;
     const lbl = document.createElement('span'); lbl.textContent = f.label; row.appendChild(lbl);
-    if (f.css === getFontFamily()) { const c = document.createElement('span'); c.className = 'check'; c.textContent = '✓'; row.appendChild(c); }
+    if (f.css === getFontFamily()) { const c = document.createElement('span'); c.className = 'check'; c.innerHTML = ico('check', {size:13}); row.appendChild(c); }
     row.addEventListener('click', (e) => { e.stopPropagation(); setFontFamily(f.css); menu.remove(); });
     ftList.appendChild(row);
   });
@@ -472,7 +476,7 @@ function openGearMenu() {
     lbl.textContent = t.label;
     row.appendChild(lbl);
     if (key === currentKey) {
-      const c = document.createElement('span'); c.className = 'check'; c.textContent = '✓'; row.appendChild(c);
+      const c = document.createElement('span'); c.className = 'check'; c.innerHTML = ico('check', {size:13}); row.appendChild(c);
     }
     row.addEventListener('click', (e) => { e.stopPropagation(); setTheme(key); menu.remove(); });
     menu.appendChild(row);
@@ -483,7 +487,7 @@ function openGearMenu() {
   const cw = document.createElement('div');
   cw.className = 'theme-row';
   cw.style.color = '#ff6b6b';
-  cw.innerHTML = '<span style="width:24px;text-align:center;">✕</span><span>Close Window</span>';
+  cw.innerHTML = '<span style="width:24px;text-align:center;">' + ico('x', {size:13}) + '</span><span>Close Window</span>';
   cw.addEventListener('click', (e) => { e.stopPropagation(); menu.remove(); closeAllAndWindow(); });
   menu.appendChild(cw);
 
@@ -558,14 +562,14 @@ function renderTabBar() {
 
 function kindIcon(k) {
   switch (k) {
-    case 'lxd':     return '💻';
-    case 'compose': return '📦';
-    case 'docker':  return '🐳';
-    case 'host':    return '🖥';
-    case 'vga':     return '🖼';
-    case 'updater': return '⬆';
+    case 'lxd':     return ico('laptop');
+    case 'compose': return ico('box');
+    case 'docker':  return ico('whale');
+    case 'host':    return ico('monitor');
+    case 'vga':     return ico('image');
+    case 'updater': return ico('upload');
   }
-  return '⌨';
+  return ico('keyboard');
 }
 
 // v6.6.11 — a window controls ONLY its active tab. Take control of the active
@@ -703,7 +707,7 @@ function showTermCtxMenu(ev, term, wsSend) {
   };
   const addItem = (label, enabled, onClick) => {
     const it = document.createElement('div');
-    it.textContent = label;
+    icoLabel(it, label);
     it.style.cssText = 'padding:6px 12px;border-radius:5px;white-space:nowrap;'
       + 'cursor:' + (enabled ? 'pointer' : 'default') + ';'
       + 'color:' + (enabled ? 'var(--text,#e2e2e6)' : 'var(--text-dim,#6e6e80)') + ';';
@@ -716,14 +720,14 @@ function showTermCtxMenu(ev, term, wsSend) {
     menu.appendChild(it);
   };
 
-  addItem('⧉ Copy', hasSel, () => {
+  addItem(ico('copy') + ' Copy', hasSel, () => {
     let sel = ''; try { sel = term.getSelection() || ''; } catch (e) {}
     if (sel) { try { navigator.clipboard.writeText(sel).catch(()=>{}); } catch (e) {} }
   });
   if (wsSend) {
-    addItem('⮃ Paste', true, () => { termPasteFromClipboard(wsSend); });
+    addItem(ico('clipboard') + ' Paste', true, () => { termPasteFromClipboard(wsSend); });
   }
-  addItem('☰ Select All', true, () => { try { term.selectAll(); } catch (e) {} });
+  addItem(ico('menu') + ' Select All', true, () => { try { term.selectAll(); } catch (e) {} });
 
   document.body.appendChild(menu);
   let x = ev.clientX, y = ev.clientY;
@@ -1329,7 +1333,7 @@ function renderAddMenu() {
     // Per-server header.
     const lbl = document.createElement('div');
     lbl.className = 'group-label';
-    lbl.textContent = (srv.serverId ? '🔗 ' : '🖥 ') + (srv.hostname || 'server');
+    icoLabel(lbl, ico(srv.serverId ? 'link' : 'monitor', {size:13}) + ' ' + (srv.hostname || 'server'));
     addMenu.appendChild(lbl);
 
     if (addMenuTab === 'lxd') {
@@ -1389,7 +1393,7 @@ if (bc) {
   };
 }
 
-// A child VGA console iframe asks us to close its tab (its ✕ button). Match
+// A child VGA console iframe asks us to close its tab (its close button). Match
 // the embedded console by VM name and close the owning vga tab.
 window.addEventListener('message', (ev) => {
   if (ev.origin !== location.origin) return;

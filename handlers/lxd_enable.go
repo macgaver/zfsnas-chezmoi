@@ -207,7 +207,7 @@ func HandleLXDMigrateNetplan(w http.ResponseWriter, r *http.Request) {
 	send("─────────────────────────────────────────")
 
 	if err := system.MigrateNetplanToIfupdown(send); err != nil {
-		send("✗ " + err.Error())
+		send("Error: " + err.Error())
 		audit.Log(audit.Entry{
 			User: sess.Username, Role: sess.Role,
 			Action: audit.ActionNetworkMigrate, Result: audit.ResultError,

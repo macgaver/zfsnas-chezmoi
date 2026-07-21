@@ -179,13 +179,13 @@ func HandleInstallPrereqs(w http.ResponseWriter, r *http.Request) {
 		send("─────────────────────────────────────────")
 		send("Loading ZFS kernel module (modprobe zfs)…")
 		if out, err := system.LoadZfsModule(); err != nil {
-			send("⚠ Could not load ZFS module automatically: " + err.Error())
+			send("Warning: could not load ZFS module automatically: " + err.Error())
 			if out != "" {
 				send(out)
 			}
 			send("A reboot is recommended to activate the ZFS kernel module.")
 		} else {
-			send("✓ ZFS kernel module loaded successfully.")
+			send("ZFS kernel module loaded successfully.")
 		}
 	}
 	audit.Log(audit.Entry{

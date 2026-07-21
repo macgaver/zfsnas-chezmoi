@@ -437,7 +437,7 @@ func HandleBinaryUpdateApply(appCfg *config.AppConfig) http.HandlerFunc {
 				done(false, "signature verification failed: signature does not match release key")
 				return
 			}
-			send("Signature valid ✓")
+			send("Signature valid")
 		} else if targetTag != "" {
 			send("No signature asset for " + targetTag + " — skipping (pre-signing release)")
 		} else {
@@ -466,7 +466,7 @@ func HandleBinaryUpdateApply(appCfg *config.AppConfig) http.HandlerFunc {
 				done(false, "signature verification failed: "+err.Error())
 				return
 			}
-			send("Signature verified ✓")
+			send("Signature verified")
 		} else {
 			send("No signature asset — skipping post-download verification")
 		}

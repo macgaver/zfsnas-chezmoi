@@ -460,7 +460,7 @@ func ServeLXDVGAPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// embed=1 renders the page for use inside a multi-terminal tab (toolbar
-	// pinned to the bottom, ✕ closes the tab instead of the window).
+	// pinned to the bottom, the close button closes the tab instead of the window).
 	// server_id, when set, makes every API + SPICE call route through the
 	// per-peer relay so a peer VM's console works from the home portal.
 	embed := r.URL.Query().Get("embed") == "1"
@@ -592,14 +592,14 @@ body[data-embed] #cur-menu { top:auto !important; bottom:calc(100%% + 4px) !impo
   <div id="pwr-wrap">
     <button id="pwr-btn" onclick="togglePwrMenu(event)" title="VM power state">…</button>
     <div id="pwr-menu">
-      <div class="kbd-item" data-pwr-action="start"   onclick="pwrAction('start')">▶ Start</div>
+      <div class="kbd-item" data-pwr-action="start"   onclick="pwrAction('start')"><svg class="znas-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><polygon points="6 3 20 12 6 21 6 3"/></svg> Start</div>
       <div class="kbd-item" data-pwr-action="restart" onclick="pwrAction('restart')">⟳ Restart (graceful)</div>
-      <div class="kbd-item" data-pwr-action="reset"   onclick="pwrAction('reset')" style="color:#ff8a8a;">⚡ Hard Reboot</div>
-      <div class="kbd-item" data-pwr-action="stop"    onclick="pwrAction('stop')" style="color:#fbbf24;">■ Stop</div>
+      <div class="kbd-item" data-pwr-action="reset"   onclick="pwrAction('reset')" style="color:#ff8a8a;"><svg class="znas-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg> Hard Reboot</div>
+      <div class="kbd-item" data-pwr-action="stop"    onclick="pwrAction('stop')" style="color:#fbbf24;"><svg class="znas-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="18" height="18" x="3" y="3" rx="2"/></svg> Stop</div>
     </div>
   </div>
   <div id="kbd-wrap">
-    <button onclick="toggleKbdMenu(event)" title="Send keyboard shortcut">⌨</button>
+    <button onclick="toggleKbdMenu(event)" title="Send keyboard shortcut"><svg class="znas-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg></button>
     <div id="kbd-menu">
       <div class="kbd-item" onclick="kbdCtrlAltDel()">Ctrl+Alt+Delete</div>
       <div class="kbd-sub" style="border-top:1px solid #3a3a3a;margin-top:4px;padding-top:6px;">Function keys</div>
@@ -620,11 +620,11 @@ body[data-embed] #cur-menu { top:auto !important; bottom:calc(100%% + 4px) !impo
     </div>
   </div>
   <div id="cdrom-wrap" style="position:relative;display:none;">
-    <button id="cdrom-btn" onclick="toggleCDROMMenu(event)" title="CD/DVD drive">💿</button>
+    <button id="cdrom-btn" onclick="toggleCDROMMenu(event)" title="CD/DVD drive"><svg class="znas-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg></button>
     <div id="cdrom-menu" style="display:none;position:absolute;top:calc(100%% + 4px);left:0;background:#2a2a2a;border:1px solid #444;border-radius:4px;min-width:240px;max-width:340px;max-height:60vh;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.6);"></div>
   </div>
   <div id="cur-wrap" style="position:relative;display:inline-block;">
-    <button onclick="toggleCursorMenu(event)" title="Pointer style">🖱</button>
+    <button onclick="toggleCursorMenu(event)" title="Pointer style"><svg class="znas-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4"/></svg></button>
     <div id="cur-menu" style="display:none;position:absolute;top:calc(100%% + 4px);left:0;background:#2a2a2a;border:1px solid #444;border-radius:4px;min-width:170px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.6);">
       <div class="kbd-item" data-cur="default"   onclick="setCursor('default')">Default arrow</div>
       <div class="kbd-item" data-cur="large"     onclick="setCursor('large')">Large arrow</div>
@@ -636,13 +636,13 @@ body[data-embed] #cur-menu { top:auto !important; bottom:calc(100%% + 4px) !impo
   </div>
   <button onclick="document.getElementById('spice-area').requestFullscreen()">Fullscreen</button>
   <span id="status">Connecting…</span>
-  <button id="close-btn" onclick="closeConsole()" title="Close console">✕</button>
+  <button id="close-btn" onclick="closeConsole()" title="Close console"><svg class="znas-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
 </div>
 <div id="spice-area">
   <span id="notice">Connecting to VGA console…</span>
 </div>
 <script src="/static/vendor/spice-html5.js?v=6.5.30-letterbox"></script>
-<script>
+<script>` + znasIconsJS + `
 const name = %q;
 const serverId = %q;
 const embedded = %t;
@@ -652,7 +652,7 @@ const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 // this home server. Local consoles return the path unchanged.
 function apiURL(p) { return serverId ? ('/interlink-relay/' + encodeURIComponent(serverId) + p) : p; }
 function wsURL(p)  { return apiURL(p); }
-// ✕ in embed mode can't close an iframe — ask the parent tab to close us.
+// The close button in embed mode can't close an iframe — ask the parent tab to close us.
 function closeConsole() {
   if (embedded) {
     try { window.parent.postMessage({ type:'znas-vga-close', name: name }, location.origin); } catch(e) {}
@@ -966,7 +966,7 @@ function _renderCDROMMenu() {
   m.innerHTML = '';
   const eject = document.createElement('div');
   eject.className = 'kbd-item eject' + (cur.filename ? '' : ' muted');
-  eject.textContent = '⏏ Empty (eject)';
+  icoLabel(eject, ico('eject', {size:13}) + ' Empty (eject)');
   eject.dataset.iso = '';
   eject.addEventListener('click', function() { swapCDROM(''); });
   m.appendChild(eject);
@@ -1009,7 +1009,7 @@ function _renderCDROMMenu() {
            _cdromState.configured[0].path.indexOf('/' + p + '/') !== -1);
         const row = document.createElement('div');
         row.className = 'kbd-item' + (isCur ? ' current' : '');
-        row.textContent = (isCur ? '● ' : '') + iso.name;
+        icoLabel(row, (isCur ? ico('circle-fill', {size:11}) + ' ' : '') + iso.name);
         row.dataset.iso = iso.name;
         row.dataset.pool = p;
         row.addEventListener('click', function() { swapCDROM(iso.name, p); });

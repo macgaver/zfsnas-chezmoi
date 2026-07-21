@@ -856,7 +856,7 @@ func HandleRsyncJobProgress(w http.ResponseWriter, r *http.Request) {
 // HandleRsyncJobCancel — POST /api/rsync-jobs/{id}/cancel
 // A user stop is a PAUSE, not a failure: rsync --partial keeps the partial
 // transfer, the storage records "paused by user" with an auto-resume time
-// (next window opening / next scheduled run), and the ▶ Run button forces an
+// (next window opening / next scheduled run), and the Run button forces an
 // immediate resume.
 func HandleRsyncJobCancel(w http.ResponseWriter, r *http.Request) {
 	j := system.RsyncJobByID(mux.Vars(r)["id"])

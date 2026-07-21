@@ -1,7 +1,7 @@
 /* ===== ZFS NAS Portal — Global Design System ===== */
 
 /* Tron Legacy / Matrix Reload theme fonts (Orbitron + Share Tech Mono).
-   ⚠ This @import MUST stay above every style rule in this file: per the CSS
+   WARNING: this @import MUST stay above every style rule in this file: per the CSS
    spec an @import that follows any rule is ignored by the browser. A
    `html, body { touch-action }` rule was once added above this line, which
    silently disabled these theme fonts for several releases — keep the import
@@ -1124,7 +1124,7 @@ th.lxd-sortable.sort-desc .sort-arrow { opacity: 1; }
 .stk-resp-table.stk-hide-image   [data-col="image"],
 .stk-resp-table.stk-hide-service [data-col="service"] { display: none; }
 
-/* User column chooser (the ⚙ Columns button on each Stack Containers card).
+/* User column chooser (the gear "Columns" button on each Stack Containers card).
    Persisted per-browser via cookie. Mirrors the responsive hide rules above so
    a deselected column collapses its <col>/<th>/<td> cleanly under
    table-layout:fixed. Container/State/actions are always kept. */
@@ -1919,12 +1919,16 @@ body.tron-legacy .sysinfo-chip.is-ctrl      { --chip-accent: #ff9d00; }
   margin-top: 6px;
 }
 .vm-smbios-details summary::-webkit-details-marker { display: none; }
+/* Chevron drawn from the ZNAS icon set as a mask so it takes currentColor
+   and stays consistent with znasIcon('chevron-right') used elsewhere. */
 .vm-smbios-details summary::before {
-  content: "▶";
-  font-size: 9px;
-  color: var(--text-3);
+  content: "";
   width: 10px;
-  text-align: center;
+  height: 10px;
+  flex-shrink: 0;
+  background-color: var(--text-3);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / 10px 10px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / 10px 10px no-repeat;
   transition: transform 0.15s;
 }
 .vm-smbios-details[open] summary::before { transform: rotate(90deg); }
@@ -2919,7 +2923,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 .map-legend-item[data-layer="disk"]      i{background:var(--map-disk);color:var(--map-disk);}
 .map-toolbar-right{display:flex;align-items:center;gap:12px;}
 .map-status{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums;}
-/* zoom controls (− / level / + / ⛶) */
+/* zoom controls (− / level / + / fullscreen) */
 .map-zoom{display:inline-flex;align-items:stretch;
   border:1px solid color-mix(in srgb, var(--accent-2) 35%, transparent);
   border-radius:8px;overflow:hidden;}
@@ -2938,7 +2942,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
   /* JS owns pan + pinch-zoom on touch, so suppress the browser's own gestures
      (page pinch-zoom / two-finger scroll). Wheel + scrollbars still work. */
   touch-action:none;-webkit-user-select:none;user-select:none;}
-/* Fullscreen (⛶ in the zoom group): paint the theme background instead of the
+/* Fullscreen (the button in the zoom group): paint the theme background instead of the
    browser's default black fullscreen backdrop. */
 .map-viewport:fullscreen{background:var(--bg);}
 .map-viewport:-webkit-full-screen{background:var(--bg);} /* prefixed Safari (separate rule: an unknown pseudo would void a shared one) */
@@ -2960,7 +2964,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 /* In-fullscreen zoom control: the toolbar (with the −/%/+ buttons) is a sibling
    of the viewport, so it's not visible once the viewport itself goes
    fullscreen. This clone lives INSIDE the viewport and shows only in fullscreen,
-   pinned top-right beside the exit ✕. Reuses .map-zoom pill styling. */
+   pinned top-right beside the exit button. Reuses .map-zoom pill styling. */
 .map-fs-zoom{display:none;position:fixed;top:12px;right:56px;z-index:9500;}
 .map-viewport:fullscreen .map-fs-zoom{display:inline-flex;}
 .map-viewport:-webkit-full-screen .map-fs-zoom{display:inline-flex;}
@@ -3445,7 +3449,7 @@ body.is-phone table.m-card-table td:not([data-label]):not(.m-cell-full)::before 
 /* Avoid the doubled border when a cardified table sits in a .table-wrap. */
 body.is-phone .table-wrap:has(table.m-card-table) { border: none; overflow: visible; border-radius: 0; }
 /* Rows whose action cell holds an absolutely-positioned dropdown (the Stack
-   Containers table's 🖥️ terminal + ⋮ burger menus) must NOT clip it — the
+   Containers table's terminal + burger menus) must NOT clip it — the
    default cardified-row overflow:hidden hid the menu the moment it opened, so
    the buttons looked dead on a phone. Let those rows (and their action cell)
    overflow so the menu is visible and tappable. */
