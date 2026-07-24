@@ -322,6 +322,9 @@ func main() {
 	// ===== UPS shutdown watcher =====
 	go system.StartUPSShutdownWatcher(appCfg)
 
+	// ===== UPS power-transition notification watcher =====
+	handlers.StartUPSPowerWatcher(appCfg)
+
 	// ===== Session cleanup goroutine =====
 	go func() {
 		t := time.NewTicker(30 * time.Minute)

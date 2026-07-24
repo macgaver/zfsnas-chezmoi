@@ -45,6 +45,7 @@ const (
 	EventVMHostSaturation   EventKey = "vm_host_saturation"
 	EventComposeUpdateFailure EventKey = "compose_update_failure"
 	EventInterlinkUnreachable EventKey = "interlink_unreachable"
+	EventUPSPowerChanged      EventKey = "ups_power_changed"
 	EventTest            EventKey = "test" // always passes filter
 )
 
@@ -74,6 +75,7 @@ func matchesEvent(key EventKey, ev EventConfig) bool {
 	case EventVMHostSaturation:  return ev.VMHostSaturation
 	case EventComposeUpdateFailure: return ev.ComposeUpdateFailure
 	case EventInterlinkUnreachable: return ev.InterlinkUnreachable
+	case EventUPSPowerChanged:      return ev.UPSPowerChanged
 	}
 	return false
 }
@@ -117,6 +119,7 @@ type EventConfig struct {
 	ShareCreatedDeleted  bool `json:"share_created_deleted"`
 	PoolActions          bool `json:"pool_actions"`
 	InterlinkUnreachable bool `json:"interlink_unreachable"`
+	UPSPowerChanged      bool `json:"ups_power_changed"`
 
 	// Virtualization events — only meaningful when the optional LXD/Incus
 	// feature is installed. Hidden in the UI on servers without it but kept

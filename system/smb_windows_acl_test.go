@@ -5,18 +5,26 @@ import (
 	"testing"
 )
 
-// The Windows ACL share option shipped `vfs objects = zfsacl` from v6.7.15
-// (commit 6b4a729) through v6.7.22.  vfs_zfsacl is a FreeBSD/illumos module
-// that Debian and Ubuntu do not build — no zfsacl.so exists in either distro's
-// samba packaging — so smbd failed to load it and every affected share answered
-// tree connects with NT_STATUS_BAD_NETWORK_NAME:
+// The Windows ACL share option must NOT stack any ACL VFS module on Linux.
 //
-//	Error loading module '/usr/lib/x86_64-linux-gnu/samba/vfs/zfsacl.so':
-//	  cannot open shared object file: No such file or directory
-//	error probing vfs module 'zfsacl': NT_STATUS_UNSUCCESSFUL
-//	smbd_vfs_init: vfs_init_custom failed for zfsacl
+// History:
+//   - ≤6.6.28: Windows ACL = POSIX-mode mapping + `force create mode = 0755`
+//     (no ACL VFS module). Cross-user moves worked because deleting/renaming a
+//     file is governed by POSIX write on the *parent directory*.
+//   - 6.7.15–6.7.22: added `vfs objects = zfsacl` — a FreeBSD/illumos module
+//     absent from Debian/Ubuntu, so shares refused every connection
+//     (NT_STATUS_BAD_NETWORK_NAME).
+//   - the zfsacl→nfs4acl_xattr fix: connections worked again, but nfs4acl_xattr
+//     enforces NFSv4 DELETE semantics. Its POSIX-synthesized ACL grants group /
+//     Everyone `0x001201bf` — WRITE but NOT `DELETE` (0x10000) on files nor
+//     `DELETE_CHILD` (0x40) on directories — so only a file's owner could ever
+//     move/rename/delete it. A second user with full write got ACCESS_DENIED
+//     (verified on znas-debian2: the filesystem `mv` succeeded as the same user;
+//     only Samba refused). That broke the common shared-folder workflow.
 //
-// The Linux equivalent that ships in both distros is vfs_nfs4acl_xattr.
+// Resolution (POSIX-mode, restoring the ≤6.6.28 behavior): emit no ACL VFS
+// module, so Samba governs delete/rename by directory write like every other
+// share. The exec bit is still preserved via `force create mode = 0755`.
 
 func windowsACLShareBlock(t *testing.T) string {
 	t.Helper()
@@ -28,31 +36,35 @@ func windowsACLShareBlock(t *testing.T) string {
 	}})
 }
 
-// TestWindowsACLDoesNotEmitZfsacl is the core regression test: the module that
-// does not exist on Debian/Ubuntu must never reach smb.conf again.
-func TestWindowsACLDoesNotEmitZfsacl(t *testing.T) {
-	got := windowsACLShareBlock(t)
-	if strings.Contains(got, "zfsacl") {
-		t.Errorf("Windows ACL share emitted the unloadable zfsacl module:\n%s", got)
+func vfsObjectsLine(got string) string {
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "vfs objects") {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
+// TestWindowsACLUsesNoACLVFSModule is the core regression test for the
+// cross-user move failure: no ACL VFS module may be stacked, because every one
+// of them (zfsacl, nfs4acl_xattr, acl_xattr) imposes NT/NFSv4 DELETE semantics
+// that withhold delete from non-owners who hold write.
+func TestWindowsACLUsesNoACLVFSModule(t *testing.T) {
+	vfsLine := vfsObjectsLine(windowsACLShareBlock(t))
+	for _, mod := range []string{"zfsacl", "nfs4acl_xattr", "acl_xattr"} {
+		if strings.Contains(vfsLine, mod) {
+			t.Errorf("Windows ACL share stacked ACL module %q — breaks cross-user move/delete: %q", mod, vfsLine)
+		}
 	}
 }
 
-// TestWindowsACLUsesNfs4aclXattr checks we use the module Debian/Ubuntu do ship.
-func TestWindowsACLUsesNfs4aclXattr(t *testing.T) {
-	got := windowsACLShareBlock(t)
-	var vfsLine string
-	for _, line := range strings.Split(got, "\n") {
-		if strings.Contains(line, "vfs objects") {
-			vfsLine = strings.TrimSpace(line)
-		}
-	}
+// TestWindowsACLKeepsFruitStack — fruit + streams_xattr remain (they are shared
+// with the Time Machine / Apple-encoding options and carry no ACL semantics).
+func TestWindowsACLKeepsFruitStack(t *testing.T) {
+	vfsLine := vfsObjectsLine(windowsACLShareBlock(t))
 	if vfsLine == "" {
-		t.Fatalf("no vfs objects line rendered:\n%s", got)
+		t.Fatalf("no vfs objects line rendered")
 	}
-	if !strings.Contains(vfsLine, "nfs4acl_xattr") {
-		t.Errorf("vfs objects line missing nfs4acl_xattr: %q", vfsLine)
-	}
-	// fruit/streams_xattr were already stacked for this option; keep them.
 	for _, mod := range []string{"fruit", "streams_xattr"} {
 		if !strings.Contains(vfsLine, mod) {
 			t.Errorf("vfs objects line dropped %s: %q", mod, vfsLine)
@@ -60,64 +72,40 @@ func TestWindowsACLUsesNfs4aclXattr(t *testing.T) {
 	}
 }
 
-// TestWindowsACLDisablesValidateMode guards a silent-data-loss footgun.
-// For the ndr/xdr encodings nfs4acl_xattr:validate_mode defaults to YES, which
-// makes the module discard the stored ACL blob unless the POSIX mode is exactly
-// 0777 on directories and 0666 on files.  We write create mask = 0744 and
-// directory mask = 0775, so every ACL would be thrown away on read.
-func TestWindowsACLDisablesValidateMode(t *testing.T) {
+// TestWindowsACLKeepsExecBit — the one behavior the option must still provide:
+// executables keep their +x bit via force create mode.
+func TestWindowsACLKeepsExecBit(t *testing.T) {
 	got := windowsACLShareBlock(t)
-	if !strings.Contains(got, "nfs4acl_xattr:validate_mode = no") {
-		t.Errorf("validate_mode not disabled — stored ACLs would be discarded because our masks are not 0777/0666:\n%s", got)
+	if !strings.Contains(got, "force create mode = 0755") {
+		t.Errorf("Windows ACL share dropped the exec-bit preservation:\n%s", got)
 	}
 }
 
-// TestWindowsACLPinsEncoding — the default encoding differs across Samba
-// releases, and each encoding uses a different xattr to store the blob.
-// Letting it drift would orphan every previously stored ACL, so pin it.
-func TestWindowsACLPinsEncoding(t *testing.T) {
+// TestWindowsACLEmitsNoNFS4Params — none of the NFSv4-ACL wiring may remain;
+// with no ACL module these parameters are inert at best and misleading at worst.
+func TestWindowsACLEmitsNoNFS4Params(t *testing.T) {
 	got := windowsACLShareBlock(t)
-	if !strings.Contains(got, "nfs4acl_xattr:encoding = ndr") {
-		t.Errorf("encoding not pinned to ndr:\n%s", got)
+	for _, needle := range []string{"nfs4:", "nfs4acl_xattr:", "nt acl support", "zfsacl"} {
+		if strings.Contains(got, needle) {
+			t.Errorf("Windows ACL share still emits %q:\n%s", needle, got)
+		}
 	}
 }
 
-// TestWindowsACLStoresBlobInUserNamespace guards the difference between
-// "Windows can view permissions" and "Windows can change permissions".
-//
-// The ndr/xdr encodings default to storing the ACL blob in security.nfs4acl_*.
-// Linux restricts writes to the security.* xattr namespace to CAP_SYS_ADMIN,
-// and smbd runs as the connecting user once authenticated, so every attempt to
-// apply an ACL failed on the test VM with:
-//
-//	smbcacls: NT_STATUS_ACCESS_DENIED
-//	vfs_nfs4acl_xattr.c:284: can't store acl in xattr: Operation not permitted
-//
-// Relocating the blob into the user.* namespace makes ACL writes work; the
-// module never elevates privileges the way vfs_acl_xattr does.
-func TestWindowsACLStoresBlobInUserNamespace(t *testing.T) {
+// TestWindowsACLCreateMask — the ≤6.6.28 masks are preserved (0744 for files so
+// the exec bit survives the mask, 0775 for directories).
+func TestWindowsACLCreateMask(t *testing.T) {
 	got := windowsACLShareBlock(t)
-	const want = "nfs4acl_xattr:xattr_name = user.nfs4acl_ndr"
-	if !strings.Contains(got, want) {
-		t.Errorf("ACL blob left in the privileged security.* namespace — clients can read ACLs but every write returns ACCESS_DENIED; want %q in:\n%s", want, got)
+	if !strings.Contains(got, "create mask = 0744") {
+		t.Errorf("Windows ACL create mask changed:\n%s", got)
+	}
+	if !strings.Contains(got, "directory mask = 0775") {
+		t.Errorf("directory mask changed:\n%s", got)
 	}
 }
 
-// TestWindowsACLAvoidsDeprecatedNfs4Mode — vfs_nfs4acl_xattr(8) marks
-// "nfs4:mode = special" deprecated and recommends simple.  The zfsacl-era code
-// wrote special; since the module never loaded, nothing depended on it.
-func TestWindowsACLAvoidsDeprecatedNfs4Mode(t *testing.T) {
-	got := windowsACLShareBlock(t)
-	if strings.Contains(got, "nfs4:mode = special") {
-		t.Errorf("uses deprecated nfs4:mode = special:\n%s", got)
-	}
-	if !strings.Contains(got, "nfs4:mode = simple") {
-		t.Errorf("missing nfs4:mode = simple:\n%s", got)
-	}
-}
-
-// TestNonWindowsACLShareUnaffected — shares without the option must not gain
-// any NFSv4 ACL wiring.
+// TestNonWindowsACLShareUnaffected — shares without the option must carry no ACL
+// wiring at all.
 func TestNonWindowsACLShareUnaffected(t *testing.T) {
 	got := renderManagedShares([]SMBShare{{
 		Name:       "plain",
@@ -132,7 +120,7 @@ func TestNonWindowsACLShareUnaffected(t *testing.T) {
 }
 
 // TestWindowsACLKeepsShadowCopyFirst — shadow_copy2 must stay the first module
-// in the stack; adding the ACL module must not displace it.
+// in the stack when both options are on.
 func TestWindowsACLKeepsShadowCopyFirst(t *testing.T) {
 	got := renderManagedShares([]SMBShare{{
 		Name:       "both",

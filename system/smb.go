@@ -329,14 +329,13 @@ func renderManagedShares(shares []SMBShare) string {
 		if s.RecycleBin {
 			vfsObjs = append(vfsObjs, "recycle")
 		}
-		if s.WindowsACL {
-			// NFSv4-style ACLs are surfaced to Windows via nfs4acl_xattr.
-			// NOT zfsacl: that module is FreeBSD/illumos-only and is absent
-			// from Debian and Ubuntu samba packaging, so smbd failed to load
-			// it and the share refused every tree connect (see the tests in
-			// smb_windows_acl_test.go).
-			vfsObjs = append(vfsObjs, "nfs4acl_xattr")
-		}
+		// NB: the Windows ACL option deliberately stacks NO ACL VFS module.
+		// zfsacl does not exist on Debian/Ubuntu (shares refused all
+		// connections), and nfs4acl_xattr imposes NFSv4 DELETE semantics whose
+		// POSIX-synthesized ACL withholds delete from non-owners — so a second
+		// user with full write could not move/rename/delete another user's
+		// files. With no module, Samba governs delete by POSIX directory write
+		// like every other share. See smb_windows_acl_test.go.
 		if s.TimeMachine || s.WindowsACL || s.AppleEncoding {
 			vfsObjs = append(vfsObjs, "fruit", "streams_xattr")
 		}
@@ -355,39 +354,12 @@ func renderManagedShares(shares []SMBShare) string {
 			sb.WriteString("   shadow:localtime = no\n")
 		}
 
-		// Windows ACL compatibility — ensures executables keep the execute bit,
-		// and wires Samba to store NT ACLs as NFSv4 ACLs via the nfs4acl_xattr
-		// module added above (nt acl support is on by default; set explicitly
-		// for clarity).
+		// Windows ACL compatibility — ensures executables keep the execute bit.
+		// No ACL VFS module or nfs4:* wiring is emitted on purpose (see the
+		// note by the vfs objects block above): those enforce NFSv4 DELETE
+		// semantics that block cross-user move/rename/delete.
 		if s.WindowsACL {
 			sb.WriteString("   force create mode = 0755\n")
-			sb.WriteString("   nt acl support = yes\n")
-			// "special" is deprecated in vfs_nfs4acl_xattr(8); simple is the
-			// recommended (and default) mapping for OWNER@/GROUP@.
-			sb.WriteString("   nfs4:mode = simple\n")
-			sb.WriteString("   nfs4:acedup = merge\n")
-			sb.WriteString("   nfs4:chown = yes\n")
-			// Pin the marshaling format: the default has moved between Samba
-			// releases and each encoding stores the blob under a different
-			// xattr, so drift would orphan every previously saved ACL.
-			// "nfs" encoding is deliberately NOT used — it reads/writes
-			// system.nfs4_acl, which OpenZFS on Linux answers with EOPNOTSUPP.
-			sb.WriteString("   nfs4acl_xattr:encoding = ndr\n")
-			sb.WriteString("   nfs4acl_xattr:version = 41\n")
-			// Synthesize from the POSIX mode when a file has no ACL blob yet;
-			// the module default ("everyone") would hand out full control.
-			sb.WriteString("   nfs4acl_xattr:default acl style = posix\n")
-			// validate_mode defaults to yes for ndr/xdr and then DISCARDS the
-			// stored ACL unless the mode is exactly 0777/0666 — which our
-			// create mask = 0744 / directory mask = 0775 never produce.
-			sb.WriteString("   nfs4acl_xattr:validate_mode = no\n")
-			// Keep the ACL blob out of the security.* namespace. Writes there
-			// need CAP_SYS_ADMIN and smbd runs as the connecting user, so the
-			// module's default xattr makes every "Apply" from Windows fail
-			// with ACCESS_DENIED ("can't store acl in xattr: Operation not
-			// permitted"). vfs_acl_xattr elevates for this; nfs4acl_xattr does
-			// not, so store the blob where the file's owner may write it.
-			sb.WriteString("   nfs4acl_xattr:xattr_name = user.nfs4acl_ndr\n")
 		}
 
 		// Apple-style character encoding (catia) + fruit settings for macOS

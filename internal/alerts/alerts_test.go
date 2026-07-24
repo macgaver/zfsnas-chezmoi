@@ -14,6 +14,7 @@ func TestAnyTargetWantsCoversAllKeys(t *testing.T) {
 		EventVMUnexpectedStop, EventVMCreatedDeleted, EventVMSnapshotFailure,
 		EventVMBackupFailure, EventVMDiskFull, EventVMHostSaturation,
 		EventComposeUpdateFailure, EventInterlinkUnreachable,
+		EventUPSPowerChanged,
 	}
 	all := EventConfig{
 		PoolDegraded: true, SmartError: true, WearoutExceeded: true,
@@ -23,6 +24,7 @@ func TestAnyTargetWantsCoversAllKeys(t *testing.T) {
 		VMUnexpectedStop: true, VMCreatedDeleted: true, VMSnapshotFailure: true,
 		VMBackupFailure: true, VMDiskFull: true, VMHostSaturation: true,
 		ComposeUpdateFailure: true, InterlinkUnreachable: true,
+		UPSPowerChanged: true,
 	}
 	cfg := &AlertConfig{WebSocket: WebSocketTarget{Enabled: true, Events: all}}
 	for _, k := range keys {
