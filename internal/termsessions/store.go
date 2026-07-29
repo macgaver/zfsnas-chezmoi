@@ -338,6 +338,19 @@ func (s *Store) New(userID, kind, target, title string, spawn SpawnFunc) (*Sessi
 // fan out to current WS. Exits on PTY EOF/error, after which it marks the
 // session terminated and schedules eviction.
 func (s *Store) drainPTY(sess *Session) {
+	// Reap the child. markTerminated only Kill()s it, and a killed process
+	// that is never Wait()ed stays <defunct> for the life of the daemon —
+	// Go installs no SIGCHLD handler. Those PIDs count against the unit's
+	// TasksMax, and once that fills, every fork the service makes starts
+	// failing with EAGAIN: pty.Start() for a new terminal, and the `incus`
+	// probes too. This is the single exit path for all five PTY kinds, and
+	// ptmx.Close() always unblocks the Read above, so it covers every
+	// termination route (process exit, user close, cap eviction, shutdown).
+	defer func() {
+		if sess.cmd != nil {
+			sess.cmd.Wait() //nolint:errcheck
+		}
+	}()
 	buf := make([]byte, 4096)
 	for {
 		n, err := sess.ptmx.Read(buf)
