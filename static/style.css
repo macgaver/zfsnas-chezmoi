@@ -3712,3 +3712,149 @@ body.is-phone .page { overflow-x: hidden; }
 body.is-phone .lxd-table-card { overflow: visible; max-height: none; min-height: 0; }
 body.is-phone .lxd-table-card thead th { position: static; }
 
+
+/* ── Services tab (v6.8.1) ─────────────────────────────────────────────────── */
+
+/* Styled hover label for the sidebar mode icons. Replaces the native title=
+   tooltip, which is slow to appear and unstyleable. */
+.sidebar-mode-btn { position: relative; }
+.sidebar-mode-btn::after {
+  content: attr(data-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+  z-index: 60;
+  box-shadow: 0 3px 10px rgba(0,0,0,.28);
+}
+.sidebar-mode-btn:hover::after { opacity: 1; }
+
+/* Service rows in the left nav — mirrors .nav-compute-instance. */
+.nav-service-row { display: flex; align-items: center; gap: 7px; width: 100%; }
+.nav-service-row .svc-ico {
+  width: 15px; height: 15px; flex-shrink: 0; border-radius: 3px; object-fit: contain;
+}
+.nav-service-row.svc-offline { opacity: .5; }
+
+/* Services table icon cell. */
+.svc-tbl-icon {
+  width: 22px; height: 22px; border-radius: 4px; object-fit: contain;
+  vertical-align: -6px; margin-right: 8px;
+}
+
+/* Embedded app panel. */
+.svc-embed-wrap { position: relative; width: 100%; height: calc(100vh - 150px); min-height: 420px; }
+.svc-embed-wrap > iframe { width: 100%; height: 100%; border: none; border-radius: 8px; background: #fff; }
+.svc-embed-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 30px;
+}
+
+/* ── Services icon view (v6.8.1) — home-screen style grid ─────────────────── */
+.svc-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 22px 14px;
+  padding: 10px 4px 30px;
+}
+.svc-tile {
+  /* iPadOS shows its own callout ("Save Image", text selection) on long-press,
+     which pre-empts our context menu. Suppress it here and drive the menu from
+     an explicit long-press handler instead. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 12px;
+  text-align: center;
+  transition: transform .12s ease, background .12s;
+}
+.svc-tile:hover { background: var(--surface2); transform: translateY(-2px); }
+.svc-tile:active { transform: scale(.96); }
+.svc-tile-art {
+  position: relative;
+  width: 64px; height: 64px;
+  border-radius: 15px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 3px 10px rgba(0,0,0,.22);
+}
+.svc-tile-art img.svc-tile-img {
+  width: 46px; height: 46px; object-fit: contain;
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  pointer-events: none; /* long-press must target the tile, never the image */
+}
+.svc-tile-art svg { opacity: .8; }
+.svc-tile-label {
+  font-size: 12px; font-weight: 600; color: var(--text-1);
+  max-width: 104px; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.svc-tile-sub { font-size: 10.5px; color: var(--text-3); margin-top: -4px; }
+/* Status pip on the tile corner. */
+.svc-tile-dot {
+  position: absolute; right: -3px; top: -3px;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--surface);
+}
+/* A service whose container is not running: fully desaturated, and its click
+   opens the context menu instead of the app — hence the menu cursor and no
+   hover lift, so it never reads as "openable". */
+.svc-tile.svc-dim .svc-tile-art { box-shadow: none; background: var(--surface); }
+/* Scoped to the artwork, not the .svc-tile-art box: opacity/filter apply to the
+   whole subtree and a child cannot opt out, which would fade the status pip
+   nested inside it — the one thing that must stay legible. */
+.svc-tile.svc-dim .svc-tile-art img.svc-tile-img,
+.svc-tile.svc-dim .svc-tile-art svg { opacity: .34; filter: grayscale(1); }
+.svc-tile.svc-dim .svc-tile-label { color: var(--text-3); font-weight: 500; }
+.svc-tile.svc-dim .svc-tile-sub { opacity: .65; }
+.svc-tile.svc-dim { cursor: context-menu; }
+.svc-tile.svc-dim:hover { transform: none; }
+.svc-tile.svc-dim:active { transform: scale(.98); }
+/* A hidden service, shown only while "Show hidden" is on. */
+.svc-tile.svc-is-hidden .svc-tile-art { outline: 1px dashed var(--text-3); opacity: .55; }
+
+/* View-settings dropdown on the Services page. */
+.svc-viewmenu {
+  position: absolute; z-index: 9999; min-width: 208px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.36);
+}
+.svc-viewmenu-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--text-1);
+}
+.svc-viewmenu-item:hover { background: var(--surface); }
+.svc-viewmenu-sep { height: 1px; background: var(--border); margin: 5px 3px; }
+.svc-viewmenu-head {
+  padding: 6px 10px 3px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-3); font-weight: 700;
+}
+
+
+/* Long-press menu also drives the left-nav service rows on touch devices. */
+.nav-compute-instance { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }

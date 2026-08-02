@@ -59,6 +59,8 @@ type StandardPermissions struct {
 	// standard users get no VM/container/networking access until an admin
 	// explicitly grants it.
 	ViewVirtualization    bool `json:"view_virtualization,omitempty"`     // see the Compute (VMs & Containers) section at all
+	ViewServices          bool `json:"view_services,omitempty"`           // v6.8.1 — see the Services tab and open a service's web UI through the proxy
+	ManageServices        bool `json:"manage_services,omitempty"`         // v6.8.1 — edit/create/delete services and start/stop/restart their containers
 	CreateVM              bool `json:"create_vm,omitempty"`               // create new VMs
 	CreateContainer       bool `json:"create_container,omitempty"`        // create new containers
 	EditInstances         bool `json:"edit_instances,omitempty"`          // edit config of existing VMs/containers
@@ -442,7 +444,30 @@ type AppConfig struct {
 	ExternalStorages        []ExternalStorage     `json:"external_storages,omitempty"`       // v6.7.7 — Filesystem rsync external storage targets
 	MergerFS                MergerFSConfig        `json:"mergerfs,omitempty"`                // v6.7.13 — optional MergerFS union-filesystem support
 	MergerFSSnapshotPolicies []MergerFSSnapshotPolicy `json:"mergerfs_snapshot_policies,omitempty"` // v6.7.13 — per-mergerfs coordinated ZFS snapshot schedules
+
+	// ── Services (v6.8.1) ────────────────────────────────────────────────
+	// The two default-ON switches are *pointers* on purpose: an absent key in
+	// an existing config file must mean "enabled". A plain bool would decode
+	// to false and silently disable the feature on every upgraded host.
+	ServiceDiscoveryEnabled   *bool `json:"service_discovery_enabled,omitempty"`    // nil = on
+	ServiceProxyEnabled       *bool `json:"service_proxy_enabled,omitempty"`        // nil = on
 }
+
+// ServiceDiscoveryOn reports whether service discovery is enabled. Absent =
+// enabled, so existing configs keep the feature after an upgrade.
+func (c *AppConfig) ServiceDiscoveryOn() bool {
+	return c.ServiceDiscoveryEnabled == nil || *c.ServiceDiscoveryEnabled
+}
+
+// ServiceProxyOn reports whether the service proxy may serve. Disabling
+// discovery disables the proxy too — it is the master switch (spec §2.6).
+func (c *AppConfig) ServiceProxyOn() bool {
+	if !c.ServiceDiscoveryOn() {
+		return false
+	}
+	return c.ServiceProxyEnabled == nil || *c.ServiceProxyEnabled
+}
+
 
 // ── MergerFS (v6.7.13, optional feature) ─────────────────────────────────────
 
@@ -873,6 +898,10 @@ type APIKeyEntry struct {
 	Name      string    `json:"name"`
 	Key       string    `json:"key"`
 	CreatedAt time.Time `json:"created_at"`
+	// PoolTarget pins the homepage widget's single capacity metric to a
+	// specific pool, encoded as "zfs:<name>" or "mergerfs:<name>". Empty =
+	// default (the first zpool), so existing keys are unaffected.
+	PoolTarget string `json:"pool_target,omitempty"`
 }
 
 // LoadAPIKeys loads all API keys from disk, decrypting key values if encrypted.

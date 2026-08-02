@@ -42,6 +42,13 @@ var csiQueries = [][]byte{
 	[]byte("\x1b[>c"), []byte("\x1b[>0c"), []byte("\x1b[=c"),
 }
 
+// csiDecrqmRe matches DECRQM mode-report REQUESTS: "\x1b[?<Ps>$p" (DEC private)
+// and "\x1b[<Ps>$p" (ANSI). The mode number is variable, so an exact-match
+// entry in csiQueries can't cover them. Unstripped, a replayed "\x1b[?12$p"
+// makes the emulator re-answer with DECRPM "\x1b[?12;2$y", which readline shows
+// at the prompt as "12;2$y" — the reported iPad-resume paste.
+var csiDecrqmRe = regexp.MustCompile("\x1b\\[\\??[0-9;]*\\$p")
+
 // stripScrollbackQueries removes terminal-report REQUESTS from replayed
 // scrollback. A program (vim, a prompt, dircolors…) may have queried the
 // terminal's colours/cursor while running; those query bytes are invisible but
@@ -56,6 +63,7 @@ func stripScrollbackQueries(b []byte) []byte {
 		return b
 	}
 	b = oscQueryRe.ReplaceAll(b, nil)
+	b = csiDecrqmRe.ReplaceAll(b, nil)
 	for _, q := range csiQueries {
 		if bytes.Contains(b, q) {
 			b = bytes.ReplaceAll(b, q, nil)

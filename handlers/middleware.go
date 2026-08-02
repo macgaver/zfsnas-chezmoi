@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"net/http"
+	"sync/atomic"
 	"strings"
 	"time"
 	"zfsnas/internal/audit"
@@ -40,7 +41,16 @@ func RequireAuth(next http.Handler) http.Handler {
 		// Normal cookie-based auth.
 		sess, ok := SessionFromRequest(r)
 		if !ok {
-			if isBrowser(r) {
+			// Service-proxy traffic always gets a clean 401, never a redirect.
+			// These requests are an app's own documents and sub-resources
+			// (JS/CSS/XHR/WebSocket) inside a sandboxed frame: answering a
+			// script fetch with a 303 to the HTML login page would corrupt the
+			// proxied app instead of failing honestly. A uniform 401 also means
+			// the response is identical whether or not the service id exists,
+			// so the endpoint can't be used to enumerate services, and it is
+			// what lets the panel show its "session expired" overlay.
+			// See PLANS/plan-version-6.8.1.md §2.8.
+			if isBrowser(r) && !strings.HasPrefix(r.URL.Path, "/s/") {
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}
@@ -134,6 +144,8 @@ func permEnabled(p *config.StandardPermissions, perm string) bool {
 	case "delete_instances":        return p.DeleteInstances
 	case "manage_instance_backups": return p.ManageInstanceBackups
 	case "view_networking":         return p.ViewNetworking
+	case "view_services":           return p.ViewServices
+	case "manage_services":         return p.ManageServices
 	}
 	return false
 }
@@ -272,7 +284,9 @@ func RequireAuthOrAPIKey(next http.Handler) http.Handler {
 			keys, _ := config.LoadAPIKeys()
 			for _, k := range keys {
 				if subtle.ConstantTimeCompare([]byte(k.Key), []byte(token)) == 1 {
-					next.ServeHTTP(w, r)
+					// Carry the matched key so capacity handlers can honor its
+					// per-key PoolTarget selection.
+					next.ServeHTTP(w, withAPIKey(r, k))
 					return
 				}
 			}
@@ -286,7 +300,17 @@ func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
+		// Service-proxy responses are framed BY the portal. X-Frame-Options
+		// cannot express "allow that specific other origin" (ALLOW-FROM is
+		// dead), and when the dedicated proxy port is in use the framing page
+		// is a different origin than the framed one — so SAMEORIGIN blocks it
+		// just as surely as DENY. We therefore omit XFO for /s/ entirely and
+		// express the policy with CSP frame-ancestors below, which does support
+		// naming an exact origin. Isolation for these frames comes from the
+		// iframe sandbox, not from XFO (spec §2.1).
+		if !strings.HasPrefix(r.URL.Path, "/s/") {
+			w.Header().Set("X-Frame-Options", "DENY")
+		}
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		// Content-Security-Policy: defense-in-depth against XSS/exfiltration.
 		// The SPA relies on inline scripts/handlers and inline styles, so
@@ -304,10 +328,15 @@ func SecurityHeaders(next http.Handler) http.Handler {
 					"img-src 'self' data: blob:; "+
 					"media-src 'self' blob:; "+
 					"connect-src 'self'; "+
+					// v6.8.1 — the Services panel frames proxied apps. Normally
+					// they come from our own origin ('self'); when the dedicated
+					// proxy port is enabled they come from that port instead,
+					// which is a DIFFERENT origin and must be named explicitly.
+					"frame-src 'self'; "+
 					"worker-src 'self' blob:; "+
 					"object-src 'none'; "+
 					"base-uri 'self'; "+
-					"frame-ancestors 'self'; "+
+					serviceFrameAncestors(r)+
 					"form-action 'self'")
 		}
 		next.ServeHTTP(w, r)
@@ -321,6 +350,19 @@ func EnforceOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+			// The service proxy (/s/{id}/…) is deliberately exempt. Its frames
+			// are sandboxed WITHOUT allow-same-origin, so the browser gives them
+			// an opaque origin and every POST they make carries `Origin: null` —
+			// which the check below would reject, breaking the login form of
+			// every proxied app. That prefix is protected instead by (a) a
+			// mandatory session on every request and (b) SameSite=Lax on
+			// zfsnas_session, which withholds the cookie from a third-party
+			// site trying to drive an authenticated POST through the proxy.
+			// CSRF *inside* the proxied app remains that app's own business.
+			// See PLANS/plan-version-6.8.1.md §2.8.
+			if strings.HasPrefix(r.URL.Path, "/s/") {
+				break
+			}
 			if origin := r.Header.Get("Origin"); origin != "" {
 				if !strings.HasSuffix(origin, "://"+r.Host) {
 					jsonErr(w, http.StatusForbidden, "cross-origin request rejected")
@@ -346,3 +388,28 @@ func containsHTML(s string) bool {
 	}
 	return false
 }
+
+
+
+
+// portalPort records the port the main portal listens on, so proxy responses
+// can name it as an allowed framing ancestor.
+var portalPort atomic.Int32
+
+// SetPortalPort is called once at startup.
+func SetPortalPort(p int) { portalPort.Store(int32(p)) }
+
+// serviceFrameAncestors builds the frame-ancestors directive.
+//
+// Portal pages keep the strict 'self'. Service-proxy responses must additionally
+// permit the PORTAL origin to frame them: with the dedicated proxy port enabled
+// the app is served from https://host:<proxyPort> while the portal that frames
+// it is https://host:<portalPort> — a different origin, which plain 'self'
+// rejects. That mismatch silently blanked every embedded app.
+func serviceFrameAncestors(r *http.Request) string {
+	// Both the portal and the service proxy are served from the same origin, so
+	// 'self' is sufficient everywhere.
+	return "frame-ancestors 'self'; "
+}
+
+

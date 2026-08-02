@@ -1281,6 +1281,37 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleCreateAPIKey)))).Methods("POST")
 	r.Handle("/api/settings/api-keys/{id}",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDeleteAPIKey)))).Methods("DELETE")
+	r.Handle("/api/settings/api-keys/pool-targets",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleListPoolTargets(appCfg))))).Methods("GET")
+	r.Handle("/api/settings/api-keys/{id}/pool-target",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetAPIKeyPoolTarget(appCfg))))).Methods("PUT")
+
+	// --- Services (v6.8.1) ---
+	r.Handle("/api/services",
+		RequireAuth(RequirePermission("view_services")(http.HandlerFunc(HandleListServices(appCfg))))).Methods("GET")
+	r.Handle("/api/services/refresh",
+		RequireAuth(RequirePermission("view_services")(http.HandlerFunc(HandleRefreshServices(appCfg))))).Methods("POST")
+	r.Handle("/api/services",
+		RequireAuth(RequirePermission("manage_services")(http.HandlerFunc(HandleCreateService(appCfg))))).Methods("POST")
+	r.Handle("/api/services/{id}",
+		RequireAuth(RequirePermission("manage_services")(http.HandlerFunc(HandleUpdateService(appCfg))))).Methods("PUT")
+	r.Handle("/api/services/{id}",
+		RequireAuth(RequirePermission("manage_services")(http.HandlerFunc(HandleDeleteService(appCfg))))).Methods("DELETE")
+	r.Handle("/api/services/{id}/action",
+		RequireAuth(RequirePermission("manage_services")(http.HandlerFunc(HandleServiceAction(appCfg))))).Methods("POST")
+	r.Handle("/api/services/{id}/icon",
+		RequireAuth(RequirePermission("view_services")(http.HandlerFunc(HandleServiceIcon(appCfg))))).Methods("GET")
+
+	// The service reverse proxy. RequireAuth + RequirePermission are mandatory
+	// here — an unauthenticated proxy would be an open relay into the LAN
+	// (PLANS/plan-version-6.8.1.md §2.8). Registered before the SPA catch-all.
+	r.PathPrefix("/s/{id}/").Handler(
+		RequireAuth(RequirePermission("view_services")(http.HandlerFunc(HandleServiceProxy(appCfg)))))
+
+	r.Handle("/api/settings/services",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleGetServiceSettings(appCfg))))).Methods("GET")
+	r.Handle("/api/settings/services",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetServiceSettings(appCfg))))).Methods("PUT")
 
 	// --- TrueNAS-compatible read-only REST API (v2.0) ---
 	// Accepts session cookie OR Authorization: Bearer <api_key>
@@ -1288,8 +1319,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		"/api/v2.0/alert/list":        HandleHomepageAlertList,
 		"/api/v2.0/system/info":       HandleHomepageSystemInfo,
 		"/api/v2.0/system/version":    HandleHomepageSystemVersion,
-		"/api/v2.0/pool":              HandleHomepagePools,
-		"/api/v2.0/pool/dataset":      HandleHomepageDatasets,
+		"/api/v2.0/pool":              HandleHomepagePools(appCfg),
+		"/api/v2.0/pool/dataset":      HandleHomepageDatasets(appCfg),
 		"/api/v2.0/pool/snapshottask": HandleHomepageSnapshotTasks,
 		"/api/v2.0/snapshot":          HandleHomepageSnapshots,
 		"/api/v2.0/disk":              HandleHomepageDisks,

@@ -47,6 +47,17 @@ var relayBypassPrefixes = []string{
 // target list was A's peers (excluding A, including B) — i.e. wrong, and missing
 // the home server. The switcher's own /api/interlink/servers stays bypassed
 // (local) so the server-switch dropdown keeps listing A's peers.
+// relayForwardNonAPIPaths are non-/api/, non-/ws/ paths that MUST still be
+// forwarded to the viewed peer. The catch-all at the end of isRelayBypassed
+// keeps SPA routes and static assets local, which is right for everything the
+// portal itself renders — but the service proxy is peer-scoped data served
+// under a plain path, so it needs an explicit exemption. Without it, embedding
+// any app belonging to a relayed peer answered "service not found", because the
+// peer's service id was looked up in the LOCAL services.json.
+var relayForwardNonAPIPaths = []string{
+	"/s/", // v6.8.1 service reverse proxy
+}
+
 var relayForwardInterlinkPaths = []string{
 	"/api/push-interlink/",           // start/start-dataset/servers/jobs/cancel/status
 	"/api/interlink/remote-pools/",   // destination pool lookup on the viewed server
@@ -126,6 +137,13 @@ func isRelayBypassed(path string) bool {
 	for _, prefix := range relayBypassPrefixes {
 		if strings.HasPrefix(path, prefix) {
 			return true
+		}
+	}
+	// Explicitly-forwarded non-API paths (the service proxy) must survive the
+	// catch-all below.
+	for _, p := range relayForwardNonAPIPaths {
+		if strings.HasPrefix(path, p) {
+			return false
 		}
 	}
 	// Non-/api/ and non-/ws/ paths (SPA pages, root) are always served locally.

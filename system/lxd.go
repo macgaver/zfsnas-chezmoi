@@ -84,6 +84,11 @@ type LXDInstance struct {
 	Type        string   `json:"type"`        // "virtual-machine" | "container"
 	Status      string   `json:"status"`      // "Running", "Stopped", "Starting", "Stopping", ...
 	IPv4        string   `json:"ipv4"`
+	// IPv4All lists every global IPv4 the instance holds. A guest running
+	// Docker is multi-homed (real NIC(s) + docker0 + a bridge per compose
+	// network), and which one is routable from THIS host varies, so service
+	// discovery probes these rather than trusting the single best-guess above.
+	IPv4All     []string `json:"ipv4_all,omitempty"`
 	Image       string   `json:"image"`
 	CPULimit    string   `json:"cpu_limit"`
 	MemoryLimit string   `json:"memory_limit"`
@@ -1646,6 +1651,7 @@ func listLXDInstancesImpl() ([]LXDInstance, error) {
 		// Pick best IPv4: prefer IPs from NIC-device interfaces over internal bridges.
 		if r.State != nil && r.State.Network != nil {
 			inst.IPv4 = lxdPickBestIP(r.ExpandedDevices, r.ExpandedConfig, r.State.Network)
+			inst.IPv4All = lxdAllGlobalIPv4s(r.State.Network, inst.IPv4)
 		}
 
 		// Find the root disk's storage pool.
@@ -8543,4 +8549,30 @@ func LXDMoveStorage(name, targetPool string) error {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+
+// lxdAllGlobalIPv4s returns every global IPv4 the instance holds, with the
+// best-guess address first so callers that probe in order try the most likely
+// candidate before the rest. Used by service discovery, which cannot rely on a
+// single address: a Docker-running guest exposes docker0 and one bridge per
+// compose network alongside its real NIC(s), and only some are routable from
+// this host.
+func lxdAllGlobalIPv4s(network map[string]lxdStateNetwork, preferred string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	if preferred != "" {
+		out = append(out, preferred)
+		seen[preferred] = true
+	}
+	for _, iface := range network {
+		for _, a := range iface.Addresses {
+			if a.Family != "inet" || a.Scope != "global" || seen[a.Address] {
+				continue
+			}
+			seen[a.Address] = true
+			out = append(out, a.Address)
+		}
+	}
+	return out
 }

@@ -25,9 +25,13 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 	// Monitor tab without an extra round-trip.
 	lxdMetricsEnabled := false
 	mergerfsEnabled := false
+	servicesEnabled := true
+	serviceProxyEnabled := true
 	if c, err := config.LoadAppConfig(); err == nil && c != nil {
 		lxdMetricsEnabled = c.LXDMetricsEnabled
 		mergerfsEnabled = c.MergerFS.Enabled
+		servicesEnabled = c.ServiceDiscoveryOn()
+		serviceProxyEnabled = c.ServiceProxyOn()
 	}
 	jsonOK(w, map[string]interface{}{
 		"version":             version.Version,
@@ -40,6 +44,9 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 		"lxd_metrics_enabled": lxdMetricsEnabled,
 		"mergerfs_installed":  system.MergerFSInstalled(),
 		"mergerfs_enabled":    mergerfsEnabled,
+		// v6.8.1 — gates the Services tab and the in-panel embed.
+		"services_enabled":       servicesEnabled,
+		"service_proxy_enabled":  serviceProxyEnabled,
 		// v6.5.19: changed across polls means the server restarted or was
 		// upgraded — frontend shows a "Server Restarted" popup with a
 		// Refresh button.

@@ -325,6 +325,13 @@ func main() {
 	// ===== UPS power-transition notification watcher =====
 	handlers.StartUPSPowerWatcher(appCfg)
 
+	// ===== Services discovery (v6.8.1) =====
+	// Gated internally on appCfg.ServiceDiscoveryOn(), so toggling the setting
+	// takes effect on the next tick without a restart.
+	handlers.StartServiceDiscovery(appCfg)
+
+	handlers.SetPortalPort(appCfg.Port)
+
 	// ===== Session cleanup goroutine =====
 	go func() {
 		t := time.NewTicker(30 * time.Minute)

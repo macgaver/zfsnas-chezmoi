@@ -716,14 +716,17 @@
 
     <!-- Mode selector — shown only when LXD is available -->
     <div class="sidebar-mode-selector" id="sidebar-mode-selector" style="display:none;">
-      <button class="sidebar-mode-btn active" id="mode-btn-storage" onclick="switchSidebarMode('storage')" title="Storage">
+      <button class="sidebar-mode-btn active" id="mode-btn-storage" onclick="switchSidebarMode('storage')" data-label="Storage" aria-label="Storage">
         <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98.96 122.88" width="14" height="14" fill="currentColor"><path d="M5.44,0h88.09c1.49,0,2.85,0.61,3.83,1.59l0.01,0.01c0.98,0.98,1.59,2.34,1.59,3.83v89.92v22.09c0,1.49-0.61,2.85-1.59,3.83l-0.01,0.01c-0.98,0.98-2.34,1.59-3.83,1.59H5.44c-1.5,0-2.86-0.61-3.84-1.59C0.61,120.3,0,118.94,0,117.44V95.36V5.44c0-1.49,0.61-2.85,1.59-3.83l0.01-0.01C2.59,0.61,3.95,0,5.44,0L5.44,0z M64.96,21.3h6.63c4.28,0,7.17,0.19,8.68,0.59c1.51,0.4,2.66,1.04,3.44,1.94c0.78,0.9,1.28,1.9,1.47,3c0.19,1.11,0.29,3.27,0.29,6.5v11.94c0,3.06-0.14,5.11-0.43,6.14c-0.29,1.03-0.79,1.85-1.5,2.43c-0.72,0.58-1.6,0.98-2.66,1.22c-1.05,0.23-2.64,0.35-4.76,0.35H64.96V21.3L64.96,21.3z M73.84,27.12v22.46c1.26,0,2.03-0.26,2.32-0.77c0.29-0.52,0.44-1.91,0.44-4.19V31.36c0-1.54-0.05-2.54-0.14-2.97c-0.1-0.44-0.32-0.75-0.67-0.96C75.45,27.22,74.8,27.12,73.84,27.12L73.84,27.12z M41.14,21.3h6.63c4.28,0,7.17,0.19,8.68,0.59c1.51,0.4,2.66,1.04,3.44,1.94c0.78,0.9,1.28,1.9,1.47,3c0.19,1.11,0.29,3.27,0.29,6.5v11.94c0,3.06-0.14,5.11-0.43,6.14c-0.29,1.03-0.79,1.85-1.5,2.43c-0.72,0.58-1.6,0.98-2.66,1.22c-1.05,0.23-2.64,0.35-4.76,0.35H41.14V21.3L41.14,21.3z M50.02,27.12v22.46c1.26,0,2.03-0.26,2.32-0.77c0.29-0.52,0.44-1.91,0.44-4.19V31.36c0-1.54-0.05-2.54-0.14-2.97c-0.1-0.44-0.32-0.75-0.67-0.96C51.62,27.22,50.97,27.12,50.02,27.12L50.02,27.12z M37.55,21.3v34.1h-8.88V41.09h-2.59V55.4H17.2V21.3h8.88v12.2h2.59V21.3H37.55L37.55,21.3z M74.51,104.48h11.45c0.58,0,1.05,0.48,1.05,1.05v4.03c0,0.57-0.48,1.05-1.05,1.05H74.51c-0.57,0-1.05-0.47-1.05-1.05v-4.03C73.46,104.95,73.93,104.48,74.51,104.48L74.51,104.48z M5.62,92.55h87.72V5.62H5.62V92.55L5.62,92.55z M93.34,98.17H5.62v19.09h87.72V98.17L93.34,98.17z"/></svg>
       </button>
-      <button class="sidebar-mode-btn" id="mode-btn-compute" onclick="switchSidebarMode('compute')" title="Compute">
+      <button class="sidebar-mode-btn" id="mode-btn-compute" onclick="switchSidebarMode('compute')" data-label="Compute" aria-label="Compute">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14A2.5 2.5 0 0 1 11.5 14v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>
       </button>
-      <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" title="Networking">
+      <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Networking" aria-label="Networking">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm9 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM6 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm4-6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/><path fill-rule="evenodd" d="M3 3.5A.5.5 0 0 1 3.5 3h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 3.5zm-1 5A.5.5 0 0 1 2.5 8h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8.5zm1 5A.5.5 0 0 1 3.5 13h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5z"/></svg>
+      </button>
+      <button class="sidebar-mode-btn" id="mode-btn-services" onclick="switchSidebarMode('services')" data-label="Services" aria-label="Services" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       </button>
     </div>
 
@@ -768,6 +771,13 @@
     </div>
 
     <!-- Networking nav — shown only in networking mode -->
+    <div id="nav-services-section" style="display:none;">
+      <div class="sidebar-section" id="nav-services-root" style="margin-top:0;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" onclick="switchToServicesTable()" title="All discovered services">
+        <span>Services</span>
+        <span style="color:var(--text-3);font-size:14px;">+</span>
+      </div>
+      <div id="nav-services-list"></div>
+    </div>
     <div id="nav-networking-section" style="display:none;">
       <div class="sidebar-section" id="nav-networking-root" style="margin-top:0;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" onclick="showPage('lxd-networks');_setNetworkingRootActive()">
         Networking
@@ -4870,6 +4880,61 @@
       </div>
 
       <!-- ===== Compute Instance Detail page ===== -->
+      <!-- ===== Services table (v6.8.1) ===== -->
+      <div class="page hidden" id="page-services">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <div>
+            <h2 style="margin:0;">Services</h2>
+            <p class="text-3" style="font-size:13px;margin:4px 0 0;">Applications discovered in Docker &amp; Podman across your VMs and containers.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-ghost btn-sm" onclick="refreshServices(true)" id="svc-refresh-btn">Rescan</button>
+            <button class="btn btn-primary btn-sm" onclick="openCreateService()">+ Create</button>
+            <button class="btn btn-ghost btn-sm" id="svc-view-gear" title="View options" aria-label="View options"
+                    onclick="_svcToggleViewMenu(event)" style="padding:5px 9px;">
+              <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="svc-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+        <div id="svc-icon-view" style="display:none;">
+          <div class="svc-icon-grid" id="svc-icon-grid"></div>
+        </div>
+        <div class="card" id="svc-table-view" style="padding:0;">
+          <table class="table lxd-inst-table" id="svc-table">
+            <thead><tr>
+              <th style="text-align:left;">Name</th>
+              <th style="text-align:left;">Instance</th>
+              <th style="text-align:left;">Tags</th>
+              <th style="text-align:left;">Status</th>
+              <th class="svc-col-cpu"  style="text-align:left;">vCPU</th>
+              <th class="svc-col-ram"  style="text-align:left;">RAM</th>
+              <th class="svc-col-fs"   style="text-align:left;">Filesystem</th>
+              <th class="svc-col-net"  style="text-align:left;">Network</th>
+              <th style="text-align:right;"></th>
+            </tr></thead>
+            <tbody id="svc-table-body">
+              <tr><td colspan="9" style="padding:26px;text-align:center;color:var(--text-3);">Loading services…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== Embedded service panel (v6.8.1) ===== -->
+      <div class="page hidden" id="page-service-view" style="padding-top:0;">
+        <div style="display:flex;align-items:center;gap:10px;padding:16px 0 12px;flex-wrap:wrap;">
+          <img id="svc-view-icon" class="svc-tbl-icon" alt="" style="display:none;">
+          <h2 id="svc-view-title" style="margin:0;font-size:19px;">Service</h2>
+          <span id="svc-view-sub" class="text-3" style="font-size:12px;font-family:'SF Mono',monospace;"></span>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="_svcOpenExternal('window')">Open in window</button>
+            <button class="btn btn-ghost btn-sm" onclick="_svcOpenExternal('tab')">Open in new tab</button>
+            <button class="btn btn-ghost btn-sm" onclick="openServiceGearFor(_svcViewId)">Settings</button>
+          </div>
+        </div>
+        <div class="svc-embed-wrap" id="svc-embed-wrap"></div>
+      </div>
+
       <div class="page hidden" id="page-compute-instance" style="padding-top:0;padding-bottom:0;">
         <!-- Page header -->
         <div class="ci-header-row" style="display:flex;align-items:center;gap:10px;padding:20px 0 0;flex-wrap:wrap;">
@@ -6742,9 +6807,40 @@ Select the Console tab to load.</pre>
               <input type="checkbox" id="virt-docker-detect-ct">
               Detect / Manage dockers on LXC Containers
             </label>
+
+            <div style="height:1px;background:var(--border);margin:16px 0 14px;"></div>
+
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+              <input type="checkbox" id="svc-discovery-toggle" style="margin-top:2px;" onchange="_svcSettingsDirty()">
+              <div>
+                <div style="font-size:13px;font-weight:600;">
+                  Services tab
+                  <i class="info-tip tip-down" data-tip="Scans every running VM and container for Docker/Podman applications and lists them in the Services tab, with icons, tags and start/stop control. Turning this off stops all scanning and hides the tab; your per-service settings are kept."></i>
+                </div>
+                <div style="font-size:12px;color:var(--text-3);margin-top:4px;line-height:1.55;">
+                  Adds a <strong>Services</strong> tab listing the applications found across your VMs and containers.
+                  Services open in a new browser tab by default.
+                </div>
+              </div>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:12px;">
+              <input type="checkbox" id="svc-proxy-toggle" style="margin-top:2px;" onchange="_svcSettingsDirty()">
+              <div>
+                <div style="font-size:13px;font-weight:600;">
+                  Allow embedding a service in the right panel
+                  <i class="info-tip tip-down" data-tip="Lets a service marked &quot;Right panel (embedded)&quot; be displayed inside ZNAS, by serving it through the portal over HTTPS in a sandboxed frame. Many apps cannot be embedded (they block framing, are plain HTTP, or keep their session in browser storage) — those open in a tab or window instead."></i>
+                </div>
+                <div style="font-size:12px;color:var(--text-3);margin-top:4px;line-height:1.55;">
+                  Only used by services you explicitly set to <em>Right panel (embedded)</em>. Many apps can't be embedded and will open in a tab regardless.
+                </div>
+              </div>
+            </label>
+
+            <div id="svc-settings-alert" class="alert alert-error hidden" style="margin-top:12px;"></div>
             <div class="virt-card-footer">
               <span id="virt-docker-msg" class="virt-card-msg"></span>
-              <button class="btn btn-primary btn-sm" onclick="applyDockerDetectCard()">Apply</button>
+              <button class="btn btn-primary btn-sm" onclick="applyDockerDetectCard(); saveServiceSettings();">Apply</button>
             </div>
           </div>
 
@@ -8733,6 +8829,150 @@ Select the Console tab to load.</pre>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeDeleteAPIKeyModal()">Cancel</button>
       <button id="btn-delete-apikey-confirm" class="btn" style="background:var(--accent-danger);color:#fff;" onclick="_executeDeleteAPIKey()">Delete Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- Service Settings (gear) Modal — v6.8.1 -->
+<div class="modal-backdrop hidden" id="modal-service-gear" onclick="if(event.target===this)closeServiceGear()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div>
+        <h3 style="margin-bottom:2px;">Service Settings</h3>
+        <div id="svc-gear-name" style="font-size:12px;font-family:'SF Mono',monospace;color:var(--text-3);"></div>
+      </div>
+      <button class="modal-close" onclick="closeServiceGear()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="svc-gear-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+      <div class="form-group">
+        <label>Display name</label>
+        <input type="text" id="svc-gear-name-input" placeholder="Leave blank to use the detected name" autocomplete="off">
+      </div>
+      <div id="svc-gear-url-grp" class="form-group" style="display:none;">
+        <label>URL</label>
+        <input type="text" id="svc-gear-url" placeholder="https://10.0.0.1" autocomplete="off">
+      </div>
+      <div id="svc-gear-port-grp" style="display:flex;gap:10px;">
+        <div class="form-group" style="flex:1.4;">
+          <label>Port <i class="info-tip" data-tip="Choose one of the TCP ports this container actually publishes, or pick Custom to enter any other port. Auto uses the port ZNAS detected as the app's web UI."></i></label>
+          <select id="svc-gear-port-select" onchange="_svcGearPortChanged()"></select>
+          <input type="number" id="svc-gear-port" min="1" max="65535" placeholder="port"
+                 style="display:none;margin-top:6px;">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>Scheme</label>
+          <select id="svc-gear-scheme">
+            <option value="">Auto</option>
+            <option value="http">http</option>
+            <option value="https">https</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1.2;">
+          <label>Base path</label>
+          <input type="text" id="svc-gear-path" placeholder="/">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Open in <i class="info-tip" data-tip="Panel embeds the app inside the portal. Apps that store their session in browser localStorage cannot run inside the sandboxed panel and should use a window or tab."></i></label>
+        <select id="svc-gear-openmode" onchange="_svcGearPinNote()">
+          <option value="">New browser tab (default)</option>
+          <option value="window">New window</option>
+          <option value="panel">Right panel (embedded)</option>
+        </select>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;margin-bottom:4px;">
+        <input type="checkbox" id="svc-gear-pinned" onchange="_svcGearPinNote()" style="width:14px;height:14px;accent-color:var(--accent);">
+        Pin to the left menu
+        <i class="info-tip" data-tip="Puts this service in the Services section of the left menu, whatever its open mode is — clicking it there opens it the way you chose above. Pinning used to be tied to embedding, so a service you wanted one click away had to be embedded even when a tab was the right way to open it."></i>
+      </label>
+      <div id="svc-gear-pin-note" style="font-size:11.5px;color:var(--text-3);margin:0 0 12px 22px;line-height:1.45;"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;margin-bottom:12px;">
+        <input type="checkbox" id="svc-gear-ignore-tls" style="width:14px;height:14px;accent-color:var(--accent);">
+        Ignore certificate errors (HTTPS services)
+        <i class="info-tip" data-tip="Self-hosted apps usually present a self-signed certificate. With this on, ZNAS does not verify it when fetching the app. Only affects the connection from this server to the app, on your private network — your browser still uses the portal's own certificate. Has no effect on plain-HTTP services."></i>
+      </label>
+      <div class="form-group">
+        <label>Icon <i class="info-tip" data-tip="Icon name from the dashboard-icons pack, e.g. jellyfin, plex, portainer. Leave blank to derive it from the container image."></i></label>
+        <input type="text" id="svc-gear-icon" placeholder="auto (from image name)" autocomplete="off">
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;">
+        <input type="checkbox" id="svc-gear-hidden" style="width:14px;height:14px;accent-color:var(--accent);">
+        Hide this service from the Icon View
+      </label>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:space-between;">
+      <button class="btn btn-ghost btn-sm" id="svc-gear-delete" style="color:var(--accent-danger);display:none;" onclick="_svcDeleteFromGear()">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button class="btn btn-ghost" onclick="closeServiceGear()">Cancel</button>
+        <button class="btn btn-primary" id="svc-gear-save" onclick="_saveServiceGear()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Custom Service Modal — v6.8.1 -->
+<div class="modal-backdrop hidden" id="modal-service-create" onclick="if(event.target===this)closeCreateService()">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>Add Custom Service</h3>
+      <button class="modal-close" onclick="closeCreateService()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="svc-create-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+      <p class="text-3" style="font-size:12.5px;margin-bottom:14px;">Add an application ZNAS can't discover on its own — anything reachable on your private network.</p>
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="svc-create-name" placeholder="Router" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>URL <i class="info-tip" data-tip="Must be a private-network address (10.x, 192.168.x, 172.16-31.x or fd00::/8). Public and loopback addresses are refused."></i></label>
+        <input type="text" id="svc-create-url" placeholder="http://192.168.1.1:8080" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Related VM / container <span class="text-3 text-xs">(optional)</span></label>
+        <select id="svc-create-instance"><option value="">— None —</option></select>
+      </div>
+      <div class="form-group">
+        <label>Icon <span class="text-3 text-xs">(optional)</span></label>
+        <input type="text" id="svc-create-icon" placeholder="e.g. opnsense" autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCreateService()">Cancel</button>
+      <button class="btn btn-primary" id="svc-create-btn" onclick="_submitCreateService()">Add Service</button>
+    </div>
+  </div>
+</div>
+
+<!-- API Key Homepage Capacity Pool Modal -->
+<div class="modal-backdrop hidden" id="modal-apikey-pool" onclick="if(event.target===this)closeAPIKeyPoolTarget()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <div>
+        <h3 style="margin-bottom:2px;">Homepage Capacity Pool</h3>
+        <div id="apk-pool-keyname" style="font-size:12px;font-family:'SF Mono',monospace;color:var(--text-3);"></div>
+      </div>
+      <button class="modal-close" onclick="closeAPIKeyPoolTarget()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="apk-pool-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:6px;">
+        The homepage widget can display <strong>one</strong> pool's capacity per API key. Choose which pool this key reports.
+      </p>
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:14px;">
+        Other metrics (alerts, disks, shares, services) are unaffected. Leave on <em>Default</em> to report the first ZFS pool, as before.
+      </p>
+      <div class="form-group">
+        <label>Capacity pool</label>
+        <select id="apk-pool-select">
+          <option value="">Default (first ZFS pool)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAPIKeyPoolTarget()">Cancel</button>
+      <button id="btn-apk-pool-save" class="btn btn-primary" onclick="_saveAPIKeyPoolTarget()">Save</button>
     </div>
   </div>
 </div>
@@ -11530,7 +11770,7 @@ Select the Console tab to load.</pre>
     <div style="margin-bottom:16px;padding:12px 14px 13px;background:linear-gradient(135deg,rgba(0,180,216,0.09) 0%,rgba(102,51,153,0.09) 100%);border:1px solid var(--border);border-radius:10px;">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:9px;text-align:left;">Native ZNAS Client Apps</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <a href="https://apps.apple.com/ca/app/znas-client/id6788345795" target="_blank" rel="noopener"
+        <a href="https://apps.apple.com/app/znas-client/id6788345795" target="_blank" rel="noopener"
            style="display:flex;align-items:center;gap:11px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-decoration:none;transition:border-color .15s,box-shadow .15s;"
            onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 3px 14px rgba(0,180,216,0.22)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
           <img src="/static/znas-client-icon.png" alt="ZNAS Client for macOS" style="width:46px;height:46px;flex-shrink:0;">
@@ -11540,14 +11780,16 @@ Select the Console tab to load.</pre>
             <div style="font-size:10.5px;color:var(--accent);font-weight:600;margin-top:1px;">Mac App Store <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>
           </div>
         </a>
-        <div style="display:flex;align-items:center;gap:11px;padding:8px 10px;background:var(--surface2);border:1px dashed var(--border);border-radius:10px;cursor:default;" title="The iPhone & iPad app is on its way">
-          <img src="/static/znas-client-icon.png" alt="ZNAS Client for iOS — coming soon" style="width:46px;height:46px;flex-shrink:0;filter:grayscale(1);opacity:.4;">
+        <a href="https://apps.apple.com/app/znas-client/id6788345795" target="_blank" rel="noopener"
+           style="display:flex;align-items:center;gap:11px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-decoration:none;transition:border-color .15s,box-shadow .15s;"
+           onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 3px 14px rgba(0,180,216,0.22)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+          <img src="/static/znas-client-icon.png" alt="ZNAS Client for iOS" style="width:46px;height:46px;flex-shrink:0;">
           <div style="text-align:left;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:var(--text-3);line-height:1.25;">ZNAS Client</div>
-            <div style="font-size:11px;color:var(--text-3);line-height:1.35;">for iOS</div>
-            <div style="display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1.5px 8px;margin-top:2px;">Coming soon</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text-1);line-height:1.25;">ZNAS Client</div>
+            <div style="font-size:11px;color:var(--text-3);line-height:1.35;">for iPhone &amp; iPad</div>
+            <div style="font-size:10.5px;color:var(--accent);font-weight:600;margin-top:1px;">App Store <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>
           </div>
-        </div>
+        </a>
       </div>
     </div>
 
@@ -12630,6 +12872,9 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
     window._lxdMetricsEnabled  = !!d.lxd_metrics_enabled;
     window._mergerfsInstalled  = !!d.mergerfs_installed;
     window._mergerfsEnabled    = !!d.mergerfs_enabled;
+    window._servicesEnabled    = d.services_enabled !== false;
+    window._serviceProxyEnabled = d.service_proxy_enabled !== false;
+    _applyServicesTabVisibility();
     updateVirtTabVisibility(window._lxdAvailable);
     if (typeof updateMonitorTabVisibility === 'function') updateMonitorTabVisibility();
     if (typeof _applyMergerFSNav === 'function') _applyMergerFSNav();
@@ -13014,6 +13259,7 @@ function switchSettingsTab(tab) {
       } else if (t === 'virt') {
         loadVirtSettings();
         loadVirtMetricsStatus();
+        loadServiceSettings();
       }
     } else {
       panel.style.display = 'none';
@@ -16221,7 +16467,8 @@ async function loadAPIKeys() {
           <td style="padding:10px 0;font-weight:600;">${esc(k.name)}</td>
           <td style="padding:10px 0;font-family:'SF Mono',monospace;color:var(--text-2);">${esc(k.key_prefix)}</td>
           <td style="padding:10px 0;color:var(--text-3);">${formatDate(k.created_at)}</td>
-          <td style="padding:10px 0;text-align:right;">
+          <td style="padding:10px 0;text-align:right;white-space:nowrap;">
+            <button class="btn btn-ghost btn-sm" title="Homepage capacity pool" aria-label="Homepage capacity pool" onclick="openAPIKeyPoolTarget('${esc(k.id)}','${esc(k.name)}','${esc(k.pool_target || '')}')" style="padding:4px 8px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></button>
             <button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);" onclick="deleteAPIKey('${esc(k.id)}','${esc(k.name)}')">Delete</button>
           </td>
         </tr>`).join('')}
@@ -16260,6 +16507,72 @@ async function _executeDeleteAPIKey() {
     alertEl.textContent = 'Failed to delete key.';
     alertEl.classList.remove('hidden');
     btn.disabled = false; btn.textContent = 'Delete Key';
+  }
+}
+
+// ===== API Key homepage capacity pool =====
+let _apkPoolId = null;
+async function openAPIKeyPoolTarget(id, name, current) {
+  _apkPoolId = id;
+  document.getElementById('apk-pool-keyname').textContent = name;
+  document.getElementById('apk-pool-alert').classList.add('hidden');
+  const sel = document.getElementById('apk-pool-select');
+  sel.innerHTML = '<option value="">Default (first ZFS pool)</option>';
+  const btn = document.getElementById('btn-apk-pool-save');
+  btn.disabled = false; btn.textContent = 'Save';
+  document.getElementById('modal-apikey-pool').classList.remove('hidden');
+  try {
+    const resp = await fetch('/api/settings/api-keys/pool-targets');
+    if (resp.ok) {
+      const opts = await resp.json() || [];
+      for (const o of opts) {
+        const el = document.createElement('option');
+        el.value = o.value; el.textContent = o.label;
+        sel.appendChild(el);
+      }
+    }
+  } catch {}
+  // Preselect current (even if the pool no longer exists, add it so the user sees it).
+  if (current && !Array.from(sel.options).some(o => o.value === current)) {
+    const el = document.createElement('option');
+    el.value = current; el.textContent = current + ' (unavailable)';
+    sel.appendChild(el);
+  }
+  sel.value = current || '';
+  initCustomSelect('apk-pool-select'); csRefresh('apk-pool-select');
+}
+function closeAPIKeyPoolTarget() {
+  document.getElementById('modal-apikey-pool').classList.add('hidden');
+  _apkPoolId = null;
+}
+async function _saveAPIKeyPoolTarget() {
+  const id = _apkPoolId;
+  if (!id) return;
+  const btn = document.getElementById('btn-apk-pool-save');
+  const alertEl = document.getElementById('apk-pool-alert');
+  const val = document.getElementById('apk-pool-select').value;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  alertEl.classList.add('hidden');
+  try {
+    const resp = await fetch('/api/settings/api-keys/' + encodeURIComponent(id) + '/pool-target', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pool_target: val })
+    });
+    if (resp.ok) {
+      closeAPIKeyPoolTarget();
+      loadAPIKeys();
+      _showToast('Homepage capacity pool updated.', 'success');
+    } else {
+      const d = await resp.json().catch(() => ({}));
+      alertEl.textContent = d.error || 'Failed to save.';
+      alertEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  } catch {
+    alertEl.textContent = 'Failed to save.';
+    alertEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Save';
   }
 }
 
@@ -17405,6 +17718,806 @@ async function confirmSMBWorkgroupRestart() {
   document.getElementById('modal-smb-workgroup-restart').classList.add('hidden');
   _pendingSMBGlobalBody = null;
   await _doSaveSMBGlobalConfig(body, null, null, null);
+}
+
+// ── Services settings (Settings → Virtualization) ───────────────────────────
+// The embed toggle is meaningless while the Services tab is off, so it follows
+// the master switch's enabled state.
+function _svcSettingsDirty() {
+  const proxy = document.getElementById('svc-proxy-toggle');
+  const on = document.getElementById('svc-discovery-toggle')?.checked;
+  if (proxy) { proxy.disabled = !on; proxy.parentElement.style.opacity = on ? '1' : '.45'; }
+}
+
+async function loadServiceSettings() {
+  try {
+    const r = await fetch('/api/settings/services', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('svc-discovery-toggle').checked = d.discovery_enabled !== false;
+    document.getElementById('svc-proxy-toggle').checked     = d.proxy_enabled !== false;
+    _svcSettingsDirty();
+  } catch {}
+}
+
+async function saveServiceSettings() {
+  const alertEl = document.getElementById('svc-settings-alert');
+  if (alertEl) alertEl.classList.add('hidden');
+  try {
+    const r = await fetch('/api/settings/services', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({
+        discovery_enabled: document.getElementById('svc-discovery-toggle').checked,
+        proxy_enabled:     document.getElementById('svc-proxy-toggle').checked,
+      })
+    });
+    if (r.ok) {
+      const d = await r.json();
+      window._servicesEnabled     = d.discovery_enabled !== false;
+      window._serviceProxyEnabled = d.proxy_enabled !== false;
+      _applyServicesTabVisibility();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      if (alertEl) { alertEl.textContent = d.error || 'Failed to apply.'; alertEl.classList.remove('hidden'); }
+    }
+  } catch {
+    if (alertEl) { alertEl.textContent = 'Failed to apply.'; alertEl.classList.remove('hidden'); }
+  }
+}
+
+// ===== Services (v6.8.1) =====
+// The tab is hidden entirely when service discovery is switched off in
+// Settings → Virtualization, and whenever virtualization itself is unavailable
+// (there would be no VMs or containers to scan).
+function _applyServicesTabVisibility() {
+  const btn = document.getElementById('mode-btn-services');
+  if (!btn) return;
+  const show = !!window._lxdAvailable && window._servicesEnabled !== false;
+  btn.style.display = show ? '' : 'none';
+  if (!show && _sidebarMode === 'services') {
+    _applySidebarModeUI('storage');
+    showPage('dashboard');
+  }
+}
+
+// Applications discovered inside VMs/LXCs. The right panel embeds each app
+// through the same-origin proxy (/s/{id}/) in a SANDBOXED iframe — see
+// PLANS/plan-version-6.8.1.md §2.1. Apps that keep their session in
+// localStorage cannot run under an opaque origin and fall back to a window.
+
+let _svcCache = [];
+let _svcViewId = null;
+let _svcGearId = null;
+// True between dropping the cache (InterLink switch) and the new server's list
+// arriving — the empty states then say "Loading" instead of "none discovered".
+let _svcLoading = false;
+// 'icon' (home-screen tiles, default) | 'table' (the detailed grid)
+let _svcViewMode = (() => { try { return localStorage.getItem('znas_svc_view') || 'icon'; } catch { return 'icon'; } })();
+let _svcShowHidden = (() => { try { return localStorage.getItem('znas_svc_show_hidden') === '1'; } catch { return false; } })();
+
+const _SVC_GENERIC_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.75;"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`;
+
+function _svcIconHTML(s, cls) {
+  // The icon endpoint 404s when nothing is cached; onerror swaps in the glyph.
+  const id = esc(s.id);
+  return `<img class="${cls}" src="/api/services/${id}/icon" alt="" onerror="this.replaceWith(_svcGenericIconNode(${cls === 'svc-tile-img' ? 34 : 15}))">`;
+}
+function _svcGenericIconNode(size) {
+  const span = document.createElement('span');
+  span.innerHTML = _SVC_GENERIC_ICON.replace(/width="15" height="15"/, `width="${size || 15}" height="${size || 15}"`);
+  return span.firstChild;
+}
+
+async function refreshServices(force) {
+  // The metric columns (vCPU/RAM/Filesystem/Network) are the PARENT instance's,
+  // so the instance cache must be warm even when the user never opened the
+  // Compute tab this session.
+  if (!Array.isArray(window._lxdInstancesCache) || !_lxdInstancesCache.length) {
+    try {
+      const ri = await fetch('/api/incus/instances', { credentials: 'same-origin' });
+      if (ri.ok) _lxdInstancesCache = (await ri.json()) || [];
+    } catch {}
+  }
+  try {
+    if (force) {
+      const btn = document.getElementById('svc-refresh-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+      await fetch('/api/services/refresh', { method: 'POST', credentials: 'same-origin' });
+      if (btn) { btn.disabled = false; btn.textContent = 'Rescan'; }
+    }
+    const r = await fetch('/api/services', { credentials: 'same-origin' });
+    _svcCache = r.ok ? (await r.json() || []) : [];
+  } catch { _svcCache = []; }
+  _svcLoading = false;
+  renderServicesNav();
+  if (!document.getElementById('page-services').classList.contains('hidden')) renderServicesPage();
+}
+
+function renderServicesNav() {
+  const el = document.getElementById('nav-services-list');
+  if (!el) return;
+  // Pinned services, whatever their open mode. Pinning used to be a side
+  // effect of embedding, which meant anything you wanted one click away had to
+  // be embedded — see the "Pin to the left menu" toggle in the gear dialog.
+  const visible = _svcCache.filter(s => s.pinned_effective);
+  if (!visible.length) {
+    el.innerHTML = `<div style="padding:8px 14px;color:var(--text-3);font-size:12px;line-height:1.5;">`
+      + (_svcLoading
+          ? `Loading services…`
+          : `No pinned services.<br><span style="opacity:.8;">Turn on "Pin to the left menu" in a service's settings to keep it here.</span>`)
+      + `</div>`;
+    return;
+  }
+  el.innerHTML = visible.map(s => {
+    const off = s.last_state !== 'running' && s.source !== 'custom';
+    const dot = s.last_state === 'running' ? '#3fb950' : (s.last_state === 'unknown' ? '#6e7681' : '#f0b429');
+    return `<button class="nav-compute-instance${off ? ' svc-offline' : ''}" id="nav-svc-${esc(s.id)}" data-sid="${esc(s.id)}" title="${esc(s.display_name)}"
+        onclick='openService(${JSON.stringify(s.id)})'
+        oncontextmenu='event.preventDefault();_svcContextMenu(event,${JSON.stringify(s.id)})'>
+      <span class="nav-service-row">
+        ${_svcIconHTML(s, 'svc-ico')}
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${esc(s.display_name)}</span>
+        ${typeof _tagDotsHTML === 'function' ? _tagDotsHTML(s.tags) : ''}
+        <span class="nav-dot" style="background:${dot};"></span>
+      </span>
+    </button>`;
+  }).join('');
+  _svcBindLongPress(el);
+}
+
+function switchToServicesTable() { openServicesHome(); }
+
+// Navigate to this server's Services home page.
+//
+// Always lands on the services list itself — never on a service that happened
+// to be open. That page is per-server: an embedded service belongs to the
+// server that discovered it, so after an InterLink switch it would otherwise
+// keep showing the PREVIOUS server's app inside the new server's session.
+//
+// Entering the tab (and switching InterLink server while on it) always shows
+// the ICON view — the home-screen of the server you are now looking at. Table
+// view stays a within-visit choice from the gear menu; it is deliberately not
+// restored on entry, so the tab is never "stuck" on a grid of the old server.
+function openServicesHome() {
+  _svcViewId = null;                       // drop any service being viewed
+  _svcViewMode = 'icon';                   // always land on the icon panel
+  const wrap = document.getElementById('svc-embed-wrap');
+  if (wrap) wrap.innerHTML = '';           // stop the old server's iframe loading
+  showPage('services');
+  renderServicesPage();
+}
+
+// Paint whichever view is selected and keep the containers in sync.
+function renderServicesPage() {
+  const iconWrap = document.getElementById('svc-icon-view');
+  const tableWrap = document.getElementById('svc-table-view');
+  if (!iconWrap || !tableWrap) return;
+  const icon = _svcViewMode === 'icon';
+  iconWrap.style.display  = icon ? '' : 'none';
+  tableWrap.style.display = icon ? 'none' : '';
+  if (icon) renderServicesIcons(); else renderServicesTable();
+}
+
+// Services visible in the page views. Hidden ones are omitted unless the user
+// has switched "Show hidden services" on.
+function _svcVisibleForPage() {
+  return _svcCache.filter(s => _svcShowHidden || !s.hidden);
+}
+
+// A service is "down" when the container behind it is not running — that
+// covers both "exited" and "unknown" (the instance was off at the last sweep,
+// so the entry is retained rather than dropped). Custom entries have no
+// container to report a state for and are therefore never down.
+function _svcIsDown(s) {
+  return !!s && s.source !== 'custom' && s.last_state !== 'running';
+}
+
+// Tile click. A down service has nothing to open — the URL would give a dead
+// frame or a tab that cannot connect — so the click shows the SAME menu as a
+// right-click, where Start sits one item away. Running services open as before.
+function _svcTileClick(ev, id) {
+  // A long-press already opened the menu; iOS still fires the click on lift.
+  if (_svcSuppressNextClick) { _svcSuppressNextClick = false; return; }
+  const s = _svcById(id);
+  if (_svcIsDown(s)) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const r = ev.currentTarget.getBoundingClientRect();
+    // clientX/Y are 0 for a keyboard-driven click — fall back to the tile.
+    _svcShowServiceMenu(id, ev.clientX || (r.left + r.width / 2), ev.clientY || r.bottom);
+    return;
+  }
+  openService(id);
+}
+
+// Home-screen style tile grid. A click opens the service (which now defaults to
+// a new tab) — or, when it is down, gives the context menu; right-click always
+// gives the same menu as the left nav.
+function renderServicesIcons() {
+  const el = document.getElementById('svc-icon-grid');
+  if (!el) return;
+  const list = _svcVisibleForPage();
+  if (!list.length) {
+    const hiddenCount = _svcCache.filter(s => s.hidden).length;
+    el.innerHTML = `<div style="grid-column:1/-1;padding:40px 10px;text-align:center;color:var(--text-3);font-size:13px;line-height:1.6;">`
+      + (_svcLoading
+          ? `Loading services…`
+          : _svcCache.length
+          ? `All ${hiddenCount} service${hiddenCount === 1 ? ' is' : 's are'} hidden.<br>Use the gear menu → <strong>Show hidden services</strong>.`
+          : `No services discovered yet.<br>They appear automatically once a VM or container runs Docker or Podman.`)
+      + `</div>`;
+    return;
+  }
+  el.innerHTML = list.map(s => {
+    const running = s.last_state === 'running' || s.source === 'custom';
+    const down = _svcIsDown(s);
+    const dot = running ? '#3fb950' : (s.last_state === 'unknown' ? '#6e7681' : '#f0b429');
+    const dim = down ? ' svc-dim' : '';
+    const hid = s.hidden ? ' svc-is-hidden' : '';
+    const sub = s.instance ? esc(s.instance) : (s.source === 'custom' ? 'custom' : '');
+    const tip = down
+      ? ` — ${s.last_state === 'unknown' ? 'not running' : 'stopped'} · click for options`
+      : (s.url ? ' — ' + esc(s.url) : '');
+    return `<button class="svc-tile${dim}${hid}" data-sid="${esc(s.id)}" title="${esc(s.display_name)}${tip}"
+        onclick='_svcTileClick(event,${JSON.stringify(s.id)})'
+        oncontextmenu='event.preventDefault();_svcContextMenu(event,${JSON.stringify(s.id)})'>
+      <span class="svc-tile-art">
+        ${_svcIconHTML(s, 'svc-tile-img')}
+        <span class="svc-tile-dot" style="background:${dot};"></span>
+      </span>
+      <span class="svc-tile-label">${esc(s.display_name)}</span>
+      ${sub ? `<span class="svc-tile-sub">${sub}</span>` : ''}
+    </button>`;
+  }).join('');
+  _svcBindLongPress(el);
+}
+
+// ── Long-press → context menu (touch devices) ──────────────────────────────
+//
+// iPadOS does not reliably deliver a `contextmenu` event for a long-press, and
+// what it does show is its OWN callout (image save / text selection) — so the
+// tile menu never appeared on iPad. We therefore drive the same menu from an
+// explicit long-press: press and hold ~500 ms without moving.
+//
+// Delegated on the container so it survives re-renders, and paired with a
+// one-shot click suppressor because iOS still emits a click when the finger
+// lifts after the menu has opened.
+let _svcLpTimer = null, _svcLpMoved = false, _svcSuppressNextClick = false;
+
+function _svcBindLongPress(container) {
+  if (!container || container._svcLpBound) return;
+  container._svcLpBound = true;
+
+  const cancel = () => { if (_svcLpTimer) { clearTimeout(_svcLpTimer); _svcLpTimer = null; } };
+
+  container.addEventListener('touchstart', (e) => {
+    const tile = e.target.closest('[data-sid]');
+    if (!tile) return;
+    const t = e.touches[0];
+    const x = t.clientX, y = t.clientY;
+    const id = tile.getAttribute('data-sid');
+    _svcLpMoved = false;
+    cancel();
+    _svcLpTimer = setTimeout(() => {
+      _svcLpTimer = null;
+      if (_svcLpMoved) return;
+      _svcSuppressNextClick = true;           // the lift would otherwise open it
+      setTimeout(() => { _svcSuppressNextClick = false; }, 900);
+      try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) {}
+      _svcShowServiceMenu(id, x, y);
+    }, 500);
+  }, { passive: true });
+
+  // A drag is a scroll, not a long-press.
+  container.addEventListener('touchmove', () => { _svcLpMoved = true; cancel(); }, { passive: true });
+  container.addEventListener('touchend', cancel, { passive: true });
+  container.addEventListener('touchcancel', cancel, { passive: true });
+}
+
+// ── View-options menu (gear, top right of the Services page) ────────────────
+let _svcViewMenuEl = null;
+function _svcCloseViewMenu() {
+  if (_svcViewMenuEl) { _svcViewMenuEl.remove(); _svcViewMenuEl = null; document.removeEventListener('mousedown', _svcViewMenuOutside, true); }
+}
+function _svcViewMenuOutside(e) {
+  if (_svcViewMenuEl && !_svcViewMenuEl.contains(e.target) && e.target.id !== 'svc-view-gear') _svcCloseViewMenu();
+}
+function _svcToggleViewMenu(ev) {
+  ev.stopPropagation();
+  if (_svcViewMenuEl) { _svcCloseViewMenu(); return; }
+  const check = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const blank = `<span style="width:14px;display:inline-block;"></span>`;
+  const hiddenCount = _svcCache.filter(s => s.hidden).length;
+  const dd = document.createElement('div');
+  dd.className = 'svc-viewmenu';
+  dd.innerHTML = `
+    <div class="svc-viewmenu-head">View</div>
+    <div class="svc-viewmenu-item" data-act="icon">${_svcViewMode === 'icon' ? check : blank}<span>Icon View</span></div>
+    <div class="svc-viewmenu-item" data-act="table">${_svcViewMode === 'table' ? check : blank}<span>Table View</span></div>
+    <div class="svc-viewmenu-sep"></div>
+    <div class="svc-viewmenu-item" data-act="hidden">${_svcShowHidden ? check : blank}<span>Show hidden services${hiddenCount ? ` (${hiddenCount})` : ''}</span></div>`;
+  document.body.appendChild(dd);
+  const r = ev.currentTarget.getBoundingClientRect();
+  dd.style.top = (r.bottom + 6) + 'px';
+  dd.style.left = Math.max(8, Math.min(r.right - dd.offsetWidth, window.innerWidth - dd.offsetWidth - 8)) + 'px';
+  dd.querySelectorAll('.svc-viewmenu-item').forEach(it => {
+    it.onclick = () => {
+      const act = it.dataset.act;
+      if (act === 'icon' || act === 'table') {
+        _svcViewMode = act;
+        try { localStorage.setItem('znas_svc_view', act); } catch {}
+      } else if (act === 'hidden') {
+        _svcShowHidden = !_svcShowHidden;
+        try { localStorage.setItem('znas_svc_show_hidden', _svcShowHidden ? '1' : '0'); } catch {}
+      }
+      _svcCloseViewMenu();
+      renderServicesPage();
+    };
+  });
+  _svcViewMenuEl = dd;
+  setTimeout(() => document.addEventListener('mousedown', _svcViewMenuOutside, true), 0);
+}
+
+function renderServicesTable() {
+  const tb = document.getElementById('svc-table-body');
+  if (!tb) return;
+  const rows = _svcVisibleForPage();
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--text-3);">${_svcLoading
+      ? 'Loading services…'
+      : 'No services discovered. They appear automatically once a VM or container runs Docker or Podman.'}</td></tr>`;
+    return;
+  }
+  const inst = name => (_lxdInstancesCache || []).find(i => i.name === name) || {};
+  tb.innerHTML = rows.map(s => {
+    const i = inst(s.instance);
+    const running = s.last_state === 'running';
+    const statusLabel = s.source === 'custom' ? 'Custom' : (running ? 'Running' : (s.last_state === 'unknown' ? 'Unknown' : 'Stopped'));
+    const statusColor = running ? '#3fb950' : (s.last_state === 'unknown' ? '#6e7681' : '#f0b429');
+    const ctl = (s.source === 'custom' || !s.container) ? '' :
+      `<span style="cursor:pointer;color:var(--text-3);margin-left:6px;" onclick="event.stopPropagation();_svcStatusMenu(event,'${esc(s.id)}')">▾</span>`;
+    return `<tr style="border-top:1px solid var(--border);">
+      <td style="padding:10px 0;font-weight:600;cursor:pointer;" onclick='openService(${JSON.stringify(s.id)})'>
+        ${_svcIconHTML(s, 'svc-tbl-icon')}${esc(s.display_name)}
+        ${s.hidden ? `<span title="Hidden from Icon View" style="margin-left:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);border:1px solid var(--border);border-radius:20px;padding:1px 7px;">hidden</span>` : ''}
+        ${(s.reachable === false && s.source !== 'custom' && s.last_state === 'running')
+          ? `<span title="${esc(s.unreachable_reason || 'not reachable from this server')}" style="margin-left:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f0b429;border:1px solid rgba(240,180,41,.4);border-radius:20px;padding:1px 7px;">unreachable</span>` : ''}
+      </td>
+      <td style="padding:10px 0;color:var(--text-2);">${esc(s.instance || '—')}</td>
+      <td style="padding:10px 0;">${typeof _tagPillsHTML === 'function' ? _tagPillsHTML(s.tags) : (s.tags || []).map(t => esc(t)).join(', ')}</td>
+      <td style="padding:10px 0;"><span style="display:inline-flex;align-items:center;gap:6px;">
+        <span class="nav-dot" style="background:${statusColor};"></span>${statusLabel}${ctl}</span></td>
+      <td class="svc-col-cpu"  style="padding:10px 0;color:var(--text-2);">${esc(i.cpu_limit || '—')}</td>
+      <td class="svc-col-ram"  style="padding:10px 0;color:var(--text-2);">${esc(i.memory_limit || '—')}</td>
+      <td class="svc-col-fs"   style="padding:10px 0;color:var(--text-2);">${esc(i.root_pool || '—')}</td>
+      <td class="svc-col-net"  style="padding:10px 0;color:var(--text-2);">${esc(i.ipv4 || '—')}</td>
+      <td style="padding:10px 0;text-align:right;">
+        <button class="btn btn-ghost btn-sm" title="Service settings" onclick="event.stopPropagation();openServiceGearFor('${esc(s.id)}')" style="padding:4px 8px;">
+          <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function _svcById(id) { return _svcCache.find(s => s.id === id); }
+
+// ── Opening a service ───────────────────────────────────────────────────────
+
+function openService(id, modeOverride) {
+  // A long-press already opened the menu; iOS still fires the click on lift.
+  if (_svcSuppressNextClick) { _svcSuppressNextClick = false; return; }
+  const s = _svcById(id);
+  if (!s) return;
+  if (!s.openable) {
+    _showToast('This service has no known web port. Set one in its settings.', 'warning');
+    openServiceGearFor(id);
+    return;
+  }
+  // Last-resort fallback is a TAB, never the panel. Embedding is opt-in: a
+  // stale or missing effective_open_mode must not silently embed a service the
+  // user expects to open in a browser tab.
+  const mode = modeOverride || s.effective_open_mode || 'tab';
+  if (mode === 'tab')    { _svcOpenTab(s); return; }
+  if (mode === 'window') { _svcOpenWindow(s); return; }
+  _svcEmbed(s);
+}
+
+// Services are always opened WITHOUT a referrer.
+//
+// Sending one leaks the portal's hostname to every app, and several of them
+// reject the request outright: OPNsense/pfSense compare the Referer against
+// their own host and answer "The HTTP_REFERER … does not match the predefined
+// settings" before showing a login page. `noreferrer` suppresses the header
+// (and implies noopener, so the opened page still cannot reach back into the
+// portal via window.opener).
+function _svcOpenTab(s) {
+  window.open(s.url, '_blank', 'noreferrer');
+}
+
+// A compact popout: no browser chrome beyond what the OS forces, sized for an
+// app rather than a document.
+function _svcOpenWindow(s) {
+  window.open(s.url, 'znas-svc-' + s.id,
+    'noreferrer,popup,width=1180,height=780,menubar=no,toolbar=no,location=no,status=no');
+}
+
+function _svcOpenExternal(mode) {
+  const s = _svcById(_svcViewId);
+  if (s) openService(s.id, mode);
+}
+
+// Embed through the proxy. The sandbox attribute deliberately omits
+// allow-same-origin: that gives the app an opaque origin so its JS cannot reach
+// the portal DOM, cookies, or API (spec §2.1).
+async function _svcEmbed(s) {
+  _svcViewId = s.id;
+  showPage('service-view');
+  document.getElementById('svc-view-title').textContent = s.display_name;
+  document.getElementById('svc-view-sub').textContent = s.url || '';
+  const ico = document.getElementById('svc-view-icon');
+  if (ico) { ico.src = '/api/services/' + encodeURIComponent(s.id) + '/icon'; ico.style.display = ''; }
+
+  const wrap = document.getElementById('svc-embed-wrap');
+  if (!s.proxy_url) { _svcEmbedFailed(s, 'The service proxy is disabled.'); return; }
+  if (s.reachable === false && s.source !== 'custom') {
+    _svcEmbedFailed(s, 'This server cannot reach the service.', s.unreachable_reason);
+    return;
+  }
+
+  // Which origin serves the frame decides how much the app is allowed to do.
+  //
+  //  • Dedicated port ON  → the frame lives on a DIFFERENT origin, so granting
+  //    allow-same-origin is safe (the browser still walls it off from the
+  //    portal) and the app gets its localStorage back. This is what makes
+  //    Jellyfin / Immich / Home Assistant work in the panel.
+  //  • Dedicated port OFF → the frame is same-origin with the portal, so
+  //    allow-same-origin would let hostile app JS drive the portal API with the
+  //    admin's session. Never granted; localStorage apps fall back to a window.
+  // The frame is sandboxed WITHOUT allow-same-origin: it is served from the
+  // portal's own origin, so granting it would let a hostile container's JS
+  // drive the portal API with the admin's session.
+  const sandbox = 'allow-scripts allow-forms allow-popups allow-downloads allow-modals';
+  wrap.innerHTML = `<iframe id="svc-frame" sandbox="${sandbox}" src="${esc(s.proxy_url)}"></iframe>`;
+
+  // Fallback ladder (spec §7.1): if the frame never loads, offer a window.
+  const frame = document.getElementById('svc-frame');
+  let loaded = false;
+  frame.addEventListener('load', () => { loaded = true; });
+  setTimeout(() => {
+    if (!loaded && _svcViewId === s.id) {
+      _svcEmbedFailed(s, 'This app could not be displayed inside the portal.');
+    }
+  }, 8000);
+}
+
+function _svcEmbedFailed(s, why, detail) {
+  const wrap = document.getElementById('svc-embed-wrap');
+  if (!wrap) return;
+  const help = detail
+    ? esc(detail)
+      + '<br><br>Embedding works by fetching the app <em>from this server</em>, so it cannot display here '
+      + 'until the server can reach it. Your own browser may reach it fine — open it in a new tab. '
+      + 'To embed it, give this server a route to that network (it already has one for the networks whose services do embed).'
+    : "Apps that store their session in browser storage can't run inside the sandboxed panel."
+      + " Open this one in a new window or tab instead — you can make that permanent in its settings.";
+  wrap.innerHTML = `<div class="svc-embed-overlay">
+      <div style="font-size:14px;color:var(--text-1);font-weight:600;">${esc(why)}</div>
+      <div style="font-size:12.5px;color:var(--text-3);max-width:500px;line-height:1.55;">${help}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick='_svcOpenWindow(${JSON.stringify(s)})'>Open in window</button>
+        <button class="btn btn-ghost btn-sm" onclick="openServiceGearFor('${esc(s.id)}')">Settings</button>
+      </div>
+    </div>`;
+}
+
+// ── Context menu (left-menu right-click) ────────────────────────────────────
+
+function _svcContextMenu(ev, id) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  _svcShowServiceMenu(id, ev.clientX, ev.clientY);
+}
+
+// Builds and shows the per-service menu at a screen position. Shared by the
+// desktop right-click and the touch long-press.
+function _svcShowServiceMenu(id, x, y) {
+  const s = _svcById(id);
+  if (!s) return;
+  const items = [
+    { label: 'Open in panel',      fn: () => openService(id, 'panel') },
+    { label: 'Open in new window', fn: () => openService(id, 'window') },
+    { label: 'Open in new tab',    fn: () => openService(id, 'tab') },
+    { sep: true },
+    { label: 'Edit…',              fn: () => openServiceGearFor(id) },
+  ];
+  // Compose stacks only: edit the docker-compose.yml behind this service, in
+  // the same editor the instance's compose card uses. A standalone container
+  // (no project) has no compose file, and a custom entry has no guest at all.
+  if (s.source !== 'custom' && s.project && s.instance) {
+    items.push({ label: 'Edit Stack…', fn: () => _svcEditStack(id) });
+  }
+  if (s.source !== 'custom' && s.container) {
+    items.push({ sep: true });
+    items.push({ label: 'Start',   fn: () => _svcAction(id, 'start') });
+    items.push({ label: 'Stop',    fn: () => _svcAction(id, 'stop') });
+    items.push({ label: 'Restart', fn: () => _svcAction(id, 'restart') });
+  }
+  _svcShowMenu(x, y, items);
+}
+
+// Open this service's compose stack in the shared edit-compose modal.
+//
+// The service record knows the instance and the compose PROJECT but not the
+// path of the compose file — that only exists in the container labels — so the
+// guest's docker listing is fetched and grouped exactly as the instance page
+// does, then the first config file is handed to the same modal. `docker ps -a`
+// backs that listing, so a stopped stack still resolves.
+async function _svcEditStack(id) {
+  const s = _svcById(id);
+  if (!s || !s.instance || !s.project) return;
+  try {
+    const r = await fetch('/api/incus/instances/' + encodeURIComponent(s.instance) + '/docker/containers',
+                          { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    const containers = (await r.json()).containers || [];
+    const g = _ciDockerGroup(containers).find(x => x.project === s.project);
+    const path = g && g.config_files && g.config_files[0];
+    if (!path) {
+      _showToast('No compose file recorded for “' + s.project + '” — its containers carry no compose labels.', 'error');
+      return;
+    }
+    dockerEditComposeOpen(encodeURIComponent(s.project), encodeURIComponent(path),
+                          { instance: s.instance, containers });
+  } catch (e) {
+    _showToast('Could not read the stack from ' + s.instance + ': ' + (e.message || e), 'error');
+  }
+}
+
+function _svcStatusMenu(ev, id) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const r = ev.currentTarget.getBoundingClientRect();
+  _svcShowMenu(r.left, r.bottom + 4, [
+    { label: 'Start',   fn: () => _svcAction(id, 'start') },
+    { label: 'Stop',    fn: () => _svcAction(id, 'stop') },
+    { label: 'Restart', fn: () => _svcAction(id, 'restart') },
+  ]);
+}
+
+let _svcMenuEl = null;
+function _svcCloseMenu() {
+  if (_svcMenuEl) { _svcMenuEl.remove(); _svcMenuEl = null; document.removeEventListener('mousedown', _svcMenuOutside, true); }
+}
+function _svcMenuOutside(e) { if (_svcMenuEl && !_svcMenuEl.contains(e.target)) _svcCloseMenu(); }
+function _svcShowMenu(x, y, items) {
+  _svcCloseMenu();
+  const dd = document.createElement('div');
+  dd.style.cssText = 'position:fixed;z-index:9999;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px;min-width:186px;box-shadow:0 8px 26px rgba(0,0,0,.34);';
+  dd.innerHTML = items.map((it, i) => it.sep
+    ? `<div style="height:1px;background:var(--border);margin:5px 3px;"></div>`
+    : `<div data-i="${i}" style="padding:7px 11px;border-radius:5px;cursor:pointer;font-size:13px;color:var(--text-1);">${esc(it.label)}</div>`
+  ).join('');
+  dd.querySelectorAll('[data-i]').forEach(el => {
+    el.onmouseenter = () => el.style.background = 'var(--surface)';
+    el.onmouseleave = () => el.style.background = 'none';
+    el.onclick = () => { const it = items[+el.dataset.i]; _svcCloseMenu(); it.fn(); };
+  });
+  document.body.appendChild(dd);
+  const r = dd.getBoundingClientRect();
+  dd.style.left = Math.min(x, window.innerWidth  - r.width  - 8) + 'px';
+  dd.style.top  = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+  _svcMenuEl = dd;
+  setTimeout(() => document.addEventListener('mousedown', _svcMenuOutside, true), 0);
+}
+
+async function _svcAction(id, action) {
+  try {
+    const r = await fetch('/api/services/' + encodeURIComponent(id) + '/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin', body: JSON.stringify({ action })
+    });
+    if (r.ok) {
+      _showToast('Service ' + action + ' requested.', 'success');
+      setTimeout(() => refreshServices(true), 1500);
+    } else {
+      const d = await r.json().catch(() => ({}));
+      _showToast(d.error || (action + ' failed'), 'error');
+    }
+  } catch { _showToast(action + ' failed', 'error'); }
+}
+
+// ── Gear modal ──────────────────────────────────────────────────────────────
+
+function openServiceGearFor(id) {
+  const s = _svcById(id);
+  if (!s) return;
+  _svcGearId = id;
+  document.getElementById('svc-gear-name').textContent = s.display_name;
+  document.getElementById('svc-gear-alert').classList.add('hidden');
+  document.getElementById('svc-gear-name-input').value = s.name || '';
+
+  document.getElementById('svc-gear-scheme').value = s.scheme_override || '';
+  document.getElementById('svc-gear-path').value   = s.path_override || '';
+  document.getElementById('svc-gear-icon').value   = s.icon_override || '';
+  // Absent = ignore (checked), matching the backend default.
+  document.getElementById('svc-gear-ignore-tls').checked = (s.ignore_tls_errors !== false);
+  _svcGearBuildPortOptions(s);
+  // Must not default to 'panel': doing so made every gear save bake in an
+  // explicit embed choice the user never made, pinning the service to the left
+  // menu. Unset stays unset.
+  document.getElementById('svc-gear-openmode').value = (s.open_mode === 'panel' || s.open_mode === 'window') ? s.open_mode : '';
+  document.getElementById('svc-gear-hidden').checked = !!s.hidden;
+  // pinned_effective already folds in the legacy "embedded means pinned" rule.
+  document.getElementById('svc-gear-pinned').checked = !!s.pinned_effective;
+  _svcGearPinNote();
+  const isCustom = s.source === 'custom';
+  document.getElementById('svc-gear-url-grp').style.display  = isCustom ? '' : 'none';
+  document.getElementById('svc-gear-port-grp').style.display = isCustom ? 'none' : 'flex';
+  document.getElementById('svc-gear-url').value = s.url_override || '';
+  document.getElementById('svc-gear-delete').style.display = isCustom ? '' : 'none';
+  const btn = document.getElementById('svc-gear-save');
+  btn.disabled = false; btn.textContent = 'Save';
+  document.getElementById('modal-service-gear').classList.remove('hidden');
+}
+// Build the port dropdown from the ports the container ACTUALLY publishes.
+// Typing a port by hand is how a service ends up pointed at a NEIGHBOURING
+// container (a stack's reverse proxy on :443, say) and silently proxies the
+// wrong app — so the real choices are offered directly, with Custom as the
+// escape hatch for anything else (a port published on a different interface,
+// or a service reached through something else entirely).
+function _svcGearBuildPortOptions(s) {
+  const sel = document.getElementById('svc-gear-port-select');
+  const custom = document.getElementById('svc-gear-port');
+  if (!sel) return;
+  const ports = (s.published_ports || []).slice();
+  const override = s.port_override || 0;
+
+  let html = `<option value="">${s.detected_port ? 'Auto — detected ' + s.detected_port : 'Auto'}</option>`;
+  for (const p of ports) {
+    html += `<option value="${p}">${p}${p === s.detected_port ? ' (detected)' : ''}</option>`;
+  }
+  html += `<option value="__custom__">Custom…</option>`;
+  sel.innerHTML = html;
+
+  // Preselect: an override that matches a published port selects it; one that
+  // doesn't (or a port on a container publishing nothing) falls to Custom.
+  if (!override) {
+    sel.value = '';
+    custom.value = '';
+  } else if (ports.includes(override)) {
+    sel.value = String(override);
+    custom.value = '';
+  } else {
+    sel.value = '__custom__';
+    custom.value = override;
+  }
+  _svcGearPortChanged();
+  if (typeof initCustomSelect === 'function') initCustomSelect('svc-gear-port-select');
+  if (typeof csRefresh === 'function') csRefresh('svc-gear-port-select');
+}
+
+// Spell out what the pin will do. Pinning and open mode are separate settings
+// now, and "it is in the menu" says nothing about what a click there does.
+function _svcGearPinNote() {
+  const el = document.getElementById('svc-gear-pin-note');
+  if (!el) return;
+  if (!document.getElementById('svc-gear-pinned').checked) {
+    el.textContent = 'Not in the left menu — open it from the Services page.';
+    return;
+  }
+  const mode = document.getElementById('svc-gear-openmode').value;
+  el.textContent = 'In the left menu, clicking it opens '
+    + (mode === 'panel' ? 'the right panel.' : mode === 'window' ? 'a new window.' : 'a new browser tab.');
+}
+
+function _svcGearPortChanged() {
+  const sel = document.getElementById('svc-gear-port-select');
+  const custom = document.getElementById('svc-gear-port');
+  if (!sel || !custom) return;
+  const isCustom = sel.value === '__custom__';
+  custom.style.display = isCustom ? '' : 'none';
+  if (isCustom) setTimeout(() => custom.focus(), 30);
+}
+
+// The effective port override: 0 = auto.
+function _svcGearPortValue() {
+  const sel = document.getElementById('svc-gear-port-select');
+  if (!sel) return 0;
+  if (sel.value === '__custom__') {
+    return parseInt(document.getElementById('svc-gear-port').value) || 0;
+  }
+  return parseInt(sel.value) || 0;
+}
+
+function closeServiceGear() {
+  document.getElementById('modal-service-gear').classList.add('hidden');
+  _svcGearId = null;
+}
+async function _saveServiceGear() {
+  const id = _svcGearId; if (!id) return;
+  const btn = document.getElementById('svc-gear-save');
+  const alertEl = document.getElementById('svc-gear-alert');
+  btn.disabled = true; btn.textContent = 'Saving…'; alertEl.classList.add('hidden');
+  const body = {
+    name: document.getElementById('svc-gear-name-input').value,
+    port_override: _svcGearPortValue(),
+    scheme_override: document.getElementById('svc-gear-scheme').value,
+    path_override: document.getElementById('svc-gear-path').value,
+    open_mode: document.getElementById('svc-gear-openmode').value,
+    icon_override: document.getElementById('svc-gear-icon').value,
+    hidden: document.getElementById('svc-gear-hidden').checked,
+    pinned: document.getElementById('svc-gear-pinned').checked,
+    ignore_tls_errors: document.getElementById('svc-gear-ignore-tls').checked,
+  };
+  const urlEl = document.getElementById('svc-gear-url');
+  if (document.getElementById('svc-gear-url-grp').style.display !== 'none') body.url_override = urlEl.value;
+  try {
+    const r = await fetch('/api/services/' + encodeURIComponent(id), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin', body: JSON.stringify(body)
+    });
+    if (r.ok) { closeServiceGear(); await refreshServices(false); _showToast('Service updated.', 'success'); }
+    else {
+      const d = await r.json().catch(() => ({}));
+      alertEl.textContent = d.error || 'Failed to save.'; alertEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  } catch {
+    alertEl.textContent = 'Failed to save.'; alertEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+}
+async function _svcDeleteFromGear() {
+  const id = _svcGearId; if (!id) return;
+  const r = await fetch('/api/services/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' });
+  if (r.ok) { closeServiceGear(); await refreshServices(false); _showToast('Service removed.', 'success'); }
+  else {
+    const d = await r.json().catch(() => ({}));
+    const a = document.getElementById('svc-gear-alert');
+    a.textContent = d.error || 'Failed to delete.'; a.classList.remove('hidden');
+  }
+}
+
+// ── Create modal ────────────────────────────────────────────────────────────
+
+function openCreateService() {
+  document.getElementById('svc-create-name').value = '';
+  document.getElementById('svc-create-url').value = '';
+  document.getElementById('svc-create-icon').value = '';
+  document.getElementById('svc-create-alert').classList.add('hidden');
+  const sel = document.getElementById('svc-create-instance');
+  sel.innerHTML = '<option value="">— None —</option>' +
+    (_lxdInstancesCache || []).map(i => `<option value="${esc(i.name)}">${esc(i.name)}</option>`).join('');
+  const btn = document.getElementById('svc-create-btn');
+  btn.disabled = false; btn.textContent = 'Add Service';
+  document.getElementById('modal-service-create').classList.remove('hidden');
+}
+function closeCreateService() { document.getElementById('modal-service-create').classList.add('hidden'); }
+async function _submitCreateService() {
+  const btn = document.getElementById('svc-create-btn');
+  const alertEl = document.getElementById('svc-create-alert');
+  btn.disabled = true; btn.textContent = 'Adding…'; alertEl.classList.add('hidden');
+  try {
+    const r = await fetch('/api/services', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({
+        name: document.getElementById('svc-create-name').value,
+        url: document.getElementById('svc-create-url').value,
+        instance: document.getElementById('svc-create-instance').value,
+        icon_override: document.getElementById('svc-create-icon').value,
+      })
+    });
+    if (r.ok) { closeCreateService(); await refreshServices(false); _showToast('Service added.', 'success'); }
+    else {
+      const d = await r.json().catch(() => ({}));
+      alertEl.textContent = d.error || 'Failed to add service.'; alertEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Add Service';
+    }
+  } catch {
+    alertEl.textContent = 'Failed to add service.'; alertEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Add Service';
+  }
 }
 
 // ===== Alerts =====
@@ -41299,6 +42412,7 @@ function _lxdRenderSorted() {
 function _pageToSidebarMode(page) {
   if (!page) return 'storage';
   if (page === 'lxd' || page === 'compute' || page.startsWith('compute-instance') || page.startsWith('compute/')) return 'compute';
+  if (page === 'services' || page === 'service-view') return 'services';
   if (page === 'lxd-networks' || page === 'bridge-detail' || page === 'lxd-datastores' || page === 'datastore-detail' || page === 'lxd-backups') return 'networking';
   return 'storage';
 }
@@ -41306,7 +42420,7 @@ function _pageToSidebarMode(page) {
 function _applySidebarModeUI(mode) {
   if (mode === 'storage') _stopCIStatsPolling();
   _sidebarMode = mode;
-  ['storage','compute','networking'].forEach(m => {
+  ['storage','compute','networking','services'].forEach(m => {
     const btn = document.getElementById('mode-btn-' + m);
     if (btn) btn.classList.toggle('active', m === mode);
   });
@@ -41318,6 +42432,8 @@ function _applySidebarModeUI(mode) {
   if (netSection) netSection.style.display = mode === 'networking' ? '' : 'none';
   const dsSection = document.getElementById('nav-datastores-section');
   if (dsSection) dsSection.style.display = mode === 'networking' ? '' : 'none';
+  const svcSection = document.getElementById('nav-services-section');
+  if (svcSection) svcSection.style.display = mode === 'services' ? '' : 'none';
 }
 
 function switchSidebarMode(mode) {
@@ -41334,6 +42450,13 @@ function switchSidebarMode(mode) {
     refreshDatastoresNav();
     showPage('lxd-networks');
     _setNetworkingRootActive();
+  }
+  if (mode === 'services') {
+    // Paint from cache immediately, then refresh in the background — an
+    // `incus exec` sweep must never block the tab from opening.
+    renderServicesNav();
+    switchToServicesTable();
+    refreshServices(false);
   }
 }
 
@@ -43349,11 +44472,14 @@ function _ciDockerStackUpdateMenu(ev, gi) {
 // the Docker card. openLXDProgressModal's "on done" path hard-fires
 // loadLXDInstances() which doesn't repaint our card, so we attach our
 // own refresh through a lightweight side-poller.
-function _ciDockerPollUntilIdle(jobId) {
-  const inst = _ciCurrentName;
+function _ciDockerPollUntilIdle(jobId, instOverride, onDone) {
+  const inst = instOverride || _ciCurrentName;
   let tries = 0;
   const tick = async () => {
-    if (_ciCurrentName !== inst) return; // user switched instances; abort
+    // Abort when the instance page has moved on to a DIFFERENT instance. An
+    // edit launched from the Services page has no instance page open at all
+    // (_ciCurrentName empty), and must keep polling to its completion hook.
+    if (_ciCurrentName && _ciCurrentName !== inst) return;
     tries++;
     try {
       const r = await fetch('/api/incus/create-progress?job_id=' + encodeURIComponent(jobId));
@@ -43361,7 +44487,10 @@ function _ciDockerPollUntilIdle(jobId) {
       const d = await r.json();
       if (d.status === 'done' || d.status === 'error') {
         // Small grace so any incus-side state mutation settles before re-listing.
-        setTimeout(() => { if (_ciCurrentName === inst) ciLoadDockerContainers(); }, 600);
+        setTimeout(() => {
+          if (_ciCurrentName === inst) ciLoadDockerContainers();
+          if (typeof onDone === 'function') onDone(d.status);
+        }, 600);
         return;
       }
     } catch (_) {}
@@ -43531,13 +44660,21 @@ function _ciDockerTermNewWindow(id) {
 let _ciDockerOrigEnv = '';
 let _ciDockerEnvPath = '';
 let _ciDockerEnvMissing = false;
+// Instance the modal is editing FOR. The compose card always edits the open
+// instance, but the Services page opens this modal for a stack whose instance
+// page isn't on screen — so read/write go through this, never _ciCurrentName.
+let _ciDockerEditInstance = '';
 
-async function dockerEditComposeOpen(projectEnc, pathEnc) {
+// opts (optional, used when the modal is opened from outside the instance page):
+//   instance   — guest that owns the stack (defaults to the open instance)
+//   containers — that guest's docker listing, for the "other config files" note
+async function dockerEditComposeOpen(projectEnc, pathEnc, opts) {
   _ciDockerCloseAllRowMenus();
   const project = decodeURIComponent(projectEnc);
   const path    = decodeURIComponent(pathEnc);
   _ciDockerProject = project;
   _ciDockerPath    = path;
+  _ciDockerEditInstance = (opts && opts.instance) || _ciCurrentName;
   document.getElementById('docker-edit-project').textContent = project;
   document.getElementById('docker-edit-path').textContent    = path;
   document.getElementById('docker-edit-missing').classList.add('hidden');
@@ -43552,7 +44689,7 @@ async function dockerEditComposeOpen(projectEnc, pathEnc) {
   document.getElementById('modal-docker-edit-compose').classList.remove('hidden');
   // Surface the project's *other* compose files (override / fragment files)
   // read-only so the user sees the full set.
-  const g = _ciDockerGroup(_ciDockerContainers).find(x => x.project === project);
+  const g = _ciDockerGroup((opts && opts.containers) || _ciDockerContainers).find(x => x.project === project);
   if (g && g.config_files && g.config_files.length > 1) {
     const extra = g.config_files.slice(1).map(p => esc(p)).join('<br>');
     document.getElementById('docker-edit-extra-list').innerHTML = extra
@@ -43560,7 +44697,7 @@ async function dockerEditComposeOpen(projectEnc, pathEnc) {
     document.getElementById('docker-edit-extra').classList.remove('hidden');
   }
   try {
-    const r = await fetch('/api/incus/instances/' + encodeURIComponent(_ciCurrentName)
+    const r = await fetch('/api/incus/instances/' + encodeURIComponent(_ciDockerEditInstance)
       + '/docker/compose-file?path=' + encodeURIComponent(path));
     if (!r.ok) throw new Error((await r.json()).error || 'failed');
     const d = await r.json();
@@ -43670,7 +44807,8 @@ async function dockerEditComposeSave() {
     const body = { path: _ciDockerPath, yaml: ta.value };
     if (_ciDockerEnvPath && eta.value !== _ciDockerOrigEnv) body.env = eta.value;
 
-    const r = await fetch('/api/incus/instances/' + encodeURIComponent(_ciCurrentName) + '/docker/compose-file', {
+    const inst = _ciDockerEditInstance || _ciCurrentName;
+    const r = await fetch('/api/incus/instances/' + encodeURIComponent(inst) + '/docker/compose-file', {
       method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
@@ -43678,7 +44816,11 @@ async function dockerEditComposeSave() {
     const d = await r.json();
     document.getElementById('modal-docker-edit-compose').classList.add('hidden');
     openLXDProgressModal('Applying ' + _ciDockerProject + '…', d.job_id, { kind: 'docker-action' });
-    _ciDockerPollUntilIdle(d.job_id);
+    // Re-applying a stack can change its ports or container set, so the
+    // Services list is re-scanned when the edit was launched from there.
+    _ciDockerPollUntilIdle(d.job_id, inst, () => {
+      if (_sidebarMode === 'services' && typeof refreshServices === 'function') refreshServices(true);
+    });
   } catch (e) {
     al.textContent = 'Save failed: ' + e.message;
     al.classList.remove('hidden');
@@ -56428,6 +57570,11 @@ async function _softRelayRefresh() {
     if (typeof datasetCache       !== 'undefined') datasetCache       = [];
     if (typeof zvolCache          !== 'undefined') zvolCache          = [];
     if (typeof _lxdInstancesCache !== 'undefined') _lxdInstancesCache = [];
+    // Services are per-server: their ids only exist on the server that
+    // discovered them. Keeping a stale list across a relay switch sends the
+    // PREVIOUS server's id to the newly-viewed one, which answers
+    // "service not found" for every embedded app.
+    if (typeof _svcCache !== 'undefined') { _svcCache = []; _svcLoading = true; }
     if (typeof _perfPools         !== 'undefined') _perfPools         = [];
     if (typeof _nfsSharesCache    !== 'undefined') _nfsSharesCache    = [];
     if (typeof _lxdNetworks       !== 'undefined') _lxdNetworks       = [];
@@ -56451,6 +57598,20 @@ async function _softRelayRefresh() {
     // them so the previous server's disks don't linger after a switch — the
     // stale pool filter would otherwise mask the new server's disks entirely.
     if (typeof _resetIOBar === 'function') _resetIOBar();
+
+    // Re-open the Services home for the newly-viewed server. Repainting alone
+    // was not enough: if an embedded service was on screen it stayed there,
+    // still showing the PREVIOUS server's app (whose id does not even exist on
+    // the new one). Navigating first also discards that iframe.
+    // (The cache itself was dropped with the other per-server caches above.)
+    // _relayRestoreView, at the very end of this function, is what actually
+    // lands us on the new server's Services home — this only tears the old
+    // server's iframe down early and starts the new list loading.
+    if (_sidebarMode === 'services') {
+      if (typeof renderServicesNav  === 'function') renderServicesNav();
+      if (typeof openServicesHome   === 'function') openServicesHome();
+      if (typeof refreshServices    === 'function') refreshServices(false);
+    }
 
     // Re-fetch version + feature flags. This updates window._serverHostname
     // to the relay target (when entering relay) or back to the local host
@@ -56482,6 +57643,8 @@ async function _softRelayRefresh() {
         _experimentalMode = !!d.experimental_mode;
         if (typeof d.mergerfs_installed === 'boolean')   window._mergerfsInstalled = d.mergerfs_installed;
         if (typeof d.mergerfs_enabled === 'boolean')     window._mergerfsEnabled   = d.mergerfs_enabled;
+        if (typeof d.services_enabled === 'boolean')      { window._servicesEnabled = d.services_enabled; _applyServicesTabVisibility(); }
+        if (typeof d.service_proxy_enabled === 'boolean')   window._serviceProxyEnabled = d.service_proxy_enabled;
         if (typeof _applyMergerFSNav === 'function')     _applyMergerFSNav();
         if (typeof d.lxd_available === 'boolean')        window._lxdAvailable      = d.lxd_available;
         if (typeof d.lxd_metrics_enabled === 'boolean')  window._lxdMetricsEnabled = d.lxd_metrics_enabled;
@@ -56594,6 +57757,22 @@ async function _softRelayRefresh() {
 async function _relayRestoreView(view) {
   const page = view && view.page;
   if (!page) { showPage('dashboard'); return; }
+
+  // Services are per-server. A specific embedded app is NEVER restored — its
+  // id belongs to the previous server — so both the list page and an open
+  // service land on the new server's icon home. window._lxdAvailable /
+  // _servicesEnabled were already refreshed from the peer's /api/version
+  // above, so this also covers a peer with the tab switched off.
+  if (page === 'services' || page === 'service-view') {
+    if (window._lxdAvailable && window._servicesEnabled !== false
+        && typeof openServicesHome === 'function') {
+      if (typeof _applySidebarModeUI === 'function') _applySidebarModeUI('services');
+      openServicesHome();
+      return;
+    }
+    showPage('dashboard');
+    return;
+  }
 
   const detail = {
     'datastore-detail': { sel: view.datastore, url: '/api/incus/storage-pools-detail', parent: 'lxd-datastores',

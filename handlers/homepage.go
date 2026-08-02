@@ -52,61 +52,130 @@ func HandleHomepageSystemVersion(w http.ResponseWriter, r *http.Request) {
 
 // ── Pool ──────────────────────────────────────────────────────────────────────
 
-// HandleHomepagePools returns the ZFS pool list with health status (TrueNAS-compatible).
-func HandleHomepagePools(w http.ResponseWriter, r *http.Request) {
-	pool, err := system.GetPool()
-	if err != nil || pool == nil {
-		jsonOK(w, []interface{}{})
-		return
+// HandleHomepagePools returns a single pool's health + capacity
+// (TrueNAS-compatible). The homepage widget shows one capacity metric, so the
+// requesting API key selects which pool via its PoolTarget: a named zpool, a
+// MergerFS union, or (default) the first zpool.
+func HandleHomepagePools(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		kind, name := homepagePoolTargetFor(r)
+
+		if kind == "mergerfs" {
+			if p, ok := findMergerFSPool(appCfg, name); ok {
+				st := system.MergerFSGetStatus(p)
+				status := "OFFLINE"
+				if st.Mounted {
+					status = "ONLINE"
+				}
+				jsonOK(w, []map[string]interface{}{{
+					"name":      p.Name,
+					"healthy":   st.Mounted,
+					"status":    status,
+					"size":      st.TotalBytes,
+					"allocated": st.UsedBytes,
+					"free":      st.FreeBytes,
+				}})
+				return
+			}
+			// Selected union no longer exists — fall through to default.
+		}
+
+		pool := homepageSelectedZPool(kind, name)
+		if pool == nil {
+			jsonOK(w, []interface{}{})
+			return
+		}
+		jsonOK(w, []map[string]interface{}{
+			{
+				"name":      pool.Name,
+				"healthy":   pool.Health == "ONLINE",
+				"status":    pool.Health,
+				"size":      pool.Size,
+				"allocated": pool.Alloc,
+				"free":      pool.Free,
+			},
+		})
 	}
-	jsonOK(w, []map[string]interface{}{
-		{
-			"name":    pool.Name,
-			"healthy": pool.Health == "ONLINE",
-			"status":  pool.Health,
-			"size":    pool.Size,
-			"allocated": pool.Alloc,
-			"free":    pool.Free,
-		},
-	})
+}
+
+// homepageSelectedZPool resolves the zpool for a "zfs:<name>" target, falling
+// back to the first zpool for the default (or if the named pool is gone).
+func homepageSelectedZPool(kind, name string) *system.Pool {
+	if kind == "zfs" {
+		if p, err := system.GetPoolByName(name); err == nil && p != nil {
+			return p
+		}
+	}
+	p, err := system.GetPool()
+	if err != nil {
+		return nil
+	}
+	return p
 }
 
 // HandleHomepageDatasets returns datasets with used/available (TrueNAS-compatible).
-// The homepage widget matches: d.pool === pool.name && d.name === pool.name.
-func HandleHomepageDatasets(w http.ResponseWriter, r *http.Request) {
-	pool, err := system.GetPool()
-	if err != nil || pool == nil {
-		jsonOK(w, []interface{}{})
-		return
+// The homepage widget matches: d.pool === pool.name && d.name === pool.name, so
+// this MUST report the same pool HandleHomepagePools selected for this API key.
+func HandleHomepageDatasets(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		kind, name := homepagePoolTargetFor(r)
+
+		// MergerFS: synthesize the single root "dataset" the widget looks for
+		// (name == pool name), carrying the union's used/available.
+		if kind == "mergerfs" {
+			if p, ok := findMergerFSPool(appCfg, name); ok {
+				st := system.MergerFSGetStatus(p)
+				jsonOK(w, []map[string]interface{}{{
+					"id":   p.Name,
+					"pool": p.Name,
+					"name": p.Name,
+					"used": map[string]interface{}{
+						"value":  byteStr(uint64(st.UsedBytes)),
+						"parsed": st.UsedBytes,
+					},
+					"available": map[string]interface{}{
+						"value":  byteStr(uint64(st.FreeBytes)),
+						"parsed": st.FreeBytes,
+					},
+				}})
+				return
+			}
+		}
+
+		pool := homepageSelectedZPool(kind, name)
+		if pool == nil {
+			jsonOK(w, []interface{}{})
+			return
+		}
+		datasets, err := system.ListDatasets(pool.Name)
+		if err != nil {
+			jsonOK(w, []interface{}{})
+			return
+		}
+		out := make([]map[string]interface{}, 0, len(datasets))
+		for _, d := range datasets {
+			out = append(out, map[string]interface{}{
+				"id":   d.Name,
+				"pool": pool.Name,
+				"name": d.Name,
+				"used": map[string]interface{}{
+					"value":  byteStr(d.Used),
+					"parsed": d.Used,
+				},
+				"available": map[string]interface{}{
+					"value":  byteStr(d.Avail),
+					"parsed": d.Avail,
+				},
+				"quota": map[string]interface{}{
+					"value":  byteStr(d.Quota),
+					"parsed": d.Quota,
+				},
+				"compression": d.Compression,
+				"mountpoint":  d.Mountpoint,
+			})
+		}
+		jsonOK(w, out)
 	}
-	datasets, err := system.ListDatasets(pool.Name)
-	if err != nil {
-		jsonOK(w, []interface{}{})
-		return
-	}
-	out := make([]map[string]interface{}, 0, len(datasets))
-	for _, d := range datasets {
-		out = append(out, map[string]interface{}{
-			"id":   d.Name,
-			"pool": pool.Name,
-			"name": d.Name,
-			"used": map[string]interface{}{
-				"value":  byteStr(d.Used),
-				"parsed": d.Used,
-			},
-			"available": map[string]interface{}{
-				"value":  byteStr(d.Avail),
-				"parsed": d.Avail,
-			},
-			"quota": map[string]interface{}{
-				"value":  byteStr(d.Quota),
-				"parsed": d.Quota,
-			},
-			"compression": d.Compression,
-			"mountpoint":  d.Mountpoint,
-		})
-	}
-	jsonOK(w, out)
 }
 
 // ── Snapshots ─────────────────────────────────────────────────────────────────
