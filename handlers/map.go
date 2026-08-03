@@ -78,11 +78,36 @@ type mapDataset struct {
 	Encrypted bool   `json:"encrypted"`
 }
 
+// mapMergerFS is one mergerfs union, sitting between the datasets it unions and
+// whatever presents it (an SMB/NFS share). Capacity comes from the union mount
+// itself — df on the FUSE mount, which is what the user actually sees — while
+// DatasetIDs carry the dependency down to the ZFS datasets that back it.
+type mapMergerFS struct {
+	ID         string   `json:"id"`   // "mfs:<name>"
+	Name       string   `json:"name"`
+	Mountpoint string   `json:"mountpoint"`
+	Mounted    bool     `json:"mounted"`
+	AllZFS     bool     `json:"all_zfs"`
+	Total      uint64   `json:"total"`
+	Used       uint64   `json:"used"`
+	Free       uint64   `json:"free"`
+	Branches   int      `json:"branches"`    // total branch count, ZFS or not
+	DatasetIDs []string `json:"dataset_ids"` // branch datasets, when they are ZFS
+	// PoolIDs is every distinct pool the branches live on. One pool ⇒ the
+	// hovercard can show that pool's live iostat, exactly as a dataset does;
+	// several ⇒ no single stream describes this union, so it shows none.
+	PoolIDs []string `json:"pool_ids"`
+}
+
 type mapConsumer struct {
 	ID         string   `json:"id"`
 	Type       string   `json:"type"` // smb|nfs|iscsi|s3|vm|container
 	Name       string   `json:"name"`
 	DatasetIDs []string `json:"dataset_ids"`     // backing dataset(s)/zvol(s); a VM links to each virtual-disk zvol
+	// MergerFSIDs is set instead of DatasetIDs when the share's path lives on a
+	// mergerfs mount: the union is what the share presents, and the union itself
+	// carries the link down to the datasets.
+	MergerFSIDs []string `json:"mergerfs_ids,omitempty"`
 	State      string   `json:"state,omitempty"` // vm/container run state
 	Clients    int      `json:"clients"`         // number of connected remotes
 	RateKBps   *float64 `json:"rate_kbps"`       // null ⇒ unknown (no label, flow up)
@@ -152,6 +177,7 @@ type mapTopology struct {
 	Pools     []mapPool     `json:"pools"`
 	Disks     []mapDisk     `json:"disks"`
 	Datasets  []mapDataset  `json:"datasets"`
+	MergerFS  []mapMergerFS `json:"mergerfs"`
 	Consumers []mapConsumer `json:"consumers"`
 	Remotes   []mapRemote   `json:"remotes"`
 	Net       mapNet        `json:"net"`
@@ -330,6 +356,48 @@ func buildMapTopology(appCfg *config.AppConfig) mapTopology {
 		}
 	}
 
+	// ── MergerFS unions ────────────────────────────────────────────────────
+	// A union sits above the datasets it merges and below whatever shares it.
+	// mfsByMount lets a share path resolve to the union rather than to the
+	// dataset the mount happens to sit on — that dataset is not what the share
+	// is serving, and showing it would draw the wrong dependency.
+	mfsByMount := map[string]string{}
+	if appCfg.MergerFS.Enabled {
+		for _, st := range mergerfsStatuses(appCfg) {
+			m := mapMergerFS{
+				ID:         "mfs:" + st.Name,
+				Name:       st.Name,
+				Mountpoint: st.Mountpoint,
+				Mounted:    st.Mounted,
+				AllZFS:     st.AllZFS,
+				Total:      uint64(max64(st.TotalBytes, 0)),
+				Used:       uint64(max64(st.UsedBytes, 0)),
+				Free:       uint64(max64(st.FreeBytes, 0)),
+				Branches:   len(st.Branches),
+			}
+			for _, b := range st.Branches {
+				// A branch is a ZFS dataset by name when validation recorded one;
+				// otherwise fall back to the mountpoint it sits under, which also
+				// catches a plain directory inside a dataset.
+				id := dsByName[b.ZFSDataset]
+				if id == "" {
+					id = resolveByPath(dsByMount, b.Path)
+				}
+				if id == "" {
+					continue
+				}
+				m.DatasetIDs = appendUniqueStr(m.DatasetIDs, id)
+				if pid := poolIDOfDatasetID(id); pid != "" {
+					m.PoolIDs = appendUniqueStr(m.PoolIDs, pid)
+				}
+			}
+			top.MergerFS = append(top.MergerFS, m)
+			if st.Mountpoint != "" {
+				mfsByMount[st.Mountpoint] = m.ID
+			}
+		}
+	}
+
 	// ── Consumers: SMB / NFS / iSCSI / S3 shares ───────────────────────────
 	cfgDir := config.Dir()
 
@@ -360,12 +428,12 @@ func buildMapTopology(appCfg *config.AppConfig) mapTopology {
 	if smbShares, err := system.ListSMBShares(cfgDir); err == nil {
 		for _, s := range smbShares {
 			c := mapConsumer{
-				ID:         "smb:" + s.Name,
-				Type:       "smb",
-				Name:       s.Name,
-				DatasetIDs: dsList(resolveByPath(dsByMount, s.Path)),
-				Clients:    len(smbSessions[s.Name]),
+				ID:      "smb:" + s.Name,
+				Type:    "smb",
+				Name:    s.Name,
+				Clients: len(smbSessions[s.Name]),
 			}
+			c.DatasetIDs, c.MergerFSIDs = backingIDs(dsByMount, mfsByMount, s.Path)
 			top.Consumers = append(top.Consumers, c)
 			for _, cl := range smbSessions[s.Name] {
 				pendingClients = append(pendingClients, pendingShareClient{c.ID, cl})
@@ -377,12 +445,12 @@ func buildMapTopology(appCfg *config.AppConfig) mapTopology {
 	nfsSessions := system.GetNFSSessions(nfsShares)
 	for _, s := range nfsShares {
 		c := mapConsumer{
-			ID:         "nfs:" + s.ID,
-			Type:       "nfs",
-			Name:       s.Path,
-			DatasetIDs: dsList(resolveByPath(dsByMount, s.Path)),
-			Clients:    len(nfsSessions[s.Path]),
+			ID:      "nfs:" + s.ID,
+			Type:    "nfs",
+			Name:    s.Path,
+			Clients: len(nfsSessions[s.Path]),
 		}
+		c.DatasetIDs, c.MergerFSIDs = backingIDs(dsByMount, mfsByMount, s.Path)
 		top.Consumers = append(top.Consumers, c)
 		for _, cl := range nfsSessions[s.Path] {
 			pendingClients = append(pendingClients, pendingShareClient{c.ID, cl})
@@ -511,6 +579,15 @@ func buildMapTopology(appCfg *config.AppConfig) mapTopology {
 		referenced := make(map[string]bool, len(top.Consumers))
 		for _, c := range top.Consumers {
 			for _, id := range c.DatasetIDs {
+				referenced[id] = true
+			}
+		}
+		// A union's branches are used — by the union. Without this they were
+		// pruned as orphans (nothing points at them directly), leaving the
+		// union floating with no storage under it: the dependency the map
+		// exists to show. A union is user-configured, so it is never an orphan.
+		for _, m := range top.MergerFS {
+			for _, id := range m.DatasetIDs {
 				referenced[id] = true
 			}
 		}
@@ -805,6 +882,80 @@ func findCustomVol(dsByName map[string]string, src, vol string) string {
 
 // resolveByPath returns the dataset id whose mountpoint is the longest prefix of
 // the given filesystem path (so a share rooted in a subdir maps to its dataset).
+// backingIDs decides what a share is actually presenting. A path on a mergerfs
+// mount resolves to the UNION alone: the dataset under the mountpoint is not
+// what is being served, and linking to it would draw a dependency that does not
+// exist. Everything else resolves to its dataset as before. The deeper of the
+// two mounts wins, so a share on a dataset that happens to live under a union's
+// mountpoint still resolves to the dataset.
+func backingIDs(dsByMount, mfsByMount map[string]string, path string) (datasetIDs, mergerfsIDs []string) {
+	mfsID := resolveByPath(mfsByMount, path)
+	dsID := resolveByPath(dsByMount, path)
+	if mfsID != "" && len(longestMountFor(mfsByMount, path)) >= len(longestMountFor(dsByMount, path)) {
+		return nil, []string{mfsID}
+	}
+	return dsList(dsID), nil
+}
+
+// longestMountFor returns the longest mountpoint in m that contains path.
+func longestMountFor(m map[string]string, path string) string {
+	path = strings.TrimRight(path, "/")
+	best := ""
+	for mp := range m {
+		p := strings.TrimRight(mp, "/")
+		if path == p || strings.HasPrefix(path, p+"/") {
+			if len(p) > len(best) {
+				best = p
+			}
+		}
+	}
+	return best
+}
+
+// poolIDOfDatasetID turns "ds:tank/media" into "pool:tank".
+func poolIDOfDatasetID(id string) string {
+	name := strings.TrimPrefix(id, "ds:")
+	if name == "" || name == id {
+		return ""
+	}
+	if i := strings.IndexByte(name, '/'); i >= 0 {
+		name = name[:i]
+	}
+	return "pool:" + name
+}
+
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// ── mergerfs status cache (20s) ────────────────────────────────────────────
+// MergerFSGetStatus shells out to `mountpoint` and `df` once per branch. The
+// topology is polled every ~3s by every open map, so the uncached call would put
+// a steady stream of processes on the box for data that changes slowly.
+var (
+	mfsStatusMu      sync.Mutex
+	mfsStatusCache   []system.MergerFSStatus
+	mfsStatusExpires time.Time
+)
+
+func mergerfsStatuses(appCfg *config.AppConfig) []system.MergerFSStatus {
+	mfsStatusMu.Lock()
+	defer mfsStatusMu.Unlock()
+	if mfsStatusCache != nil && time.Now().Before(mfsStatusExpires) {
+		return mfsStatusCache
+	}
+	out := make([]system.MergerFSStatus, 0, len(appCfg.MergerFS.Pools))
+	for _, p := range appCfg.MergerFS.Pools {
+		out = append(out, system.MergerFSGetStatus(p))
+	}
+	mfsStatusCache = out
+	mfsStatusExpires = time.Now().Add(20 * time.Second)
+	return out
+}
+
 func resolveByPath(dsByMount map[string]string, path string) string {
 	path = strings.TrimRight(path, "/")
 	if path == "" {

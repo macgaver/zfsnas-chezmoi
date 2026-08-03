@@ -1483,6 +1483,7 @@
               <span class="map-legend-item" data-layer="consumer"><i></i>Shares</span>
               <span class="map-legend-item" data-layer="vm"><i></i>VMs / CT</span>
               <span class="map-legend-item" data-layer="dataset"><i></i>Datasets / ZVols</span>
+              <span class="map-legend-item" data-layer="mergerfs"><i></i>MergerFS unions</span>
               <span class="map-legend-item" data-layer="pool"><i></i>Pool</span>
               <span class="map-legend-item" data-layer="disk"><i></i>Disks</span>
             </div>
@@ -5372,6 +5373,7 @@ Select the Console tab to load.</pre>
               <span class="map-legend-item" data-layer="consumer"><i></i>Shares</span>
               <span class="map-legend-item" data-layer="vm"><i></i>VMs / CT</span>
               <span class="map-legend-item" data-layer="dataset"><i></i>Datasets / ZVols</span>
+              <span class="map-legend-item" data-layer="mergerfs"><i></i>MergerFS unions</span>
               <span class="map-legend-item" data-layer="pool"><i></i>Pool</span>
               <span class="map-legend-item" data-layer="disk"><i></i>Disks</span>
             </div>
@@ -13888,6 +13890,9 @@ function showPage(name) {
   // Instantly drop any chart tooltip overlay so it can't linger on the next
   // screen (the watchdog also covers this, but this is immediate).
   if (typeof _hideChartTooltip === 'function') _hideChartTooltip();
+  // Same for the topology hovercard: it lives on <body>, not inside the page,
+  // so a page switch would otherwise leave it floating over the new screen.
+  if (typeof window._mapHoverForceHide === 'function') window._mapHoverForceHide();
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
   document.querySelectorAll('.nav-item,.nav-compute-instance').forEach(n => n.classList.remove('active'));
   _clearComputeRootHighlight();
@@ -33832,6 +33837,13 @@ function _workloadMakeChart(canvasId, datasets, unit, mirrored) {
           bodyColor: tipBody,
           padding: 10,
           filter: item => item.parsed.y !== null && item.parsed.y !== undefined,
+          // Biggest consumer at the top. A workload chart carries one series per
+          // VM/container, so dataset order is arbitrary — the instance actually
+          // driving a spike could sit anywhere in the list. Sorted by MAGNITUDE,
+          // not signed value: the mirrored charts put RX/Write below the axis as
+          // negative numbers, which a signed sort would push to the bottom
+          // however large they are. Matches the Monitor tab's network chart.
+          _znasSortByMag: true,
           callbacks: {
             title: items => {
               if (!items.length) return '';
@@ -38030,11 +38042,47 @@ function runReplicationTask(id, name) {
     svg.addEventListener('mouseout', e=>{
       const g = e.target.closest && e.target.closest('.map-node, .net-node'); if(!g) return;
       if (e.relatedTarget && g.contains(e.relatedTarget)) return; // moving within same node
+      // iPadOS hid its parked cursor — the pointer is still on the node. See
+      // _mapLeaveIsPointerPark; the document watchdog closes the card once the
+      // pointer really goes somewhere else.
+      if (_mapLeaveIsPointerPark(e)) return;
       // Grace-period hide (not immediate): the card sits ~12px away from the
       // node, so the user must be able to cross that gap to hover the card and
       // read its live charts. The card's own mouseenter cancels this timer.
       mapHoverHideSoon();
     });
+    // Pointer watchdog. mouseout alone can no longer be trusted to mean "gone"
+    // (see above), so the authoritative signal is where the pointer actually
+    // is: any real movement that lands on neither a node nor the card arms the
+    // same grace-period hide. Bound once, on the document, because the pointer
+    // leaves the SVG entirely in exactly the case we care about.
+    if (!window._mapMoveWatchBound){
+      window._mapMoveWatchBound = 1;
+      document.addEventListener('mousemove', e=>{
+        _mapLastMoveAt = Date.now();
+        if (!_mapHoverId || _mapHideTimer) return;   // nothing open, or already closing
+        const t = e.target;
+        if (t && t.closest && (t.closest('.map-node, .net-node') || t.closest('#map-hovercard'))) return;
+        mapHoverHideSoon();
+      }, {passive:true});
+      // A TOUCH anywhere off the card dismisses it immediately. On iPad the
+      // pointer can be parked on a node (card open, cursor auto-hidden) while
+      // the user carries on with a finger — Safari does synthesize a mousemove
+      // for a tap, which the watchdog above would catch, but only for targets
+      // that accept synthetic mouse events, and only after the 280 ms grace.
+      // Touch is the unambiguous signal, so act on it directly: no grace, no
+      // dependence on legacy event emulation.
+      document.addEventListener('touchstart', e=>{
+        if (!_mapHoverId) return;
+        const t = e.target;
+        if (t && t.closest && (t.closest('.map-node, .net-node') || t.closest('#map-hovercard'))) return;
+        mapHoverHide(); mapClearHighlight();
+      }, {passive:true, capture:true});
+      // Last line of defence: the card is position:fixed on <body>, so hiding
+      // the topology page does NOT hide it. Any navigation that leaves the map
+      // behind must take the card with it — mirrors the chart-tooltip guard.
+      window._mapHoverForceHide = function(){ mapHoverHide(); mapClearHighlight(); };
+    }
     // Right-click anywhere in the map background → shared options menu (both
     // layers). Bound to the VIEWPORT (the whole right pane), not just the SVG,
     // so the empty space around a fitted/smaller map still opens the menu.
@@ -38116,11 +38164,24 @@ function runReplicationTask(id, name) {
       // it to read/interact with the live charts; entering it cancels the
       // pending grace-period hide, leaving it re-arms it.
       c.addEventListener('mouseenter', _mapCancelHide);
-      c.addEventListener('mouseleave', mapHoverHideSoon);
+      c.addEventListener('mouseleave', e=>{ if(!_mapLeaveIsPointerPark(e)) mapHoverHideSoon(); });
     }
     return c;
   }
   let _mapHideTimer=null;
+  // When the pointer last actually MOVED. iPadOS auto-hides the trackpad cursor
+  // after ~3s of inactivity, and WebKit then dispatches mouseout/mouseleave with
+  // relatedTarget === null — indistinguishable, by shape, from the pointer
+  // leaving the window. That is why the card vanished on its own on iPad while
+  // the user was still pointing at the node.
+  //
+  // The two cases differ in timing, not in shape: a real exit is preceded by
+  // movement right up to the edge, whereas the cursor only auto-hides once the
+  // pointer has been parked for seconds. So a null-target leave with no recent
+  // movement is treated as "pointer parked", and the card stays; the watchdog
+  // below hides it as soon as the pointer genuinely moves somewhere else.
+  let _mapLastMoveAt=0;
+  function _mapLeaveIsPointerPark(e){ return !e.relatedTarget && (Date.now()-_mapLastMoveAt) > 150; }
   function _mapCancelHide(){ if(_mapHideTimer){ clearTimeout(_mapHideTimer); _mapHideTimer=null; } }
   function mapHoverHideSoon(){ _mapCancelHide();
     _mapHideTimer=setTimeout(()=>{ _mapHideTimer=null; mapHoverHide(); mapClearHighlight(); }, 280); }
@@ -38226,6 +38287,11 @@ function runReplicationTask(id, name) {
     const d=_mapData; if(!d) return null;
     const p=(d.pools||[]).find(x=>x.id===id); if(p) return p.name;
     const ds=(d.datasets||[]).find(x=>x.id===id); if(ds) return (ds.pool_id||'').replace(/^pool:/,'')||null;
+    // A union backed by exactly one pool has a meaningful zpool stream — the
+    // same one its datasets show. Spanning several pools, no single stream
+    // describes it, so it gets capacity only rather than a misleading chart.
+    const m=(d.mergerfs||[]).find(x=>x.id===id);
+    if(m) return (m.pool_ids && m.pool_ids.length===1) ? m.pool_ids[0].replace(/^pool:/,'') : null;
     return null; // disks/consumers/remotes → no zpool iostat chart
   }
   function _mapIoSection(pool){
@@ -38438,8 +38504,25 @@ function runReplicationTask(id, name) {
           _mhcRow('Used', mapBytes(ds.used)), ds.kind!=='zvol'?_mhcRow('Available', mapBytes(ds.avail)):'' ],
         [ ds.kind!=='zvol'?_mhcBar('Used', pct):'' ],
         _mapIoSection((ds.pool_id||'').replace(/^pool:/,''))); }
+    const mfs=(d.mergerfs||[]).find(x=>x.id===id);
+    if(mfs){
+      const pct = mfs.total ? mfs.used/mfs.total*100 : 0;
+      const branchNames=(mfs.dataset_ids||[])
+        .map(did=>{const x=(d.datasets||[]).find(y=>y.id===did);return x?mapLeaf(x.name):null;}).filter(Boolean);
+      const info=[ _mhcRow('Mount', mfs.mountpoint||'—'),
+                   _mhcRow('Status', mfs.mounted?'Mounted':'Not mounted'),
+                   _mhcRow('Branches', `${mfs.branches} (${mfs.all_zfs?'all ZFS':'mixed'})`),
+                   _mhcRow('Datasets', branchNames.join(', ')||'—') ];
+      const metrics=[ _mhcBar('Used', pct),
+                      _mhcMetric('Capacity', `${mapBytes(mfs.used)} / ${mapBytes(mfs.total)}`),
+                      _mhcMetric('Free', mapBytes(mfs.free)) ];
+      const pool=_mapNodePoolName(id);
+      return _mhc('mergerfs union', mapIconMergerFS(), mfs.name, 'var(--map-mergerfs)',
+        info, metrics, pool ? _mapIoSection(pool) : '');
+    }
     const c=(d.consumers||[]).find(x=>x.id===id);
-    if(c){ const dsNames=(c.dataset_ids||[]).map(did=>{const x=(d.datasets||[]).find(y=>y.id===did);return x?mapLeaf(x.name):null;}).filter(Boolean);
+    if(c){ const dsNames=(c.dataset_ids||[]).map(did=>{const x=(d.datasets||[]).find(y=>y.id===did);return x?mapLeaf(x.name):null;}).filter(Boolean)
+             .concat((c.mergerfs_ids||[]).map(mid=>{const x=(d.mergerfs||[]).find(y=>y.id===mid);return x?('union '+x.name):null;}).filter(Boolean));
       if(c.type==='vm'||c.type==='container'){
         const info=[ _mhcRow('State', c.state||'—'), _mhcRow(dsNames.length>1?'Disks':'Storage', dsNames.join(', ')||'—') ];
         const m=_mapVmMetrics[c.name];
@@ -38927,6 +39010,11 @@ function runReplicationTask(id, name) {
       pools:     merge(pinned.pools,    ['state','used','usable','arc_pct','read_kbps','write_kbps']),
       disks:     merge(pinned.disks,    ['status','present','read_kbps','write_kbps','busy_pct']),
       datasets:  merge(pinned.datasets, ['used','avail','encrypted']),
+      // Unions must be carried through like every other object array. Omitting
+      // a key here does not "keep the old value" — it deletes the array from the
+      // projected document, so the node vanished one render after it appeared.
+      // Same trap the Networking Layer hit with `net`.
+      mergerfs:  merge(pinned.mergerfs, ['mounted','total','used','free']),
       consumers: merge(pinned.consumers,['state','clients','rate_kbps']),
       remotes:   pinned.remotes,        // remotes carry no live metrics here
       net:       _projectPinnedNet(pinned.net, fresh.net),
@@ -38973,15 +39061,16 @@ function runReplicationTask(id, name) {
   // machines) are NOT included. Everything else on the server is dropped.
   function filterTopologyForInstance(data, instId){
     const empty = { server:(data&&data.server)||{}, pools:[], disks:[], datasets:[],
-                    consumers:[], remotes:[], ts:(data&&data.ts)||0 };
+                    mergerfs:[], consumers:[], remotes:[], ts:(data&&data.ts)||0 };
     if (!data || !instId) return empty;
-    const consById={}, dsById={};
+    const consById={}, dsById={}, mfsById={};
     (data.consumers||[]).forEach(c=>consById[c.id]=c);
     (data.datasets||[]).forEach(d=>dsById[d.id]=d);
+    (data.mergerfs||[]).forEach(m=>mfsById[m.id]=m);
     const vm = consById[instId];
     if (!vm) return empty;
 
-    const keepC=new Set(), keepDs=new Set(), keepPool=new Set();
+    const keepC=new Set(), keepDs=new Set(), keepPool=new Set(), keepMfs=new Set();
     // Keep a consumer and walk DOWN to its datasets + their pools — never up to
     // sibling consumers. This is a strict downward cone: only what the instance
     // consumes and the children of those objects.
@@ -38990,6 +39079,14 @@ function runReplicationTask(id, name) {
       keepC.add(c.id);
       (c.dataset_ids||[]).forEach(did=>{ const ds=dsById[did];
         if (ds){ keepDs.add(ds.id); keepPool.add(ds.pool_id); } });
+      // A share backed by a union: the union is a child of the share, and its
+      // branch datasets are children of the union. Walk through it, or the cone
+      // stops at the share and the storage under it disappears.
+      (c.mergerfs_ids||[]).forEach(mid=>{ const m=mfsById[mid]; if(!m) return;
+        keepMfs.add(m.id);
+        (m.dataset_ids||[]).forEach(did=>{ const ds=dsById[did];
+          if (ds){ keepDs.add(ds.id); keepPool.add(ds.pool_id); } });
+      });
     };
     addChain(vm);
     // Shares this instance MOUNTS are objects it consumes → keep each share and
@@ -39005,6 +39102,7 @@ function runReplicationTask(id, name) {
       pools:    (data.pools||[]).filter(p=>keepPool.has(p.id)),
       disks:    (data.disks||[]).filter(d=>keepDisk.has(d.id)),
       datasets: (data.datasets||[]).filter(d=>keepDs.has(d.id)),
+      mergerfs: (data.mergerfs||[]).filter(m=>keepMfs.has(m.id)),
       consumers:(data.consumers||[]).filter(c=>keepC.has(c.id)),
       remotes:  [], // fellow consumers of a shared mount are intentionally excluded
       net:      data.net, // Networking Layer filters to the focused instance itself
@@ -39032,7 +39130,7 @@ function runReplicationTask(id, name) {
   // Returns the box content split into {icon, name, sub, sub2}. The name is
   // wrapped onto multiple lines (below) so boxes stay narrow.
   function mapNodeText(n, layer){
-    if (layer===4) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>', name:n.dev,
+    if (layer===5) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>', name:n.dev,
       // File-backed vdevs have no size/type line — promote the io line into
       // `sub` so the markup's fixed sub2 row (subY+MAP_LINE) never renders a
       // line that mapNodeLayout's row count didn't reserve height for.
@@ -39040,11 +39138,16 @@ function runReplicationTask(id, name) {
           || `↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}`,
       sub2:[n.size_str,n.disk_type].filter(Boolean).join(' ')
           ? `↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}` : ''};
-    if (layer===3) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>', name:n.name,
+    if (layer===4) return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>', name:n.name,
       sub:`↓${mapRate(n.read_kbps)} ↑${mapRate(n.write_kbps)}`,
       sub2:`${mapBytes(n.used)} / ${mapBytes(n.usable)}`};
-    if (layer===2) return {icon:mapIcon(n), name:mapLeaf(n.name), encrypted:!!n.encrypted,
+    if (layer===3) return {icon:mapIcon(n), name:mapLeaf(n.name), encrypted:!!n.encrypted,
       sub:mapBytes(n.used), sub2:''};
+    // MergerFS union: capacity of the union mount itself (what the user sees
+    // through the share), plus how many branches it merges.
+    if (layer===2) return {icon:mapIconMergerFS(), name:n.name,
+      sub: n.mounted ? `${mapBytes(n.used)} / ${mapBytes(n.total)}` : 'not mounted',
+      sub2: `${n.branches} branch${n.branches===1?'':'es'}`};
     if (layer===0){
       if (n.kind==='docker'){ // container name + short image; status shown via the dot
         return {icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a5 5 0 0 0 5 5h6a5 5 0 0 0 5-5v-1H3z"/><path d="M4 9h2v2H4zM7 9h2v2H7zM10 9h2v2h-2zM10 6h2v2h-2z"/><path d="M19 12c1.5 0 3-1 3-3-1 0-2 .5-2.5 1"/></svg>', name:n.dname||n.label, sub:mapTrunc((n.dimage||'').split('/').pop(), 20), sub2:''}; }
@@ -39118,6 +39221,9 @@ function runReplicationTask(id, name) {
   // The node type is conveyed by this icon (top-left of the box) — no type word.
   // Field-based (not __layer) so it works on metric-only polls too: consumers
   // carry .type, datasets/remotes carry distinct .kind values.
+  // MergerFS union — stacked layers: several branches presented as one tree.
+  function mapIconMergerFS(){ return '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m6.08 9.5-3.5 1.6a1 1 0 0 0 0 1.81l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 0-1.83l-3.5-1.59"/><path d="m6.08 14.5-3.5 1.6a1 1 0 0 0 0 1.81l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 0-1.83l-3.5-1.59"/></svg>'; }
+
   function mapIcon(n){
     if (n.type) return {smb:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>',nfs:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>',iscsi:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>',s3:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M5 7l1.6 12.2A2 2 0 0 0 8.6 21h6.8a2 2 0 0 0 2-1.8L19 7"/><path d="M4 7h16"/><path d="M9 7V6a3 3 0 0 1 6 0v1"/></svg>',vm:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>',container:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>'}[n.type] || '•';
     switch (n.kind){
@@ -39224,7 +39330,8 @@ function runReplicationTask(id, name) {
       (data.pools||[]).map(p=>p.id),
       (data.disks||[]).map(d=>d.id+':'+d.pool_id),
       (data.datasets||[]).map(d=>d.id+':'+d.pool_id),
-      (data.consumers||[]).map(c=>c.id+':'+(c.dataset_ids||[]).join('+')+'>'+(c.client_of||[]).join('+')),
+      (data.mergerfs||[]).map(m=>m.id+':'+(m.dataset_ids||[]).join('+')),
+      (data.consumers||[]).map(c=>c.id+':'+(c.dataset_ids||[]).join('+')+'/'+(c.mergerfs_ids||[]).join('+')+'>'+(c.client_of||[]).join('+')),
       (data.remotes||[]).map(r=>r.id+':'+(r.consumer_ids||[]).join('+'))
     ].map(a=>a.join(',')).join('|');
 
@@ -39933,7 +40040,19 @@ function runReplicationTask(id, name) {
   // Resolve each consumer/remote to the pool group it belongs to.
   function mapResolveGroups(data){
     const dsPool = {}; data.datasets.forEach(d => dsPool[d.id] = d.pool_id);
-    data.consumers.forEach(c => { const did=c.dataset_ids&&c.dataset_ids[0]; c.__pool = did ? (dsPool[did]||'') : ''; });
+    // A union groups with its branches' pool — but only when they all share one.
+    // A union that spans pools has no home column and falls to the misc bucket,
+    // which is exactly where a node belonging to several groups belongs.
+    const mfsPool = {};
+    (data.mergerfs||[]).forEach(m => {
+      mfsPool[m.id] = (m.pool_ids && m.pool_ids.length===1) ? m.pool_ids[0] : '';
+      m.__pool = mfsPool[m.id];
+    });
+    data.consumers.forEach(c => {
+      const did = c.dataset_ids && c.dataset_ids[0];
+      const mid = c.mergerfs_ids && c.mergerfs_ids[0];
+      c.__pool = did ? (dsPool[did]||'') : (mid ? (mfsPool[mid]||'') : '');
+    });
   }
 
   // Straight centre-to-centre conduit for the alternative (radial/grid)
@@ -39962,7 +40081,7 @@ function runReplicationTask(id, name) {
   // pins persisted — same engine as the networking layer's star.
   function _storePlaceRadial(svg, data, byId, clientRemotes){
     if (!_forceReady()) return _storePlaceGrid(svg, data, clientRemotes);
-    const members=[].concat(data.disks, data.datasets, data.consumers, clientRemotes);
+    const members=[].concat(data.disks, data.datasets, (data.mergerfs||[]), data.consumers, clientRemotes);
     const allBoxes=[].concat(data.pools, members).map(n=>({w:n.__w, h:n.__h}));
     const {W,H}=_forceWorkspace(svg, allBoxes);
     // Home pool: disks/datasets carry pool_id; consumers resolve via their
@@ -39987,7 +40106,9 @@ function runReplicationTask(id, name) {
     });
     data.disks.forEach(d=> linksIn.push({a:d.id, b:d.pool_id, tight:true}));
     data.datasets.forEach(ds=> linksIn.push({a:ds.id, b:ds.pool_id}));
+    (data.mergerfs||[]).forEach(m=> (m.dataset_ids||[]).forEach(did=> linksIn.push({a:m.id, b:did})));
     data.consumers.forEach(cn=> (cn.dataset_ids||[]).forEach(did=> linksIn.push({a:cn.id, b:did})));
+    data.consumers.forEach(cn=> (cn.mergerfs_ids||[]).forEach(mid=> linksIn.push({a:cn.id, b:mid})));
     clientRemotes.forEach(r=> (r.consumer_ids||[]).forEach(cid=> linksIn.push({a:r.id, b:cid})));
     const st=_forceStarSim(svg, W, H, items, linksIn);
     st.nodes.forEach(n=>{ n.ref.__x=n.x-n.w/2; n.ref.__y=n.y-n.h/2; n.ref.__cx=n.x; });
@@ -39999,7 +40120,7 @@ function runReplicationTask(id, name) {
   // canvas matches the viewport aspect ratio.
   function _storePlaceGrid(svg, data, clientRemotes){
     const GAP=14, PAD=MAP.PAD;
-    const all=[].concat(data.disks, data.pools, data.datasets, data.consumers, clientRemotes);
+    const all=[].concat(data.disks, data.pools, data.datasets, (data.mergerfs||[]), data.consumers, clientRemotes);
     all.sort((a,b)=> (a.__layer-b.__layer) ||
       String(a.name||a.label||a.dev||a.id).localeCompare(String(b.name||b.label||b.dev||b.id)));
     const maxW=all.reduce((m,n)=>Math.max(m,n.__w),0), maxH=all.reduce((m,n)=>Math.max(m,n.__h),0);
@@ -40032,13 +40153,14 @@ function runReplicationTask(id, name) {
       n.__txt=lo.txt; n.__w=lo.w; n.__needH=lo.needH; byId[n.id]=n; };
     data.remotes.forEach(n=>place(n,0));
     data.consumers.forEach(n=>place(n,1));
-    data.datasets.forEach(n=>place(n,2));
-    data.pools.forEach(n=>place(n,3));
-    data.disks.forEach(n=>place(n,4));
+    (data.mergerfs||[]).forEach(n=>place(n,2));
+    data.datasets.forEach(n=>place(n,3));
+    data.pools.forEach(n=>place(n,4));
+    data.disks.forEach(n=>place(n,5));
 
     // Uniform box height per layer = tallest node in it (plenty of vertical room),
     // so a 2-line name doesn't make a ragged row.
-    const layerArr=[data.remotes,data.consumers,data.datasets,data.pools,data.disks];
+    const layerArr=[data.remotes,data.consumers,(data.mergerfs||[]),data.datasets,data.pools,data.disks];
     const layerH=layerArr.map(a=> a.reduce((m,n)=>Math.max(m,n.__needH), MAP_BASE+MAP_BOT));
     layerArr.forEach((a,l)=> a.forEach(n=> n.__h=layerH[l]));
     const nodeH = l => layerH[l];
@@ -40059,61 +40181,73 @@ function runReplicationTask(id, name) {
 
     // Groups = pools (in order) + a trailing "misc" bucket for unmapped nodes.
     const groupOrder = data.pools.map(p=>p.id);
-    const hasMisc = data.consumers.some(c=>!c.__pool);
+    const hasMisc = data.consumers.some(c=>!c.__pool) || (data.mergerfs||[]).some(m=>!m.__pool);
     if (hasMisc) groupOrder.push('__misc');
 
     // Bucket nodes into [group][layer]. Remotes (clients) are NOT grouped — they
     // go in a single global top row (built after groups) so a client connected
     // to shares in different pools stays one box with a link to each.
-    const rows = {}; groupOrder.forEach(g=>rows[g]=[[],[],[],[],[]]);
+    const rows = {}; groupOrder.forEach(g=>rows[g]=[[],[],[],[],[],[]]);
     const pushRow = (g,layer,n)=>{ if(rows[g]) rows[g][layer].push(n); };
-    data.disks.forEach(n=>pushRow(n.pool_id,4,n));
-    data.pools.forEach(n=>pushRow(n.id,3,n));
-    data.datasets.forEach(n=>pushRow(n.pool_id,2,n));
+    data.disks.forEach(n=>pushRow(n.pool_id,5,n));
+    data.pools.forEach(n=>pushRow(n.id,4,n));
+    data.datasets.forEach(n=>pushRow(n.pool_id,3,n));
+    (data.mergerfs||[]).forEach(n=>pushRow(n.__pool||'__misc',2,n));
     data.consumers.forEach(n=>pushRow(n.__pool||'__misc',1,n));
 
     // Order each layer so children line up under their parent → links stay near
     // vertical and don't cross each other.
     const idxOf = (arr)=>{ const m={}; arr.forEach((n,i)=>m[n.id]=i); return m; };
     groupOrder.forEach(g=>{
-      rows[g][2].sort((a,b)=> (a.name||'').localeCompare(b.name||''));      // datasets
-      const dsIx = idxOf(rows[g][2]);
-      const cdi=(c)=>{ const id=c.dataset_ids&&c.dataset_ids[0]; return (id && id in dsIx)?dsIx[id]:1e9; };
+      rows[g][3].sort((a,b)=> (a.name||'').localeCompare(b.name||''));      // datasets
+      const dsIx = idxOf(rows[g][3]);
+      // Unions sit above their first branch dataset.
+      const mdi=(m)=>{ const id=m.dataset_ids&&m.dataset_ids[0]; return (id && id in dsIx)?dsIx[id]:1e9; };
+      rows[g][2].sort((a,b)=> mdi(a)-mdi(b) || (a.name||'').localeCompare(b.name||''));  // unions
+      const mfsIx = idxOf(rows[g][2]);
+      const cdi=(c)=>{ const mid=c.mergerfs_ids&&c.mergerfs_ids[0];
+                       if (mid && mid in mfsIx) return mfsIx[mid];
+                       const id=c.dataset_ids&&c.dataset_ids[0]; return (id && id in dsIx)?dsIx[id]:1e9; };
       rows[g][1].sort((a,b)=> cdi(a)-cdi(b) || (a.name||'').localeCompare(b.name||''));   // consumers
     });
 
     // # consumers per dataset → a dataset used by exactly one share is "1:1"
     // and that share is placed directly above it (short straight link).
     const dsConsumers = {};
-    data.consumers.forEach(c=> (c.dataset_ids||[]).forEach(id=> dsConsumers[id]=(dsConsumers[id]||0)+1));
+    data.consumers.forEach(c=> [].concat(c.dataset_ids||[], c.mergerfs_ids||[])
+                                .forEach(id=> dsConsumers[id]=(dsConsumers[id]||0)+1));
 
     // Header band is now only the optional peer indicator — reclaim its space
     // for the topology when there are no peers (0), keep a slim line when there
     // are. (Was a fixed MAP.HEADER=54 for the removed hostname/CPU/RAM/net row.)
     const _mapHeaderH = (data.remotes||[]).some(r=>r.kind==='peer') ? 26 : 0;
     const layerTop = []; { let y = MAP.PAD + _mapHeaderH;
-      for (let l=0;l<5;l++){ layerTop[l]=y; y += nodeH(l) + MAP.ROW_GAP; } }
+      for (let l=0;l<6;l++){ layerTop[l]=y; y += nodeH(l) + MAP.ROW_GAP; } }
     const rowWidth = (arr)=> arr.length ? arr.reduce((s,n)=>s+n.__w,0) + (arr.length-1)*MAP.COL_GAP : 0;
 
     let cursor = MAP.PAD;
     groupOrder.forEach(g=>{
       let gw = MAP.NODE_W;
-      for (let l=1;l<5;l++) gw = Math.max(gw, rowWidth(rows[g][l]));
+      for (let l=1;l<6;l++) gw = Math.max(gw, rowWidth(rows[g][l]));
       const gx = cursor;
-      // Place disks → pool → datasets first (centered), then align consumers.
-      [4,3,2].forEach(l=>{
+      // Place disks → pool → datasets → unions first (centered), then consumers.
+      [5,4,3,2].forEach(l=>{
         const arr = rows[g][l]; if (!arr.length) return;
         let x = gx + (gw - rowWidth(arr))/2;
         arr.forEach(n=>{ n.__x=x; n.__y=layerTop[l]; n.__cx=x+n.__w/2; x += n.__w + MAP.COL_GAP; });
       });
       let groupRight = gx + gw;
-      { // consumers (layer 1): snap 1:1 shares above their dataset
+      { // consumers (layer 1): snap a 1:1 share above what it presents —
+        // its dataset, or its union when that is what backs it.
         const arr = rows[g][1];
-        const dsCx = {}; rows[g][2].forEach(d=> dsCx[d.id]=d.__cx);
+        const dsCx = {};
+        rows[g][3].forEach(d=> dsCx[d.id]=d.__cx);   // datasets
+        rows[g][2].forEach(m=> dsCx[m.id]=m.__cx);   // unions
         let runX = Math.max(gx, gx + (gw - rowWidth(arr))/2);
         arr.forEach(n=>{
+          const backing = (n.mergerfs_ids&&n.mergerfs_ids.length) ? n.mergerfs_ids : (n.dataset_ids||[]);
           let target = runX;
-          const only = (n.dataset_ids&&n.dataset_ids.length===1)?n.dataset_ids[0]:null;
+          const only = backing.length===1 ? backing[0] : null;
           if (only && dsCx[only]!=null && dsConsumers[only]===1)
             target = dsCx[only] - n.__w/2;
           const x = Math.max(runX, target);
@@ -40125,7 +40259,7 @@ function runReplicationTask(id, name) {
     });
 
     W = Math.max(cursor - MAP.GROUP_GAP + MAP.PAD, 480);
-    H = layerTop[4] + nodeH(4) + MAP.PAD;
+    H = layerTop[5] + nodeH(5) + MAP.PAD;
 
     // Global remotes row: one box per client, sorted by the average x of the
     // shares it links to, centered across the map width.
@@ -40149,7 +40283,9 @@ function runReplicationTask(id, name) {
     };
     data.disks.forEach(d => link(d, byId[d.pool_id], mapDiskFlow(d)));
     data.datasets.forEach(ds => link(byId[ds.pool_id], ds, {dir:'up'}));               // pool → dataset
+    (data.mergerfs||[]).forEach(m => (m.dataset_ids||[]).forEach(did=>{ if(byId[did]) link(byId[did], m, {dir:'up'}); }));
     data.consumers.forEach(c => (c.dataset_ids||[]).forEach(did=>{ if(byId[did]) link(byId[did], c, mapNodeFlow(c)); }));
+    data.consumers.forEach(c => (c.mergerfs_ids||[]).forEach(mid=>{ if(byId[mid]) link(byId[mid], c, mapNodeFlow(c)); }));
     clientRemotes.forEach(r => (r.consumer_ids||[]).forEach(cid => {
       if (byId[cid]) link(byId[cid], r, {dir:r.dir||'unknown', rate:null});
     }));
@@ -40186,7 +40322,7 @@ function runReplicationTask(id, name) {
                       ? mapLinkMarkupStraight({id:pl.id, lower:pl.share, upper:pl.vm}, ' map-peerg', 'map-link map-peerlink', false)
                       : mapPeerLinkMarkup(pl,i)).join('');
     const nodeSvg = [].concat(
-      data.disks, data.pools, data.datasets, data.consumers,
+      data.disks, data.pools, data.datasets, (data.mergerfs||[]), data.consumers,
       data.remotes.filter(r=>r.__x!=null)
     ).map(mapNodeMarkup).join('');
 
@@ -40334,9 +40470,10 @@ function runReplicationTask(id, name) {
   }
 
   function mapNodeClass(n){
-    if (n.__layer===4) return 'map-node--disk';
-    if (n.__layer===3) return 'map-node--pool';
-    if (n.__layer===2) return 'map-node--dataset';
+    if (n.__layer===5) return 'map-node--disk';
+    if (n.__layer===4) return 'map-node--pool';
+    if (n.__layer===3) return 'map-node--dataset';
+    if (n.__layer===2) return 'map-node--mergerfs';
     if (n.kind==='docker') return 'map-node--docker dock-'+_dockDot(n);
     if (n.__layer===0) return 'map-node--remote';
     // consumers: split share types vs vm/ct for colour
@@ -40366,18 +40503,23 @@ function runReplicationTask(id, name) {
     // (Rich info now lives in the hover hovercard, so no native <title> tooltip.)
     data.disks.forEach(d=>{
       const g=node(d.id); if(!g) return;
-      fill(g, mapNodeText(d,4));
+      fill(g, mapNodeText(d,5));
       g.style.setProperty('--busy', Math.max(0,Math.min(100,Number(d.busy_pct)||0)));
       mapSetState(g, d.present===false ? 'missing' : d.status);
     });
     data.pools.forEach(p=>{
       const g=node(p.id); if(!g) return;
-      fill(g, mapNodeText(p,3));
+      fill(g, mapNodeText(p,4));
       mapSetState(g, p.state);
     });
     data.datasets.forEach(d=>{
       const g=node(d.id); if(!g) return;
-      fill(g, mapNodeText(d,2));
+      fill(g, mapNodeText(d,3));
+    });
+    (data.mergerfs||[]).forEach(m=>{
+      const g=node(m.id); if(!g) return;
+      fill(g, mapNodeText(m,2));
+      mapSetState(g, m.mounted ? 'active' : 'missing');
     });
     data.consumers.forEach(c=>{
       const g=node(c.id); if(!g) return;

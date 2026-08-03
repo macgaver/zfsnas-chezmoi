@@ -2901,12 +2901,12 @@ body.light .iscsi-icon { filter: none; }
    theme's own variables so the map stays readable on every theme. */
 :root{
   --map-fill:#0a1018;               /* node box fill — near-black HUD on dark themes */
-  --map-disk:#22d3ee; --map-pool:#a855f7; --map-dataset:#2dd4bf;
+  --map-disk:#22d3ee; --map-pool:#a855f7; --map-dataset:#2dd4bf; --map-mergerfs:#84cc16;
   --map-consumer:#f59e0b; --map-vm:#ec4899; --map-remote:#38bdf8; --map-docker:#4aa3df;
 }
 body.light, body.dawn{       /* every light-background theme uses the dark-hue set */
   --map-fill:var(--surface);        /* light surface so dark text reads on it */
-  --map-disk:#0e7490; --map-pool:#7c3aed; --map-dataset:#0f766e;
+  --map-disk:#0e7490; --map-pool:#7c3aed; --map-dataset:#0f766e; --map-mergerfs:#4d7c0f;
   --map-consumer:#b45309; --map-vm:#be185d; --map-remote:#0369a1; --map-docker:#1d6fa5;
 }
 .map-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;
@@ -2919,6 +2919,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 .map-legend-item[data-layer="consumer"] i{background:var(--map-consumer);color:var(--map-consumer);}
 .map-legend-item[data-layer="vm"]        i{background:var(--map-vm);color:var(--map-vm);}
 .map-legend-item[data-layer="dataset"]   i{background:var(--map-dataset);color:var(--map-dataset);}
+.map-legend-item[data-layer="mergerfs"]  i{background:var(--map-mergerfs);color:var(--map-mergerfs);}
 .map-legend-item[data-layer="pool"]      i{background:var(--map-pool);color:var(--map-pool);}
 .map-legend-item[data-layer="disk"]      i{background:var(--map-disk);color:var(--map-disk);}
 .map-toolbar-right{display:flex;align-items:center;gap:12px;}
@@ -2997,9 +2998,10 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
   stroke-dasharray:5 7;animation:map-flow-up 1.4s linear infinite;}
 .map-link.down{animation-name:map-flow-down;}
 .map-link.idle{animation:none;opacity:.3;}
-.map-link.l4{stroke:var(--map-disk);}
-.map-link.l3{stroke:var(--map-pool);}
-.map-link.l2{stroke:var(--map-dataset);}
+.map-link.l5{stroke:var(--map-disk);}
+.map-link.l4{stroke:var(--map-pool);}
+.map-link.l3{stroke:var(--map-dataset);}
+.map-link.l2{stroke:var(--map-mergerfs);}
 .map-link.l1{stroke:var(--map-consumer);}
 /* VM self-mount conduit (share ↔ guest that mounts it) */
 .map-peerlink{stroke:var(--map-vm);stroke-dasharray:4 5;opacity:.85;}
@@ -3021,7 +3023,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
    spill past the box edge. Dense map text never wants tracking anyway. */
 .map-node text,.net-node text{letter-spacing:normal;}
 /* Actionable nodes (open detail / edit / instance view) show a pointer. */
-.map-node--dataset,.map-node--consumer,.map-node--vm{cursor:pointer;}
+.map-node--dataset,.map-node--mergerfs,.map-node--consumer,.map-node--vm{cursor:pointer;}
 /* Opaque base occludes any link drawn behind the box, so conduits read as
    running *between* boxes, never through them. The tint + border sit on top. */
 .map-node .map-node-base{fill:var(--map-fill);}
@@ -3033,6 +3035,7 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
 .map-node--disk   {--hue:var(--map-disk);}
 .map-node--pool   {--hue:var(--map-pool);}
 .map-node--dataset{--hue:var(--map-dataset);}
+.map-node--mergerfs{--hue:var(--map-mergerfs);}
 .map-node--consumer{--hue:var(--map-consumer);}
 .map-node--vm     {--hue:var(--map-vm);}
 .map-node--remote {--hue:var(--map-remote);}
