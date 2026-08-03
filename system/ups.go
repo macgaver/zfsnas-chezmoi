@@ -669,6 +669,73 @@ NOTIFYFLAG LOWBATT SYSLOG+WALL
 }
 
 
+// OnUPSShutdown is an optional callback invoked immediately BEFORE a
+// threshold-triggered shutdown. main.go wires it to alerts.SendSync — the dep
+// is kept indirect because internal/alerts already imports this package via the
+// interlink relay subscription (same reason as OnVMUnexpectedStop).
+//
+// It must BLOCK until the notification has actually been delivered: the caller
+// halts the machine on return, so anything still in flight dies. Implementations
+// are responsible for their own timeout — upsNotifyBudget below is the absolute
+// cap the watcher enforces regardless.
+//
+// Arguments: UPS name, a one-line summary, and the same details string the
+// audit entry carries. Returns nil when at least one target got the message.
+var OnUPSShutdown func(upsName, summary, details string) error
+
+// The shutdown notice gets a hard time budget. The machine is running on a
+// battery that just hit the user's threshold, so waiting on a dead network is
+// strictly worse than shutting down un-announced: one retry, then go. Worst
+// case is attempt + pause + attempt = 14s, inside the 15s budget.
+//
+// Vars, not consts, so the tests can exercise the timing guarantee without
+// actually sitting there for 15 seconds.
+var (
+	upsNotifyBudget      = 15 * time.Second
+	upsNotifyAttempt     = 6 * time.Second
+	upsNotifyRetryIn     = 2 * time.Second
+	upsNotifyMaxAttempts = 2
+)
+
+// notifyUPSShutdown delivers the pre-shutdown notification, retrying once if the
+// first attempt fails. Returns as soon as it is delivered, or when the attempts
+// or the budget are spent — never later, and never with a panic escaping into
+// the shutdown path.
+func notifyUPSShutdown(upsName, summary, details string) {
+	send := OnUPSShutdown
+	if send == nil {
+		return
+	}
+	deadline := time.Now().Add(upsNotifyBudget)
+	for attempt := 1; ; attempt++ {
+		errc := make(chan error, 1)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					errc <- fmt.Errorf("panic: %v", r)
+				}
+			}()
+			errc <- send(upsName, summary, details)
+		}()
+
+		select {
+		case err := <-errc:
+			if err == nil {
+				log.Printf("UPS: shutdown notification delivered (attempt %d)", attempt)
+				return
+			}
+			log.Printf("UPS: shutdown notification attempt %d failed: %v", attempt, err)
+		case <-time.After(upsNotifyAttempt):
+			log.Printf("UPS: shutdown notification attempt %d timed out", attempt)
+		}
+		if attempt >= upsNotifyMaxAttempts || time.Now().Add(upsNotifyRetryIn).After(deadline) {
+			log.Printf("UPS: giving up on the shutdown notification after %d attempt(s) — proceeding with shutdown", attempt)
+			return
+		}
+		time.Sleep(upsNotifyRetryIn)
+	}
+}
+
 // StartUPSShutdownWatcher polls the UPS every 5 seconds and issues a system
 // shutdown when ALL of the following conditions are true:
 //  1. UPS feature is enabled and a shutdown policy is configured.
@@ -806,6 +873,28 @@ func StartUPSShutdownWatcher(appCfg *config.AppConfig) {
 			Details: details,
 		})
 		log.Printf("UPS: initiating shutdown — %s", details)
+
+		// Tell the user BEFORE anything starts stopping. This is the one moment
+		// a UPS notification matters most, and it is also the last moment we can
+		// send anything: below, the machine halts and this process SIGTERMs
+		// itself, which would kill an in-flight send.
+		{
+			name := ups.UPSName
+			if name == "" {
+				name = "sysfs-battery"
+			}
+			reason := "battery threshold reached"
+			switch policy.TriggerType {
+			case "percent":
+				reason = fmt.Sprintf("battery charge fell to the configured %d%% threshold", policy.PercentThreshold)
+			case "time":
+				reason = fmt.Sprintf("estimated runtime fell to the configured %ds threshold", policy.RuntimeThreshold)
+			case "both":
+				reason = fmt.Sprintf("battery reached a configured threshold (%d%% or %ds runtime)",
+					policy.PercentThreshold, policy.RuntimeThreshold)
+			}
+			notifyUPSShutdown(name, reason, details)
+		}
 
 		if policy.PreShutdownCmd != "" {
 			exec.Command("sh", "-c", policy.PreShutdownCmd).Run()

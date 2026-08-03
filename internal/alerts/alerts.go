@@ -412,6 +412,95 @@ func allEnabledEvents(cfg *AlertConfig) []EventConfig {
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
 
+// SendSync is Send that WAITS for delivery and reports what happened.
+//
+// Send fans every target out to its own goroutine and returns immediately —
+// right for normal alerts, fatal for a message that precedes a shutdown: the
+// process is about to be SIGTERMed and the machine halted, so an in-flight SMTP
+// conversation would simply die with it. Here each target is attempted
+// concurrently and the call waits for them, bounded by `timeout` so a hung
+// relay can never hold up a shutdown running on battery.
+//
+// Returns how many targets were attempted and how many confirmed delivery. A
+// non-nil error means at least one target failed or the wait timed out; the
+// counts are still valid, so the caller can decide whether a partial delivery
+// is good enough (for the UPS notice, one target through is enough).
+func SendSync(key EventKey, subject, event, details string, timeout time.Duration) (attempted, delivered int, err error) {
+	cfg, err := Load()
+	if err != nil {
+		return 0, 0, err
+	}
+	hostname, _ := os.Hostname()
+	now := time.Now().Format("2006-01-02 15:04:05 MST")
+
+	type job struct {
+		name string
+		fn   func() error
+	}
+	var jobs []job
+	if cfg.Email.Enabled && matchesEvent(key, cfg.Email.Events) {
+		jobs = append(jobs, job{"email", func() error { return sendEmail(cfg, subject, event, details, hostname) }})
+	}
+	if cfg.Ntfy.Enabled && matchesEvent(key, cfg.Ntfy.Events) {
+		jobs = append(jobs, job{"ntfy", func() error { return sendNtfy(cfg.Ntfy, subject, event, details, hostname) }})
+	}
+	if cfg.Gotify.Enabled && matchesEvent(key, cfg.Gotify.Events) {
+		jobs = append(jobs, job{"gotify", func() error { return sendGotify(cfg.Gotify, subject, event, details, hostname) }})
+	}
+	if cfg.Pushover.Enabled && matchesEvent(key, cfg.Pushover.Events) {
+		jobs = append(jobs, job{"pushover", func() error { return sendPushover(cfg.Pushover, subject, event, details, hostname) }})
+	}
+	if cfg.Syslog.Enabled && matchesEvent(key, cfg.Syslog.Events) {
+		jobs = append(jobs, job{"syslog", func() error { return sendSyslogMsg(cfg.Syslog, subject, event, details, hostname) }})
+	}
+	// The websocket hub is in-process and instant — no waiting involved, and it
+	// reaches any browser with the portal open right now.
+	if cfg.WebSocket.Enabled && matchesEvent(key, cfg.WebSocket.Events) && wsHub != nil {
+		wsHub.BroadcastJSON(map[string]string{
+			"subject": subject, "event": event, "details": details,
+			"hostname": hostname, "time": now,
+		})
+		attempted++
+		delivered++
+	}
+	if len(jobs) == 0 {
+		if attempted == 0 {
+			return 0, 0, nil // nobody subscribes — not a failure
+		}
+		return attempted, delivered, nil
+	}
+
+	attempted += len(jobs)
+	type result struct {
+		name string
+		err  error
+	}
+	done := make(chan result, len(jobs))
+	for _, j := range jobs {
+		go func(j job) { done <- result{j.name, j.fn()} }(j)
+	}
+
+	var failures []string
+	deadline := time.After(timeout)
+	for i := 0; i < len(jobs); i++ {
+		select {
+		case r := <-done:
+			if r.err != nil {
+				failures = append(failures, r.name+": "+r.err.Error())
+				log.Printf("[alerts/%s] %v", r.name, r.err)
+			} else {
+				delivered++
+			}
+		case <-deadline:
+			return attempted, delivered, fmt.Errorf("timed out after %s with %d/%d delivered", timeout, delivered, attempted)
+		}
+	}
+	if len(failures) > 0 {
+		return attempted, delivered, fmt.Errorf("%s", strings.Join(failures, "; "))
+	}
+	return attempted, delivered, nil
+}
+
 // Send dispatches an alert to all enabled targets that subscribe to the given event key.
 func Send(key EventKey, subject, event, details string) error {
 	cfg, err := Load()

@@ -240,6 +240,31 @@ func main() {
 	}
 	system.StartLXDStateWatcher()
 
+	// Pre-shutdown UPS notice. Gated on the SAME subscription as the other UPS
+	// notifications (ups_power_changed), so turning UPS alerts on for a target
+	// covers "AC lost", "AC restored" and "shutting down now" as one decision.
+	//
+	// SendSync, not Send: Send returns while its goroutines are still talking to
+	// SMTP/ntfy, and the caller halts the machine the moment we return here.
+	// Partial delivery counts as success — one target through is what matters
+	// when the battery is nearly flat.
+	system.OnUPSShutdown = func(upsName, summary, details string) error {
+		subject := "[ZFS NAS] UPS shutdown: " + upsName
+		body := "The server is shutting down because " + summary + ".\n\n" +
+			"UPS: " + upsName + "\n" + details + "\n\n" +
+			"This is the last message before the machine halts.\n"
+		attempted, delivered, err := alerts.SendSync(
+			alerts.EventUPSPowerChanged, subject, "ups_shutdown", body, 10*time.Second)
+		if delivered > 0 {
+			log.Printf("[alerts] ups_shutdown delivered to %d/%d target(s)", delivered, attempted)
+			return nil
+		}
+		if attempted == 0 {
+			return nil // nobody subscribed to UPS notifications — nothing to wait for
+		}
+		return err
+	}
+
 	// ===== Daily SMART refresh goroutine =====
 	handlers.StartDailySmartRefresh()
 

@@ -1,6 +1,9 @@
 package alerts
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // AnyTargetWants must consult the full matchesEvent table. A previous copy of
 // this logic in handlers only knew smart_error/wearout_exceeded, which silently
@@ -44,5 +47,23 @@ func TestAnyTargetWantsCoversAllKeys(t *testing.T) {
 	disabled := &AlertConfig{WebSocket: WebSocketTarget{Enabled: false, Events: all}}
 	if AnyTargetWants(disabled, EventInterlinkUnreachable) {
 		t.Error("AnyTargetWants counted a disabled target")
+	}
+}
+
+// SendSync is what the UPS pre-shutdown notice uses: unlike Send it must not
+// return until delivery is settled, and it must never outlast its timeout.
+func TestSendSyncWithNoSubscribersIsInstantAndNotAnError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ZFSNAS_CONFIG_DIR", dir)
+	start := time.Now()
+	attempted, delivered, err := SendSync(EventUPSPowerChanged, "s", "e", "d", 5*time.Second)
+	if err != nil {
+		t.Fatalf("no configured targets should not be an error: %v", err)
+	}
+	if attempted != 0 || delivered != 0 {
+		t.Errorf("attempted=%d delivered=%d, want 0/0", attempted, delivered)
+	}
+	if el := time.Since(start); el > time.Second {
+		t.Errorf("took %s with nothing configured", el)
 	}
 }
