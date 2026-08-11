@@ -59,7 +59,7 @@ type StandardPermissions struct {
 	// standard users get no VM/container/networking access until an admin
 	// explicitly grants it.
 	ViewVirtualization    bool `json:"view_virtualization,omitempty"`     // see the Compute (VMs & Containers) section at all
-	ViewServices          bool `json:"view_services,omitempty"`           // v6.8.1 — see the Services tab and open a service's web UI through the proxy
+	ViewServices          bool `json:"view_services,omitempty"`           // v6.8.1 — see the Services category and open a service's web UI through the proxy
 	ManageServices        bool `json:"manage_services,omitempty"`         // v6.8.1 — edit/create/delete services and start/stop/restart their containers
 	CreateVM              bool `json:"create_vm,omitempty"`               // create new VMs
 	CreateContainer       bool `json:"create_container,omitempty"`        // create new containers

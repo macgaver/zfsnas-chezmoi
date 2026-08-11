@@ -24,6 +24,7 @@ var RequiredPackages = []Package{
 	{Name: "nvme-cli", Description: "NVMe drive health monitoring"},
 	{Name: "util-linux", Description: "Disk utilities (lsblk)"},
 	{Name: "gdisk", Description: "GPT disk partitioning utilities (sgdisk)"},
+	{Name: "rsync", Description: "File Browser copy/move progress, and external storage sync"},
 }
 
 // CheckPackages returns RequiredPackages with Installed and Version populated.

@@ -54,13 +54,23 @@ func PublishedPorts(ports string) []int {
 // Ranking: explicit label → known web port → lowest published port.
 // Returns 0 when nothing is published (the UI shows such a service as
 // controllable but not openable).
-func PickWebPort(ports string, labels map[string]string) int {
+// LabelPort returns the port a container explicitly declares by label, or 0
+// when it declares none. An explicit declaration is the user's own statement
+// about what this container serves, so it outranks every heuristic.
+func LabelPort(labels map[string]string) int {
 	for _, k := range serviceLabelKeys {
 		if v, ok := labels[k]; ok {
 			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 && n < 65536 {
 				return n
 			}
 		}
+	}
+	return 0
+}
+
+func PickWebPort(ports string, labels map[string]string) int {
+	if n := LabelPort(labels); n > 0 {
+		return n
 	}
 	seen := map[int]bool{}
 	var published []int
@@ -115,6 +125,20 @@ type DiscoveredService struct {
 	AllPorts []int
 }
 
+// EligibleForService reports whether a container should appear as an
+// application. A standalone container that publishes no port has no URL,
+// cannot be opened, and is overwhelmingly likely to be ephemeral — a CI
+// runner, a one-shot job, a build helper. Observed in the field: 49 GitLab
+// runner containers accumulated in one week on a single build server. A
+// compose project is a declared, intentional thing and is always kept, ports
+// or not. An explicit znas.service.port label is the deliberate override for
+// anything this rule would otherwise drop.
+func EligibleForService(c DockerContainer) bool {
+	return c.Project != "" ||
+		len(PublishedPorts(c.Ports)) > 0 ||
+		LabelPort(c.Labels) > 0
+}
+
 // GroupServices collapses a container list into applications: one entry per
 // compose project — represented by the container most likely to serve its web
 // UI — plus one per standalone container. A web+db+redis stack therefore
@@ -122,19 +146,30 @@ type DiscoveredService struct {
 //
 // Election is deterministic (rank, then lowest port, then container name) so
 // repeated scans elect the same container and the UI does not flicker.
-func GroupServices(cs []DockerContainer) []DiscoveredService {
+//
+// `known` reports whether a container is ALREADY a stored service, and admits
+// it regardless of EligibleForService. This exists because docker reports no
+// ports at all once a container exits: judged on its current state alone, a
+// standalone service the user merely STOPPED is indistinguishable from
+// ephemeral junk, and would silently vanish from the list instead of staying
+// listed and startable. History speaks where the present cannot. Pass nil when
+// no history is available.
+func GroupServices(cs []DockerContainer, known func(DockerContainer) bool) []DiscoveredService {
 	var out []DiscoveredService
 	projects := map[string][]DockerContainer{}
 	var projectOrder []string
 
 	for _, c := range cs {
+		if !EligibleForService(c) && (known == nil || !known(c)) {
+			continue
+		}
 		if c.Project == "" {
 			out = append(out, DiscoveredService{
 				Container:   c.Name,
 				ContainerID: c.ID,
 				Image:       c.Image,
 				State:       c.State,
-				Port:        PickWebPort(c.Ports, nil),
+				Port:        PickWebPort(c.Ports, c.Labels),
 				AllPorts:    PublishedPorts(c.Ports),
 			})
 			continue
@@ -159,10 +194,10 @@ func GroupServices(cs []DockerContainer) []DiscoveredService {
 
 	for _, name := range projectOrder {
 		items := projects[name]
-		best, bestPort, bestRank := items[0], PickWebPort(items[0].Ports, nil), -1
+		best, bestPort, bestRank := items[0], PickWebPort(items[0].Ports, items[0].Labels), -1
 		bestRank = webRank(bestPort)
 		for _, c := range items[1:] {
-			p := PickWebPort(c.Ports, nil)
+			p := PickWebPort(c.Ports, c.Labels)
 			r := webRank(p)
 			better := r > bestRank ||
 				(r == bestRank && r > 0 && p < bestPort) ||

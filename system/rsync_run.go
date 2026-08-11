@@ -65,6 +65,37 @@ func newRsyncJobID() string {
 	return fmt.Sprintf("rsj-%d-%d", time.Now().Unix(), n)
 }
 
+func init() {
+	// rsync syncs join the shared job board, so every session sees a running
+	// sync — not only the tab that started it or one that happened to reload.
+	// The poller key is the bare job id, matching _extAttachJobPoller.
+	RegisterJobProvider("extstorage-rsync", func() []JobSummary {
+		out := []JobSummary{}
+		for _, j := range RsyncJobs() {
+			s := j.Snapshot()
+			base := "/api/rsync-jobs/" + j.ID
+			out = append(out, JobSummary{
+				Key:         j.ID,
+				ID:          j.ID,
+				Kind:        "rsync",
+				Label:       "rsync — " + j.StorageName,
+				Status:      j.Status,
+				Progress:    j.Progress,
+				StartedAt:   j.StartedAt,
+				ProgressURL: base + "/progress",
+				CancelURL:   base + "/cancel",
+				BytesDone:   j.BytesDone,
+				BytesTotal:  asInt64(s["bytes_total"]),
+				Speed:       j.Speed,
+				ETA:         j.ETA,
+				// An rsync job is tied to a mount on the host running it.
+				LocalOnly: true,
+			})
+		}
+		return out
+	})
+}
+
 // RsyncJobByID returns a job or nil.
 func RsyncJobByID(id string) *RsyncJob {
 	if v, ok := rsyncJobs.Load(id); ok {

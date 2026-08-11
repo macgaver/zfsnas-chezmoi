@@ -725,9 +725,6 @@
       <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Networking" aria-label="Networking">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm9 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM6 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm4-6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/><path fill-rule="evenodd" d="M3 3.5A.5.5 0 0 1 3.5 3h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 3.5zm-1 5A.5.5 0 0 1 2.5 8h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8.5zm1 5A.5.5 0 0 1 3.5 13h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5z"/></svg>
       </button>
-      <button class="sidebar-mode-btn" id="mode-btn-services" onclick="switchSidebarMode('services')" data-label="Services" aria-label="Services" style="display:none;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-      </button>
     </div>
 
     <div class="sidebar-section sidebar-collapse-row" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;">
@@ -757,6 +754,16 @@
     <div class="sidebar-section" id="nav-virt-section" style="display:none">Virtualization</div>
     <button class="nav-item" id="nav-lxd" onclick="showPage('lxd')" style="display:none"><span class="nav-icon" data-icon="server"></span><span class="nav-label"> VMs &amp; Containers</span><span id="nav-lxd-dot" class="nav-dot" style="display:none;width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0;"></span></button>
 
+    <!-- Services + Compute nav — both shown in compute mode. Services sits
+         ABOVE Compute: the apps are what people reach for, the VMs that host
+         them are the layer below. -->
+    <div id="nav-services-section" style="display:none;">
+      <div class="sidebar-section" id="nav-services-root" style="margin-top:0;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" onclick="switchToServicesTable()" title="All discovered services">
+        <span>Services</span>
+        <span style="color:var(--text-3);font-size:14px;">+</span>
+      </div>
+      <div id="nav-services-list"></div>
+    </div>
     <!-- Compute nav — shown only in compute mode -->
     <div id="nav-compute-section" style="display:none;">
       <div class="sidebar-section" id="nav-compute-root" style="margin-top:0;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" onclick="switchToLXDTable()" oncontextmenu="_lxdComputeRootMenu(event)" title="Right-click to change grouping">
@@ -771,13 +778,6 @@
     </div>
 
     <!-- Networking nav — shown only in networking mode -->
-    <div id="nav-services-section" style="display:none;">
-      <div class="sidebar-section" id="nav-services-root" style="margin-top:0;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" onclick="switchToServicesTable()" title="All discovered services">
-        <span>Services</span>
-        <span style="color:var(--text-3);font-size:14px;">+</span>
-      </div>
-      <div id="nav-services-list"></div>
-    </div>
     <div id="nav-networking-section" style="display:none;">
       <div class="sidebar-section" id="nav-networking-root" style="margin-top:0;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;" onclick="showPage('lxd-networks');_setNetworkingRootActive()">
         Networking
@@ -6816,11 +6816,12 @@ Select the Console tab to load.</pre>
               <input type="checkbox" id="svc-discovery-toggle" style="margin-top:2px;" onchange="_svcSettingsDirty()">
               <div>
                 <div style="font-size:13px;font-weight:600;">
-                  Services tab
-                  <i class="info-tip tip-down" data-tip="Scans every running VM and container for Docker/Podman applications and lists them in the Services tab, with icons, tags and start/stop control. Turning this off stops all scanning and hides the tab; your per-service settings are kept."></i>
+                  Services category
+                  <i class="info-tip tip-down" data-tip="Scans every running VM and container for Docker/Podman applications and lists them in the Services category of the Compute section, with icons, tags and start/stop control. Turning this off stops all scanning and hides the category; your per-service settings are kept."></i>
                 </div>
                 <div style="font-size:12px;color:var(--text-3);margin-top:4px;line-height:1.55;">
-                  Adds a <strong>Services</strong> tab listing the applications found across your VMs and containers.
+                  Adds a <strong>Services</strong> category to the <strong>Compute</strong> section of the left menu,
+                  listing the applications found across your VMs and containers.
                   Services open in a new browser tab by default.
                 </div>
               </div>
@@ -8886,7 +8887,7 @@ Select the Console tab to load.</pre>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;margin-bottom:4px;">
         <input type="checkbox" id="svc-gear-pinned" onchange="_svcGearPinNote()" style="width:14px;height:14px;accent-color:var(--accent);">
         Pin to the left menu
-        <i class="info-tip" data-tip="Puts this service in the Services section of the left menu, whatever its open mode is — clicking it there opens it the way you chose above. Pinning used to be tied to embedding, so a service you wanted one click away had to be embedded even when a tab was the right way to open it."></i>
+        <i class="info-tip" data-tip="Puts this service in the Services category of the left menu (under Compute), whatever its open mode is — clicking it there opens it the way you chose above. Pinning used to be tied to embedding, so a service you wanted one click away had to be embedded even when a tab was the right way to open it."></i>
       </label>
       <div id="svc-gear-pin-note" style="font-size:11.5px;color:var(--text-3);margin:0 0 12px 22px;line-height:1.45;"></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;margin-bottom:12px;">
@@ -12876,7 +12877,7 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
     window._mergerfsEnabled    = !!d.mergerfs_enabled;
     window._servicesEnabled    = d.services_enabled !== false;
     window._serviceProxyEnabled = d.service_proxy_enabled !== false;
-    _applyServicesTabVisibility();
+    _applyServicesNavVisibility();
     updateVirtTabVisibility(window._lxdAvailable);
     if (typeof updateMonitorTabVisibility === 'function') updateMonitorTabVisibility();
     if (typeof _applyMergerFSNav === 'function') _applyMergerFSNav();
@@ -12900,6 +12901,11 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
   const _targetPage = _initialPage || _preferredLanding || 'dashboard';
   const _targetMode = _pageToSidebarMode(_targetPage);
   if (_targetMode !== 'storage') _applySidebarModeUI(_targetMode);
+  // _applySidebarModeUI only PAINTS the sidebar — switchSidebarMode() is what
+  // normally loads a mode's data, and it is bypassed here. Compute's services
+  // half must therefore be run explicitly, or the Services tab stays empty for
+  // the whole session. See _enterComputeServices().
+  if (_targetMode === 'compute') _enterComputeServices();
   if (_targetPage.startsWith('compute')) {
     window._intendedComputePage = _targetPage;
     showPage('dashboard');
@@ -14350,13 +14356,19 @@ async function refreshActivityBar() {
   // ones. Falls back to /api/audit on any failure.
   const useAgg = !!_abAllServers;
   const url = useAgg ? '/api/audit/aggregate' : '/api/audit';
-  // Fleet-wide background jobs (v6.7.7): in All-Servers mode the jobs
-  // section also lists syncs running on OTHER servers (host chip, live
-  // progress) — a job never disappears just because the user is viewing a
-  // different interlink server. No-relay so the fan-out always runs on the
-  // home server regardless of the relay target.
-  if (useAgg) _refreshRemoteJobs();
-  else { const el = document.getElementById('ab-remote-jobs'); if (el) el.innerHTML = ''; }
+  // Fleet-wide background jobs: the jobs section lists rsync syncs and File
+  // Browser transfers running on OTHER servers too, with a host chip and live
+  // progress, so a job never disappears just because the user is viewing a
+  // different interlink server. No-relay so the fan-out always runs on the home
+  // server regardless of the relay target.
+  //
+  // Unconditional, unlike the audit entries above. This used to be gated on the
+  // All-Servers toggle, but that toggle scopes the EVENT LOG, not running work:
+  // gating it meant a live sync or transfer was invisible to anyone who had the
+  // toggle off, which is the opposite of what this section is for. Jobs this
+  // browser already tracks are filtered out inside, since those render as
+  // interactive rows in ab-jobs.
+  _refreshRemoteJobs();
   try {
     const resp = await fetch(url);
     if (!resp.ok) {
@@ -14375,14 +14387,20 @@ async function refreshActivityBar() {
 async function _refreshRemoteJobs() {
   const el = document.getElementById('ab-remote-jobs');
   if (!el) return;
+  // ONE aggregate for every job type — rsync, File Browser transfers, LXD
+  // backup/restore, disk moves, pool creation — because they all register with
+  // the shared job board. Previously this was one fan-out per job type, each
+  // hitting every interlink peer on every tick.
   let jobs = [];
   try {
-    const r = await fetch('/api/rsync-jobs/aggregate', { headers: { 'X-ZNAS-No-Relay': '1' } });
+    const r = await fetch('/api/jobs/aggregate', { headers: { 'X-ZNAS-No-Relay': '1' } });
     if (!r.ok) { el.innerHTML = ''; return; }
-    jobs = ((await r.json()) || []).filter(j => j.status === 'running');
+    jobs = ((await r.json()) || [])
+      .filter(j => j.status === 'running' || j.status === 'queued');
   } catch { return; }
-  // Jobs already tracked by a local poller render in ab-jobs — skip them here.
-  jobs = jobs.filter(j => !(typeof activeJobs === 'object' && activeJobs && activeJobs[j.id]));
+  // Jobs this browser already tracks render as interactive rows in ab-jobs —
+  // skip them here so they are not listed twice.
+  jobs = jobs.filter(j => !(typeof activeJobs === 'object' && activeJobs && activeJobs[j.key]));
   if (!jobs.length) { el.innerHTML = ''; return; }
   el.innerHTML = jobs.map(j => {
     const pct = typeof j.progress === 'number' ? Math.min(100, Math.max(0, j.progress)) : 0;
@@ -14391,7 +14409,7 @@ async function _refreshRemoteJobs() {
       <div style="display:flex;align-items:center;gap:8px;width:100%;">
         <span class="spinner" style="width:12px;height:12px;border-width:2px;flex-shrink:0;"></span>
         <span class="ab-host" title="Server running this job" style="display:inline-block;background:var(--surface2);color:var(--text-2);font-size:10px;font-family:'SF Mono',monospace;border-radius:3px;padding:0 5px;flex-shrink:0;">${esc(j.system || '?')}</span>
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">rsync — ${esc(j.storage_name || '')}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(j.label || 'Background task')}</span>
         <span class="text-3" style="flex-shrink:0;font-size:11px;">${esc(txt || (pct + '%'))}</span>
       </div>
       <div style="width:100%;height:3px;background:var(--border);border-radius:2px;margin-top:4px;"><div style="height:100%;border-radius:2px;background:var(--accent-2);width:${pct.toFixed(1)}%"></div></div>
@@ -17726,7 +17744,7 @@ async function confirmSMBWorkgroupRestart() {
 }
 
 // ── Services settings (Settings → Virtualization) ───────────────────────────
-// The embed toggle is meaningless while the Services tab is off, so it follows
+// The embed toggle is meaningless while the Services category is off, so it follows
 // the master switch's enabled state.
 function _svcSettingsDirty() {
   const proxy = document.getElementById('svc-proxy-toggle');
@@ -17760,7 +17778,7 @@ async function saveServiceSettings() {
       const d = await r.json();
       window._servicesEnabled     = d.discovery_enabled !== false;
       window._serviceProxyEnabled = d.proxy_enabled !== false;
-      _applyServicesTabVisibility();
+      _applyServicesNavVisibility();
     } else {
       const d = await r.json().catch(() => ({}));
       if (alertEl) { alertEl.textContent = d.error || 'Failed to apply.'; alertEl.classList.remove('hidden'); }
@@ -17771,17 +17789,55 @@ async function saveServiceSettings() {
 }
 
 // ===== Services (v6.8.1) =====
-// The tab is hidden entirely when service discovery is switched off in
-// Settings → Virtualization, and whenever virtualization itself is unavailable
-// (there would be no VMs or containers to scan).
-function _applyServicesTabVisibility() {
-  const btn = document.getElementById('mode-btn-services');
-  if (!btn) return;
-  const show = !!window._lxdAvailable && window._servicesEnabled !== false;
-  btn.style.display = show ? '' : 'none';
-  if (!show && _sidebarMode === 'services') {
-    _applySidebarModeUI('storage');
-    showPage('dashboard');
+// Services are a CATEGORY of the Compute section, sitting above the instance
+// list — they are hosted by those VMs/containers, so they belong with them
+// rather than behind a mode of their own. (They had their own sidebar tab until
+// v6.8.x; nothing user-facing should call it a tab any more.) The category is
+// hidden entirely when service discovery is switched off in Settings →
+// Virtualization, and whenever virtualization itself is unavailable (there
+// would be nothing to scan).
+function _servicesNavAvailable() {
+  return !!window._lxdAvailable && window._servicesEnabled !== false;
+}
+// Populate the Services nav + cache for Compute mode.
+//
+// EVERY path that enters Compute mode must call this. It exists because the
+// boot restore used to hand-roll half of switchSidebarMode()'s compute branch —
+// it called refreshComputeNav() but not this — so anyone whose landing page is
+// a Compute page (landing_page: "lxd", or a #lxd/#services reload) logged in to
+// a permanently empty Services tab. Only an InterLink hop fixed it, because
+// _softRelayRefresh happens to call refreshServices() too.
+//
+// The flags _servicesNavAvailable() reads arrive from a NON-awaited /api/version
+// fetch, so at boot they may not have landed yet. Rather than lose the load to
+// that race, retry once the flags exist.
+function _enterComputeServices(_retry) {
+  if (!_servicesNavAvailable()) {
+    // Flags not in yet — try again shortly, but only once, and only while the
+    // sidebar is still in Compute mode.
+    if (!_retry) setTimeout(() => {
+      if (_sidebarMode === 'compute') _enterComputeServices(true);
+    }, 1200);
+    return;
+  }
+  // Paint the pinned services from cache immediately, then refresh in the
+  // background — an `incus exec` sweep must never block the tab opening.
+  renderServicesNav();
+  refreshServices(false);
+}
+
+function _applyServicesNavVisibility() {
+  const sec = document.getElementById('nav-services-section');
+  if (!sec) return;
+  sec.style.display = (_sidebarMode === 'compute' && _servicesNavAvailable()) ? '' : 'none';
+  // Discovery switched off while a service page was open: fall back to the
+  // instance list, which is in the same section — no mode change needed.
+  if (!_servicesNavAvailable()) {
+    const active = document.querySelector('.page:not(.hidden)');
+    if (active && (active.id === 'page-services' || active.id === 'page-service-view')) {
+      if (typeof switchToLXDTable === 'function') switchToLXDTable();
+      else showPage('dashboard');
+    }
   }
 }
 
@@ -17846,16 +17902,16 @@ function renderServicesNav() {
   // be embedded — see the "Pin to the left menu" toggle in the gear dialog.
   const visible = _svcCache.filter(s => s.pinned_effective);
   if (!visible.length) {
-    el.innerHTML = `<div style="padding:8px 14px;color:var(--text-3);font-size:12px;line-height:1.5;">`
-      + (_svcLoading
-          ? `Loading services…`
-          : `No pinned services.<br><span style="opacity:.8;">Turn on "Pin to the left menu" in a service's settings to keep it here.</span>`)
-      + `</div>`;
+    // Nothing pinned → nothing at all. The "you can pin services here" hint used
+    // to sit under the header and was pure noise for anyone who does not pin.
+    el.innerHTML = _svcLoading
+      ? `<div style="padding:8px 14px;color:var(--text-3);font-size:12px;">Loading services…</div>`
+      : '';
     return;
   }
   el.innerHTML = visible.map(s => {
     const off = s.last_state !== 'running' && s.source !== 'custom';
-    const dot = s.last_state === 'running' ? '#3fb950' : (s.last_state === 'unknown' ? '#6e7681' : '#f0b429');
+    const dot = _svcStateDot(s.last_state);
     return `<button class="nav-compute-instance${off ? ' svc-offline' : ''}" id="nav-svc-${esc(s.id)}" data-sid="${esc(s.id)}" title="${esc(s.display_name)}"
         onclick='openService(${JSON.stringify(s.id)})'
         oncontextmenu='event.preventDefault();_svcContextMenu(event,${JSON.stringify(s.id)})'>
@@ -17868,9 +17924,26 @@ function renderServicesNav() {
     </button>`;
   }).join('');
   _svcBindLongPress(el);
+  // A re-render wipes the .active class, so restore the selection — but only
+  // when a service page is the one on screen. The Compute tab also shows VM and
+  // container pages, and those must not light up the Services section.
+  const shown = document.querySelector('.page:not(.hidden)');
+  if (shown && shown.id === 'page-service-view') _svcMarkNavActive(_svcViewId);
+  else if (shown && shown.id === 'page-services') _svcMarkNavActive(null);
 }
 
 function switchToServicesTable() { openServicesHome(); }
+
+// Mark the pinned nav entry for `id` as the selected one. With no entry (the
+// service is not pinned) the Services header stays highlighted, so something in
+// the menu always reflects what is on screen.
+function _svcMarkNavActive(id) {
+  document.querySelectorAll('#nav-services-list .nav-compute-instance')
+    .forEach(b => b.classList.remove('active'));
+  const btn = id ? document.getElementById('nav-svc-' + id) : null;
+  if (btn) { btn.classList.add('active'); _setNavRootActive(null); }
+  else     { _setNavRootActive('nav-services-root'); }
+}
 
 // Navigate to this server's Services home page.
 //
@@ -17888,7 +17961,8 @@ function openServicesHome() {
   _svcViewMode = 'icon';                   // always land on the icon panel
   const wrap = document.getElementById('svc-embed-wrap');
   if (wrap) wrap.innerHTML = '';           // stop the old server's iframe loading
-  showPage('services');
+  showPage('services');                    // clears every nav highlight…
+  _setNavRootActive('nav-services-root');  // …so claim it back afterwards
   renderServicesPage();
 }
 
@@ -17907,6 +17981,15 @@ function renderServicesPage() {
 // has switched "Show hidden services" on.
 function _svcVisibleForPage() {
   return _svcCache.filter(s => _svcShowHidden || !s.hidden);
+}
+
+// Dot colour for a service's last known state. Shared by the nav, the icon
+// view and the table so a new state only has to be taught once.
+function _svcStateDot(state) {
+  return state === 'running' ? '#3fb950'
+    : state === 'gone' ? '#8b5a5a'
+    : state === 'unknown' ? '#6e7681'
+    : '#f0b429';
 }
 
 // A service is "down" when the container behind it is not running — that
@@ -17956,12 +18039,13 @@ function renderServicesIcons() {
   el.innerHTML = list.map(s => {
     const running = s.last_state === 'running' || s.source === 'custom';
     const down = _svcIsDown(s);
-    const dot = running ? '#3fb950' : (s.last_state === 'unknown' ? '#6e7681' : '#f0b429');
+    const dot = running ? '#3fb950' : _svcStateDot(s.last_state);
     const dim = down ? ' svc-dim' : '';
     const hid = s.hidden ? ' svc-is-hidden' : '';
     const sub = s.instance ? esc(s.instance) : (s.source === 'custom' ? 'custom' : '');
     const tip = down
-      ? ` — ${s.last_state === 'unknown' ? 'not running' : 'stopped'} · click for options`
+      ? ` — ${s.last_state === 'gone' ? 'no longer present · will be removed automatically'
+          : (s.last_state === 'unknown' ? 'not running' : 'stopped')} · click for options`
       : (s.url ? ' — ' + esc(s.url) : '');
     return `<button class="svc-tile${dim}${hid}" data-sid="${esc(s.id)}" title="${esc(s.display_name)}${tip}"
         onclick='_svcTileClick(event,${JSON.stringify(s.id)})'
@@ -18077,8 +18161,11 @@ function renderServicesTable() {
   tb.innerHTML = rows.map(s => {
     const i = inst(s.instance);
     const running = s.last_state === 'running';
-    const statusLabel = s.source === 'custom' ? 'Custom' : (running ? 'Running' : (s.last_state === 'unknown' ? 'Unknown' : 'Stopped'));
-    const statusColor = running ? '#3fb950' : (s.last_state === 'unknown' ? '#6e7681' : '#f0b429');
+    const statusLabel = s.source === 'custom' ? 'Custom'
+      : (running ? 'Running'
+      : (s.last_state === 'gone' ? 'Gone'
+      : (s.last_state === 'unknown' ? 'Unknown' : 'Stopped')));
+    const statusColor = running ? '#3fb950' : _svcStateDot(s.last_state);
     const ctl = (s.source === 'custom' || !s.container) ? '' :
       `<span style="cursor:pointer;color:var(--text-3);margin-left:6px;" onclick="event.stopPropagation();_svcStatusMenu(event,'${esc(s.id)}')">▾</span>`;
     return `<tr style="border-top:1px solid var(--border);">
@@ -18087,6 +18174,8 @@ function renderServicesTable() {
         ${s.hidden ? `<span title="Hidden from Icon View" style="margin-left:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);border:1px solid var(--border);border-radius:20px;padding:1px 7px;">hidden</span>` : ''}
         ${(s.reachable === false && s.source !== 'custom' && s.last_state === 'running')
           ? `<span title="${esc(s.unreachable_reason || 'not reachable from this server')}" style="margin-left:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f0b429;border:1px solid rgba(240,180,41,.4);border-radius:20px;padding:1px 7px;">unreachable</span>` : ''}
+        ${(s.last_state === 'gone')
+          ? `<span title="The last scan of ${esc(s.instance || 'its instance')} did not find this container. It will be removed from the list automatically." style="margin-left:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);border:1px solid var(--border);border-radius:20px;padding:1px 7px;">gone</span>` : ''}
       </td>
       <td style="padding:10px 0;color:var(--text-2);">${esc(s.instance || '—')}</td>
       <td style="padding:10px 0;">${typeof _tagPillsHTML === 'function' ? _tagPillsHTML(s.tags) : (s.tags || []).map(t => esc(t)).join(', ')}</td>
@@ -18158,6 +18247,10 @@ function _svcOpenExternal(mode) {
 async function _svcEmbed(s) {
   _svcViewId = s.id;
   showPage('service-view');
+  // The service being viewed is the selected menu item — mark its pinned entry,
+  // exactly as an instance does in the Compute list. Unpinned services have no
+  // entry, so the Services header carries the selection instead.
+  _svcMarkNavActive(s.id);
   document.getElementById('svc-view-title').textContent = s.display_name;
   document.getElementById('svc-view-sub').textContent = s.url || '';
   const ico = document.getElementById('svc-view-icon');
@@ -42554,7 +42647,7 @@ function _lxdRenderSorted() {
 function _pageToSidebarMode(page) {
   if (!page) return 'storage';
   if (page === 'lxd' || page === 'compute' || page.startsWith('compute-instance') || page.startsWith('compute/')) return 'compute';
-  if (page === 'services' || page === 'service-view') return 'services';
+  if (page === 'services' || page === 'service-view') return 'compute';
   if (page === 'lxd-networks' || page === 'bridge-detail' || page === 'lxd-datastores' || page === 'datastore-detail' || page === 'lxd-backups') return 'networking';
   return 'storage';
 }
@@ -42562,7 +42655,7 @@ function _pageToSidebarMode(page) {
 function _applySidebarModeUI(mode) {
   if (mode === 'storage') _stopCIStatsPolling();
   _sidebarMode = mode;
-  ['storage','compute','networking','services'].forEach(m => {
+  ['storage','compute','networking'].forEach(m => {
     const btn = document.getElementById('mode-btn-' + m);
     if (btn) btn.classList.toggle('active', m === mode);
   });
@@ -42574,16 +42667,19 @@ function _applySidebarModeUI(mode) {
   if (netSection) netSection.style.display = mode === 'networking' ? '' : 'none';
   const dsSection = document.getElementById('nav-datastores-section');
   if (dsSection) dsSection.style.display = mode === 'networking' ? '' : 'none';
+  // Services ride along with Compute, and only when the feature is available.
   const svcSection = document.getElementById('nav-services-section');
-  if (svcSection) svcSection.style.display = mode === 'services' ? '' : 'none';
+  if (svcSection) svcSection.style.display = (mode === 'compute' && _servicesNavAvailable()) ? '' : 'none';
 }
 
 function switchSidebarMode(mode) {
   _applySidebarModeUI(mode);
   if (mode === 'compute') {
     refreshComputeNav();
+    _enterComputeServices();
     const activePage = document.querySelector('.page:not(.hidden)');
-    if (activePage && !['page-dashboard','page-capacity','page-lxd','page-compute-instance'].includes(activePage.id)) {
+    if (activePage && !['page-dashboard','page-capacity','page-lxd','page-compute-instance',
+                        'page-services','page-service-view'].includes(activePage.id)) {
       switchToLXDTable();
     }
   }
@@ -42592,13 +42688,6 @@ function switchSidebarMode(mode) {
     refreshDatastoresNav();
     showPage('lxd-networks');
     _setNetworkingRootActive();
-  }
-  if (mode === 'services') {
-    // Paint from cache immediately, then refresh in the background — an
-    // `incus exec` sweep must never block the tab from opening.
-    renderServicesNav();
-    switchToServicesTable();
-    refreshServices(false);
   }
 }
 
@@ -42950,15 +43039,30 @@ function switchToLXDTable() {
   if (_sidebarMode === 'compute') {
     history.replaceState(null, '', '#compute');
     document.querySelectorAll('.nav-item,.nav-compute-instance').forEach(n => n.classList.remove('active'));
-    const root = document.getElementById('nav-compute-root');
-    if (root) root.style.color = 'var(--accent)';
+    _setNavRootActive('nav-compute-root');
   }
 }
 
-function _clearComputeRootHighlight() {
-  const root = document.getElementById('nav-compute-root');
-  if (root) root.style.color = '';
+// Highlight exactly one clickable section header (Compute / Services /
+// Networking), clearing the others. Pass nothing to clear them all. A section
+// header is a menu item too — selecting one should look like selecting
+// Settings does, and previously Compute only tinted its text while Services
+// showed nothing at all.
+function _setNavRootActive(id) {
+  document.querySelectorAll('.sidebar-section.nav-root-active')
+    .forEach(el => el.classList.remove('nav-root-active'));
+  // Legacy inline tint from earlier versions of this highlight — clear it or it
+  // survives the class removal and leaves two headers looking selected.
+  ['nav-compute-root','nav-services-root','nav-networking-root','nav-datastores-root'].forEach(rid => {
+    const el = document.getElementById(rid);
+    if (el) el.style.color = '';
+  });
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (el) el.classList.add('nav-root-active');
 }
+
+function _clearComputeRootHighlight() { _setNavRootActive(null); }
 
 let _ciCurrentName = '';
 let _ciCurrentType = '';
@@ -44961,7 +45065,7 @@ async function dockerEditComposeSave() {
     // Re-applying a stack can change its ports or container set, so the
     // Services list is re-scanned when the edit was launched from there.
     _ciDockerPollUntilIdle(d.job_id, inst, () => {
-      if (_sidebarMode === 'services' && typeof refreshServices === 'function') refreshServices(true);
+      if (_sidebarMode === 'compute' && typeof refreshServices === 'function') refreshServices(true);
     });
   } catch (e) {
     al.textContent = 'Save failed: ' + e.message;
@@ -46037,6 +46141,9 @@ function _bgPollJob(key, label, progressURL, onDone, opts) {
   // interlink switch (#7).
   st.localOnly = !!opts.localOnly;
   st.kind = opts.kind || 'task'; st.startedAt = st.startedAt || Date.now();
+  // Sub-type for kinds that have one (transfer → "copy"/"move"). Known from the
+  // caller, so the modal titles itself correctly before the first poll returns.
+  st.op = opts.op || '';
   st.lines = st.lines || []; st.status = 'running'; st.error = '';
 
   addActiveJob(key, label, {
@@ -46175,7 +46282,18 @@ function _bgJobModalRender(key) {
   const etaTxt = st.status === 'running'
     ? (st.eta && st.eta > 0 ? '~' + _fmtETA(st.eta) + ' left (estimate)' : 'estimating…')
     : '';
-  const title = st.kind === 'restore' ? 'Restore progress' : st.kind === 'backup' ? 'Backup progress' : 'Task progress';
+  const isTransfer = st.kind === 'transfer';
+  const title = isTransfer ? ((st.op || (st.raw && st.raw.op)) === 'move' ? 'Move progress' : 'Copy progress')
+    : st.kind === 'restore' ? 'Restore progress' : st.kind === 'backup' ? 'Backup progress' : 'Task progress';
+  // File Browser transfers get the headline treatment: a real bar plus the
+  // byte/speed/ETA readout, both fed by rsync's --info=progress2 output. Without
+  // rsync the job reports no percentage, so the existing spinner stands in.
+  const tPct = (isTransfer && st.progress > 0) ? Math.min(100, Math.max(0, st.progress)) : null;
+  const tBar = tPct != null
+    ? `<div style="margin:0 24px 10px;"><div style="width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden;"><div style="height:100%;border-radius:3px;background:var(--accent-2);transition:width .5s ease;width:${tPct.toFixed(1)}%"></div></div></div>`
+    : '';
+  const tBytes = (isTransfer && st.raw && st.raw.engine === 'rsync' && typeof _extProgressText === 'function')
+    ? `<span>${esc(_extProgressText(st.raw))}</span>` : '';
   const cancelBtn = (st.cancelURL && st.status === 'running')
     ? `<button class="btn btn-sm" style="color:var(--accent-danger);border-color:var(--accent-danger);" onclick="_bgCancelJobByURL('${esc(st.cancelURL)}')"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="18" height="18" x="3" y="3" rx="2"/></svg> Cancel</button>` : '';
   const log = (st.lines || []).map(esc).join('\n') || '(waiting for output…)';
@@ -46189,12 +46307,16 @@ function _bgJobModalRender(key) {
         <span>Elapsed: <b>${esc(_fmtETA(elapsed) || '0s')}</b></span>
         ${etaTxt ? `<span><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <b>${esc(etaTxt)}</b></span>` : ''}
         ${st.status === 'running' && st.progress > 0 ? `<span>Progress: <b>${st.progress}%</b>${st.phase ? ' (' + esc(st.phase) + ')' : ''}</span>` : ''}
+        ${tBytes}
       </div>
+      ${tBar}
       ${st.error ? `<div class="alert alert-error" style="margin:0 24px 8px;">${esc(st.error)}</div>` : ''}
       <pre id="bg-job-log" style="margin:0 24px;background:#0d0d0f;color:#e6e6e6;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-family:'SF Mono','Fira Code','JetBrains Mono',monospace;font-size:12px;line-height:1.5;height:46vh;min-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;">${log}</pre>
       <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:14px 24px;">
         ${cancelBtn}
-        <button class="btn btn-ghost btn-sm" onclick="_bgJobModalClose()">Close</button>
+        <button class="btn btn-ghost btn-sm" onclick="_bgJobModalClose()">${
+          isTransfer && st.status === 'running' ? 'Continue in background' : 'Close'
+        }</button>
       </div>
     </div>`;
   const logEl = m.querySelector('#bg-job-log');
@@ -46429,46 +46551,79 @@ function _bgPollRestoreJob(jobId, label, onDone) {
 // server which jobs are live and (re)attach a poller for each. The poll loop
 // is idempotent (see _bgPollJob), so this never double-tracks a job already
 // shown in this tab. Paused while relaying to another server (its bar is proxied).
-async function _bgDiscoverServerJobs() {
-  // Backup/restore jobs are local-origin (#7): keep discovering them on the
-  // LOCAL host even while relaying, via the no-relay header, so a switch to a
-  // peer never hides an in-flight local backup or strands it without a poller.
+// What to refresh when a discovered job of each kind finishes. Optional: a kind
+// with no entry simply updates the activity bar and nothing else.
+const _JOB_ONDONE = {
+  backup:  () => _bgJobBoardRefresh(),
+  restore: () => _bgJobBoardRefresh(),
+  rsync:   () => { if (typeof loadExtStorages === 'function') loadExtStorages(); },
+  transfer: async () => {
+    // Only disturb the listing if this browser is actually looking at it.
+    const fb = document.getElementById('modal-file-browser');
+    if (fb && fb.style.display !== 'none' && typeof fileBrowserNavigate === 'function') {
+      try { await fileBrowserNavigate(fileBrowserState.subpath); } catch (_) {}
+    }
+  },
+};
+
+// Server-authoritative discovery for EVERY background job type.
+//
+// The rule this implements: a background job is visible from every web session
+// and every interlink server, never only the tab that started it. A job lives
+// server-side, but the activity bar's job map is per-browser (in-memory,
+// mirrored to localStorage), so the only way a second session can know about a
+// job is to ask the server what is running — repeatedly, not once at boot, or a
+// session already open when the job started stays blind to it.
+//
+// One /api/jobs call covers rsync, File Browser transfers, LXD backup/restore,
+// disk moves and pool creation, because they all register with the shared job
+// board. Adding a job type server-side makes it appear here automatically.
+async function _bgDiscoverAllJobs() {
   const NORELAY = { credentials: 'same-origin', headers: { 'X-ZNAS-No-Relay': '1' } };
-  try {
-    const [br, rr] = await Promise.all([
-      fetch('/api/incus/backup-jobs',  NORELAY).catch(() => null),
-      fetch('/api/incus/restore-jobs', NORELAY).catch(() => null),
-    ]);
-    // Re-attach any running job the server reports that is NOT currently visible
-    // in the activity bar. Keyed on activeJobs (the bar) — not _bgJobs — so a job
-    // whose bar entry was lost (e.g. a transient poll error in an older build, or
-    // any future regression) is always restored. _bgPollJob is idempotent.
-    const visible = (k) => (typeof activeJobs === 'object' && activeJobs && activeJobs[k]);
-    if (br && br.ok) {
-      const d = await br.json();
-      for (const j of (d.jobs || [])) {
-        if (j.status !== 'running' && j.status !== 'queued') continue;
-        if (visible('bkj-' + j.job_id)) continue;
-        const dest = j.dest_kind === 'remote' ? (j.dest_host || 'remote') : 'local';
-        _bgPollBackupJob(j.job_id, 'Backup ' + j.instance + ' → ' + dest + ':' + j.dest_pool, _bgJobBoardRefresh);
-      }
+  // The home server always, plus the relayed peer when viewing one, so jobs on
+  // both get a fully interactive row (live progress + working Cancel) rather
+  // than the read-only fleet row the aggregate renders.
+  const sources = [{ opts: NORELAY, localOnly: true }];
+  if (typeof _relayActive !== 'undefined' && _relayActive) {
+    sources.push({ opts: { credentials: 'same-origin' }, localOnly: false });
+  }
+
+  for (const src of sources) {
+    let jobs = [];
+    try {
+      const r = await fetch('/api/jobs', src.opts);
+      if (!r.ok) continue;
+      jobs = (await r.json()) || [];
+    } catch (_) { continue; }
+
+    for (const j of jobs) {
+      if (j.status !== 'running' && j.status !== 'queued') continue;
+      if (!j.key || !j.progress_url) continue;
+      // Already on the bar — either this tab started it, or a previous sweep
+      // adopted it. Leave that entry alone rather than overwriting its options.
+      if (typeof activeJobs === 'object' && activeJobs && activeJobs[j.key]) continue;
+      _bgPollJob(j.key, j.label || 'Background task', j.progress_url,
+        _JOB_ONDONE[j.kind], {
+          kind: j.kind,
+          op: j.op,
+          cancelURL: j.cancel_url || undefined,
+          // Honour the job's own pinning, but never pin a job discovered
+          // through the relay to the local host — it does not live there.
+          localOnly: src.localOnly && !!j.local_only,
+        });
     }
-    if (rr && rr.ok) {
-      const d = await rr.json();
-      for (const j of (d.jobs || [])) {
-        if (j.status !== 'running' && j.status !== 'queued') continue;
-        if (visible('brj-' + j.job_id)) continue;
-        _bgPollRestoreJob(j.job_id, 'Restore ' + j.vm_id + ' → ' + j.clone_name, _bgJobBoardRefresh);
-      }
-    }
-  } catch (_) { /* transient — next tick retries */ }
+  }
 }
+
+// Retained name: this used to hold a backup/restore-only sweep, which the job
+// board now covers along with every other job type.
+async function _bgDiscoverServerJobs() { return _bgDiscoverAllJobs(); }
 
 let _bgDiscoverIv = null;
 function _startBgJobDiscovery() {
   if (_bgDiscoverIv) return;
-  _bgDiscoverServerJobs();                                  // immediate first sweep
-  _bgDiscoverIv = setInterval(_bgDiscoverServerJobs, 10000); // then every 10s
+  _bgDiscoverAllJobs();                                  // immediate first sweep
+  _bgDiscoverIv = setInterval(_bgDiscoverAllJobs, 10000); // then every 10s
 }
 
 // ====== Datastores → Backups page ===========================================
@@ -46681,7 +46836,7 @@ function _bkupBurger(e, ctx) {
   const deps = ctx.dependents || [];
   const label = isSnap ? '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Delete Snapshot' : '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Delete Backup';
   const btn = document.createElement('button');
-  btn.textContent = label;
+  btn.innerHTML = label;   // static markup — `label` carries an inline SVG icon
   btn.className = 'danger';
   if (!isSnap && deps.length) {
     // Locked — an Instant Independent Restore is running off this backup.
@@ -57749,10 +57904,14 @@ async function _softRelayRefresh() {
     // _relayRestoreView, at the very end of this function, is what actually
     // lands us on the new server's Services home — this only tears the old
     // server's iframe down early and starts the new list loading.
-    if (_sidebarMode === 'services') {
-      if (typeof renderServicesNav  === 'function') renderServicesNav();
-      if (typeof openServicesHome   === 'function') openServicesHome();
-      if (typeof refreshServices    === 'function') refreshServices(false);
+    // Only when a service page is actually on screen — the Compute tab also
+    // shows VM/container pages, which must not be yanked to the services home.
+    if (_sidebarMode === 'compute') {
+      if (typeof renderServicesNav === 'function') renderServicesNav();
+      const active = document.querySelector('.page:not(.hidden)');
+      const onSvc = active && (active.id === 'page-services' || active.id === 'page-service-view');
+      if (onSvc && typeof openServicesHome === 'function') openServicesHome();
+      if (typeof refreshServices === 'function') refreshServices(false);
     }
 
     // Re-fetch version + feature flags. This updates window._serverHostname
@@ -57785,7 +57944,7 @@ async function _softRelayRefresh() {
         _experimentalMode = !!d.experimental_mode;
         if (typeof d.mergerfs_installed === 'boolean')   window._mergerfsInstalled = d.mergerfs_installed;
         if (typeof d.mergerfs_enabled === 'boolean')     window._mergerfsEnabled   = d.mergerfs_enabled;
-        if (typeof d.services_enabled === 'boolean')      { window._servicesEnabled = d.services_enabled; _applyServicesTabVisibility(); }
+        if (typeof d.services_enabled === 'boolean')      { window._servicesEnabled = d.services_enabled; _applyServicesNavVisibility(); }
         if (typeof d.service_proxy_enabled === 'boolean')   window._serviceProxyEnabled = d.service_proxy_enabled;
         if (typeof _applyMergerFSNav === 'function')     _applyMergerFSNav();
         if (typeof d.lxd_available === 'boolean')        window._lxdAvailable      = d.lxd_available;
@@ -57908,7 +58067,7 @@ async function _relayRestoreView(view) {
   if (page === 'services' || page === 'service-view') {
     if (window._lxdAvailable && window._servicesEnabled !== false
         && typeof openServicesHome === 'function') {
-      if (typeof _applySidebarModeUI === 'function') _applySidebarModeUI('services');
+      if (typeof _applySidebarModeUI === 'function') _applySidebarModeUI('compute');
       openServicesHome();
       return;
     }
@@ -59930,7 +60089,9 @@ function fbUpdateToolbar() {
   if (_fbCtx.clipboard) {
     cl.style.display = '';
     const verb = _fbCtx.clipboard.mode === 'cut' ? '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg> cut' : '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> copied';
-    txt.textContent = `${_fbCtx.clipboard.items.length} item(s) ${verb} from ${_fbCtx.clipboard.rootLabel}/${_fbCtx.clipboard.subpath || ''}`;
+    // innerHTML, not textContent: `verb` carries an inline SVG icon. Path
+    // parts come from the filesystem, so they must be escaped.
+    txt.innerHTML = `${_fbCtx.clipboard.items.length} item(s) ${verb} from ${esc(_fbCtx.clipboard.rootLabel)}/${esc(_fbCtx.clipboard.subpath || '')}`;
   } else {
     cl.style.display = 'none';
   }
@@ -60097,6 +60258,11 @@ async function fbPaste() {
   await _fbPasteRun(verb, cb, fileBrowserState.root, fileBrowserState.subpath, false);
 }
 
+// How long a copy/move may run before it earns a progress popup. Below this a
+// transfer is over before the user could read anything, and flashing a modal
+// (or an activity-bar row) for it is pure noise.
+const _FB_TRANSFER_POPUP_DELAY_MS = 800;
+
 async function _fbPasteRun(verb, cb, dstRoot, dstSub, overwrite) {
   const body = {
     src_root: cb.root,
@@ -60113,7 +60279,8 @@ async function _fbPasteRun(verb, cb, dstRoot, dstSub, overwrite) {
     if (!r.ok) {
       const err = (await r.json()).error || 'failed';
       // If the error mentions "exists" and we didn't already retry with
-      // overwrite, ask the user.
+      // overwrite, ask the user. Validation still happens synchronously
+      // server-side, so this flow is unchanged by the move to background jobs.
       if (!overwrite && /exist/i.test(err)) {
         showConfirm({
           title: 'Overwrite existing entries?',
@@ -60125,12 +60292,76 @@ async function _fbPasteRun(verb, cb, dstRoot, dstSub, overwrite) {
       }
       throw new Error(err);
     }
-    if (verb === 'move') _fbCtx.clipboard = null;
-    await fileBrowserNavigate(fileBrowserState.subpath);
-    await fbLoadTree();
+    const d = await r.json();
+    // Same-filesystem move: an instant rename, already finished server-side.
+    if (d.done || !d.job_id) {
+      if (verb === 'move') _fbCtx.clipboard = null;
+      await fileBrowserNavigate(fileBrowserState.subpath);
+      await fbLoadTree();
+      return;
+    }
+    await _fbTrackTransfer(verb, d.job_id, cb, dstSub);
   } catch (e) {
     showToast(verb + ' failed: ' + e.message, 'error');
   }
+}
+
+// Watches a transfer job, raising the progress popup only if it is still
+// running after _FB_TRANSFER_POPUP_DELAY_MS.
+//
+// The single probe before handing over to _bgPollJob is deliberate: _bgPollJob
+// registers an activity-bar row as soon as it is called, so calling it
+// immediately would flash the bar's badge on every small copy. Probing first
+// means a fast transfer finishes completely unseen, exactly as it did when
+// copy/move were synchronous.
+async function _fbTrackTransfer(verb, jobId, cb, dstSub) {
+  const key         = 'fbt-' + jobId;
+  const progressURL = '/api/files/transfers/' + encodeURIComponent(jobId) + '/progress';
+  const cancelURL   = '/api/files/transfers/' + encodeURIComponent(jobId) + '/cancel';
+  const dstLabel    = dstSub || '/';
+  const label       = (verb === 'move' ? 'Moving ' : 'Copying ') +
+                      cb.items.length + ' item(s) → ' + dstLabel;
+
+  const refresh = async () => {
+    await fileBrowserNavigate(fileBrowserState.subpath);
+    await fbLoadTree();
+  };
+  // A move consumes the clipboard — but only the one it was started from. A
+  // large transfer finishes minutes or hours later, by which time the user may
+  // well have cut or copied something else, and clearing that would silently
+  // throw away their pending operation.
+  const consumeClipboard = () => {
+    if (verb === 'move' && _fbCtx.clipboard === cb) _fbCtx.clipboard = null;
+  };
+
+  await new Promise(res => setTimeout(res, _FB_TRANSFER_POPUP_DELAY_MS));
+
+  // One probe. A transient failure here is not fatal — fall through to the
+  // poller, which has its own retry/degrade handling.
+  try {
+    const pr = await fetch(progressURL, { credentials:'same-origin' });
+    if (pr.ok) {
+      const st = await pr.json();
+      if (st.status && st.status !== 'running') {
+        if (st.status === 'done') consumeClipboard();
+        if (st.status === 'error') showToast(verb + ' failed: ' + (st.error || 'unknown'), 'error');
+        await refresh();
+        return;
+      }
+    }
+  } catch (_) { /* fall through to the poller */ }
+
+  _bgPollJob(key, label, progressURL, async () => {
+    const st = _bgJobs[key];
+    if (st && st.status === 'done') consumeClipboard();
+    if (st && st.status === 'canceled') {
+      showToast(verb === 'move'
+        ? 'Move cancelled — items already moved are at the destination, the rest were left in place'
+        : 'Copy cancelled — files already copied were kept', 'info');
+    }
+    await refresh();
+  }, { cancelURL, kind: 'transfer', op: verb });
+  _openBgJobModal(key);
 }
 
 // ── Delete ───────────────────────────────────────────────────────────────────
@@ -61652,14 +61883,10 @@ function _renderBmHistCharts(series) {
 
 function _setNetworkingRootActive() {
   document.querySelectorAll('#nav-networking-bridges .nav-compute-instance').forEach(b => b.classList.remove('active'));
-  const root = document.getElementById('nav-networking-root');
-  if (root) root.style.color = 'var(--accent)';
+  _setNavRootActive('nav-networking-root');
 }
 
-function _clearNetworkingRootActive() {
-  const root = document.getElementById('nav-networking-root');
-  if (root) root.style.color = '';
-}
+function _clearNetworkingRootActive() { _setNavRootActive(null); }
 
 function refreshNetworkingNav() {
   if (_lxdNetworksCache.length > 0) {
@@ -62266,14 +62493,10 @@ function _closeDsMenus() { if (_openDsMenu) { _openDsMenu.remove(); _openDsMenu 
 
 function _setDatastoresRootActive() {
   document.querySelectorAll('#nav-datastores-list .nav-compute-instance').forEach(b => b.classList.remove('active'));
-  const root = document.getElementById('nav-datastores-root');
-  if (root) root.style.color = 'var(--accent)';
+  _setNavRootActive('nav-datastores-root');
 }
 
-function _clearDatastoresRootActive() {
-  const root = document.getElementById('nav-datastores-root');
-  if (root) root.style.color = '';
-}
+function _clearDatastoresRootActive() { _setNavRootActive(null); }
 
 function refreshDatastoresNav() {
   if (_lxdStorageCacheDS.length > 0) {

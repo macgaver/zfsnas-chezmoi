@@ -1229,6 +1229,15 @@ body:not(.is-phone) .lxd-inst-table td[data-col="name"] .lxd-name-2 {
   margin-top: 12px;
 }
 
+/* A clickable section header (Compute / Services / Networking) that IS the page
+   you are on. Same highlight language as .nav-item.active below, so "where am I"
+   reads identically whether you picked a page or a section. `body ` prefix so it
+   outranks the per-theme .sidebar-section colour overrides. */
+body .sidebar-section.nav-root-active {
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--accent-2);
+}
+
 .nav-item {
   position: relative;
   display: flex;
@@ -3716,7 +3725,7 @@ body.is-phone .lxd-table-card { overflow: visible; max-height: none; min-height:
 body.is-phone .lxd-table-card thead th { position: static; }
 
 
-/* ── Services tab (v6.8.1) ─────────────────────────────────────────────────── */
+/* ── Services category + pages (v6.8.1) ───────────────────────────────────── */
 
 /* Styled hover label for the sidebar mode icons. Replaces the native title=
    tooltip, which is slow to appear and unstyleable. */

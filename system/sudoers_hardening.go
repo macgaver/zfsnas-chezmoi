@@ -433,6 +433,12 @@ func buildFilesAlias() string {
 		"    /usr/bin/cp -a -f *, \\\n" +
 		"    /usr/bin/cp -a -n *, \\\n" +
 		"    /usr/bin/cp -a *, \\\n" +
+		// File Browser transfer jobs: rsync gives copy/move a real progress
+		// percentage and a clean cancel, kill terminates the process group when
+		// the user cancels. Both live here rather than only in the optional
+		// ZFSNAS_RSYNC alias, which a host without external storage never gets.
+		"    /usr/bin/rsync *, \\\n" +
+		"    /usr/bin/kill *, \\\n" +
 		// v6.5.29 — raw-file preview endpoint streams allow-listed MIME
 		// types from inside knownRoots; uses stat for size+mtime,
 		// head for the 512-byte MIME sniff, cat for the body.
@@ -1042,8 +1048,8 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/curlftpfs *":                                                   "Mounts a remote FTP server under /mnt/zfsnas-ext for the Protect → Filesystem rsync feature (browsing + sync jobs).",
 	"/usr/bin/umount /mnt/zfsnas-ext/*":                                      "Unmounts external storages of the Filesystem rsync feature — on-demand mounts are detached automatically after ~15 minutes idle. Path-scoped to the feature's mount directory.",
 	"/usr/bin/rmdir /mnt/zfsnas-ext/*":                                       "Removes empty external-storage mountpoint directories (connection-test probes). Path-scoped to the feature's mount directory.",
-	"/usr/bin/rsync *":                                                       "Runs the actual file synchronization between local datasets and a mounted external storage (Protect → Filesystem rsync). Needs root so file ownership and permissions are preserved on both sides.",
-	"/usr/bin/kill *":                                                        "Stops or pauses a running rsync synchronization (user Stop button, daily time-window enforcement). The rsync processes run as root, so terminating them needs root too.",
+	"/usr/bin/rsync *":                                                       "Runs the actual file synchronization between local datasets and a mounted external storage (Protect → Filesystem rsync), and performs File Browser copy/move of large files and folders — rsync is what supplies the live progress percentage, transfer speed and ETA shown in the progress popup. Needs root so file ownership and permissions are preserved on both sides.",
+	"/usr/bin/kill *":                                                        "Stops or pauses a running rsync synchronization (user Stop button, daily time-window enforcement) and terminates a File Browser copy/move the user cancels. Those processes run as root, so terminating them needs root too.",
 	"/usr/bin/apt-get *":                                                     "Package installation and OS updates. Used by the Prerequisites tab and the Settings > OS Updates page.",
 	"/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get *":                  "OS package upgrade with debconf forced non-interactive (suppresses the 'unable to initialize frontend' warnings on the unattended Auto Update). Used by Settings > OS Updates.",
 	"/usr/bin/tee /etc/apt/apt.conf.d/20auto-upgrades":                       "Turns the OS automatic-background-upgrade service (unattended-upgrades) on or off from the OS Packages card. Writes the same apt periodic config that `dpkg-reconfigure unattended-upgrades` manages (v6.6.27+).",

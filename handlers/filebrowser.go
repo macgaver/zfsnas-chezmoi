@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
+
 	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/system"
@@ -427,6 +430,23 @@ type fbMoveCopyReq struct {
 // knownRoots).
 // POST /api/files/move
 func HandleFileBrowserMove(w http.ResponseWriter, r *http.Request) {
+	fbStartTransfer(w, r, "move")
+}
+
+// fbStartTransfer backs both /api/files/copy and /api/files/move.
+//
+// Validation is synchronous, so a bad request still fails the POST and the
+// frontend's overwrite-confirm flow is unaffected. Past that the work runs as a
+// background job and the response carries a job id the client polls — a 69 GB
+// copy used to hold this request open for an hour with no progress and no way
+// to cancel it.
+//
+// Three response shapes:
+//
+//	{"ok":true,"done":true}          same-filesystem move, already finished
+//	{"ok":true,"job_id":"fbt-…"}     transfer running in the background
+//	{"error":"…"}                    validation failed, nothing started
+func fbStartTransfer(w http.ResponseWriter, r *http.Request, op string) {
 	var req fbMoveCopyReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -440,24 +460,83 @@ func HandleFileBrowserMove(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := system.MovePaths(srcAbs, req.SrcSubpaths, dstAbs, req.DstSubpath, req.Overwrite); err != nil {
-		jsonErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+
 	sess, _ := SessionFromRequest(r)
 	user := ""
 	if sess != nil {
 		user = sess.Username
 	}
-	details := fmt.Sprintf("mv %d → %s", len(req.SrcSubpaths), filepath.Join(dstAbs, req.DstSubpath))
-	audit.Log(audit.Entry{
-		User:    user,
-		Action:  audit.ActionFileBrowserMove,
-		Target:  filepath.Join(dstAbs, req.DstSubpath),
-		Result:  audit.ResultOK,
-		Details: details,
-	})
-	jsonOK(w, map[string]interface{}{"ok": true, "moved": len(req.SrcSubpaths)})
+	target := filepath.Join(dstAbs, req.DstSubpath)
+	action := audit.ActionFileBrowserCopy
+	verb := "cp -a"
+	if op == "move" {
+		action = audit.ActionFileBrowserMove
+		verb = "mv"
+	}
+
+	// Audit at completion rather than at kickoff: the outcome is only known when
+	// the job ends, and a transfer can now be cancelled or fail long after this
+	// request returned.
+	onFinish := func(j *system.FbTransferJob) {
+		result := audit.ResultOK
+		if j.Status != "done" {
+			result = audit.ResultError
+		}
+		details := fmt.Sprintf("%s %d → %s (%s, %s)", verb, len(req.SrcSubpaths), target, j.Engine, j.Status)
+		if j.Error != "" {
+			details += ": " + j.Error
+		}
+		audit.Log(audit.Entry{
+			User:    user,
+			Action:  action,
+			Target:  target,
+			Result:  result,
+			Details: details,
+		})
+	}
+
+	job, err := system.StartFbTransfer(op, srcAbs, req.SrcSubpaths, dstAbs, req.DstSubpath, req.Overwrite, onFinish)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if job == nil {
+		// Same-filesystem move: an instant rename, already done. Audited inline
+		// because no job exists to report an outcome later.
+		audit.Log(audit.Entry{
+			User:    user,
+			Action:  action,
+			Target:  target,
+			Result:  audit.ResultOK,
+			Details: fmt.Sprintf("%s %d → %s (rename)", verb, len(req.SrcSubpaths), target),
+		})
+		jsonOK(w, map[string]interface{}{"ok": true, "done": true})
+		return
+	}
+	jsonOK(w, map[string]interface{}{"ok": true, "job_id": job.ID})
+}
+
+// HandleFbTransferProgress returns one transfer job's state.
+// GET /api/files/transfers/{id}/progress
+func HandleFbTransferProgress(w http.ResponseWriter, r *http.Request) {
+	job := system.FbTransferByID(mux.Vars(r)["id"])
+	if job == nil {
+		jsonErr(w, http.StatusNotFound, "unknown transfer")
+		return
+	}
+	jsonOK(w, job.Snapshot())
+}
+
+// HandleFbTransferCancel stops a running transfer.
+// POST /api/files/transfers/{id}/cancel
+func HandleFbTransferCancel(w http.ResponseWriter, r *http.Request) {
+	job := system.FbTransferByID(mux.Vars(r)["id"])
+	if job == nil {
+		jsonErr(w, http.StatusNotFound, "unknown transfer")
+		return
+	}
+	job.Cancel()
+	jsonOK(w, map[string]interface{}{"ok": true})
 }
 
 // HandleFileBrowserRename renames a single entry in place.
@@ -495,40 +574,10 @@ func HandleFileBrowserRename(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]interface{}{"ok": true})
 }
 
-// HandleFileBrowserCopy copies entries (cp -a, cross-root OK).
+// HandleFileBrowserCopy copies entries (cross-root OK) as a background job.
 // POST /api/files/copy
 func HandleFileBrowserCopy(w http.ResponseWriter, r *http.Request) {
-	var req fbMoveCopyReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	srcAbs, _, ok := fbResolveRoot(w, req.SrcRoot)
-	if !ok {
-		return
-	}
-	dstAbs, _, ok := fbResolveRoot(w, req.DstRoot)
-	if !ok {
-		return
-	}
-	if err := system.CopyPaths(srcAbs, req.SrcSubpaths, dstAbs, req.DstSubpath, req.Overwrite); err != nil {
-		jsonErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	sess, _ := SessionFromRequest(r)
-	user := ""
-	if sess != nil {
-		user = sess.Username
-	}
-	details := fmt.Sprintf("cp -a %d → %s", len(req.SrcSubpaths), filepath.Join(dstAbs, req.DstSubpath))
-	audit.Log(audit.Entry{
-		User:    user,
-		Action:  audit.ActionFileBrowserCopy,
-		Target:  filepath.Join(dstAbs, req.DstSubpath),
-		Result:  audit.ResultOK,
-		Details: details,
-	})
-	jsonOK(w, map[string]interface{}{"ok": true, "copied": len(req.SrcSubpaths)})
+	fbStartTransfer(w, r, "copy")
 }
 
 // HandleFileBrowserDownload streams an arbitrary file with

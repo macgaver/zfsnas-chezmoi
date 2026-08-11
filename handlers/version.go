@@ -44,7 +44,7 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 		"lxd_metrics_enabled": lxdMetricsEnabled,
 		"mergerfs_installed":  system.MergerFSInstalled(),
 		"mergerfs_enabled":    mergerfsEnabled,
-		// v6.8.1 — gates the Services tab and the in-panel embed.
+		// v6.8.1 — gates the Services category (Compute section) and the in-panel embed.
 		"services_enabled":       servicesEnabled,
 		"service_proxy_enabled":  serviceProxyEnabled,
 		// v6.5.19: changed across polls means the server restarted or was

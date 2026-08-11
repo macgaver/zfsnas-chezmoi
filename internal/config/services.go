@@ -16,6 +16,11 @@ import (
 	"time"
 )
 
+// ServiceGoneGrace is how long a provably-absent service is retained before
+// deletion. A stack taken down for a few minutes keeps the user's overrides;
+// one genuinely removed disappears by the next day.
+const ServiceGoneGrace = 24 * time.Hour
+
 // ServiceEntry is one discovered or user-created application.
 type ServiceEntry struct {
 	ID     string `json:"id"`
@@ -73,7 +78,11 @@ type ServiceEntry struct {
 	UnreachableReason string `json:"unreachable_reason,omitempty"`
 	Tags         []string  `json:"tags,omitempty"` // replicated from the parent instance
 	LastSeen     time.Time `json:"last_seen,omitempty"`
-	LastState    string    `json:"last_state,omitempty"` // "running" | "exited" | "unknown"
+	LastState    string    `json:"last_state,omitempty"` // "running" | "exited" | "unknown" | "gone"
+	// GoneSince is when an authoritative pass first failed to find this
+	// service. Zero means present, or absent for reasons this host cannot
+	// speak to (instance powered off, docker unreachable, discovery disabled).
+	GoneSince time.Time `json:"gone_since,omitempty"`
 }
 
 // ServiceID is the stable key for a service.
@@ -112,6 +121,16 @@ func (e *ServiceEntry) IgnoreTLSOn() bool {
 	return e.IgnoreTLSErrors == nil || *e.IgnoreTLSErrors
 }
 
+// hasUserOverrides reports whether a user has deliberately configured this
+// entry. Anything they touched is worth more than our tidiness, so it is never
+// swept away without the normal grace period.
+func (e *ServiceEntry) hasUserOverrides() bool {
+	return e.Name != "" || e.PortOverride != 0 || e.SchemeOverride != "" ||
+		e.PathOverride != "" || e.URLOverride != "" || e.OpenMode != "" ||
+		e.IconOverride != "" || e.Hidden || e.Pinned != nil ||
+		e.IgnoreTLSErrors != nil
+}
+
 // PinnedOn reports whether this service belongs in the left menu. Unset falls
 // back to the rule that predates the flag — an embedded service was pinned by
 // definition — so nothing moves out of the menu on upgrade.
@@ -130,12 +149,20 @@ func SaveServices(s []ServiceEntry) error { return saveJSON("services.json", s) 
 //   - Discovered facts (instance, container, image, port, tags, state) are
 //     refreshed from the pass.
 //   - Every user override is carried forward untouched.
-//   - Entries not seen this pass keep their data and are marked "unknown", so a
-//     stopped instance's services remain listed (greyed) and startable.
 //   - Custom (user-created) services are never modified by discovery.
 //
+// Absence is interpreted, not assumed. `scanned` holds the instances this pass
+// could actually enumerate; `alive` holds every instance that still exists. An
+// instance is AUTHORITATIVE when scanned[i] || !alive[i] — either we looked, or
+// it is gone for good. A service missing from an authoritative instance is
+// provably gone: it is marked and pruned after ServiceGoneGrace. A service
+// missing from a non-authoritative instance (powered off, docker down) is
+// retained and marked "unknown", exactly as before, so a stopped instance's
+// services stay listed and startable.
+//
 // Order is stable: existing entries keep their position, new ones are appended.
-func MergeServices(existing, discovered []ServiceEntry) []ServiceEntry {
+func MergeServices(existing, discovered []ServiceEntry,
+	scanned, alive map[string]bool, now time.Time) []ServiceEntry {
 	byID := make(map[string]ServiceEntry, len(existing)+len(discovered))
 	order := make([]string, 0, len(existing)+len(discovered))
 	for _, e := range existing {
@@ -159,18 +186,50 @@ func MergeServices(existing, discovered []ServiceEntry) []ServiceEntry {
 		prev.Project, prev.Container, prev.ContainerID = d.Project, d.Container, d.ContainerID
 		prev.Image = d.Image
 		prev.IP = d.IP
-		prev.DetectedPort = d.DetectedPort
-		prev.PublishedPorts = d.PublishedPorts
+		// Ports are kept when a pass reports none. Docker only lists bindings
+		// while a container RUNS, so erasing them on every stop would destroy
+		// the record of what this service publishes — and leave a stopped
+		// service looking exactly like ephemeral junk to the sweep below. A
+		// container recreated on different ports reports them, so real changes
+		// still land.
+		if d.DetectedPort > 0 {
+			prev.DetectedPort = d.DetectedPort
+		}
+		if len(d.PublishedPorts) > 0 {
+			prev.PublishedPorts = d.PublishedPorts
+		}
 		prev.Reachable, prev.UnreachableReason = d.Reachable, d.UnreachableReason
 		prev.Tags = d.Tags
 		prev.LastSeen, prev.LastState = d.LastSeen, d.LastState
+		prev.GoneSince = time.Time{} // it is back; forget it was ever missing
 		byID[d.ID] = prev
 	}
 
 	out := make([]ServiceEntry, 0, len(order))
 	for _, id := range order {
 		e := byID[id]
-		if e.Source != "custom" && !seen[e.ID] {
+		if e.Source == "custom" || seen[e.ID] {
+			out = append(out, e)
+			continue
+		}
+		// Retroactive eligibility sweep. An entry stored before the ingest
+		// filter existed, which that filter would never admit today, can never
+		// be rediscovered — so a grace period would only delay the inevitable.
+		// Mirrors system.EligibleForService; a user-touched entry is spared.
+		if e.Project == "" && len(e.PublishedPorts) == 0 && e.DetectedPort == 0 &&
+			!e.hasUserOverrides() {
+			continue
+		}
+		if scanned[e.Instance] || !alive[e.Instance] {
+			// We looked and it was not there, or its instance no longer exists.
+			if e.GoneSince.IsZero() {
+				e.GoneSince = now
+			}
+			if now.Sub(e.GoneSince) > ServiceGoneGrace {
+				continue // prune
+			}
+			e.LastState = "gone"
+		} else {
 			// Instance stopped, unreachable, or discovery disabled this pass.
 			e.LastState = "unknown"
 		}

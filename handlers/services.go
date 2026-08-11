@@ -51,11 +51,21 @@ func StartServiceDiscovery(appCfg *config.AppConfig) {
 	}()
 }
 
+// scannableInstance reports whether a discovery pass should try to enumerate
+// this instance's containers. Only running instances can answer, and backup
+// clones (bkup--*) are transient copies whose containers are not services.
+// An instance that fails this test is never authoritative: its absence from a
+// pass says nothing about whether its services still exist.
+func scannableInstance(inst system.LXDInstance) bool {
+	return inst.Status == "Running" && !strings.HasPrefix(inst.Name, "bkup--")
+}
+
 // runServiceDiscovery performs one full sweep: every RUNNING VM/LXC is probed
 // for a container runtime, its containers are grouped into services, and the
 // result is merged into the stored list. Services of stopped or unreachable
 // instances are retained by MergeServices (marked "unknown") so they stay
-// visible and startable.
+// visible and startable; services missing from an instance we DID successfully
+// scan are marked gone and pruned after config.ServiceGoneGrace.
 func runServiceDiscovery(appCfg *config.AppConfig) error {
 	serviceDiscoveryMu.Lock()
 	defer serviceDiscoveryMu.Unlock()
@@ -68,10 +78,30 @@ func runServiceDiscovery(appCfg *config.AppConfig) error {
 		return err
 	}
 
+	existing, err := config.LoadServices()
+	if err != nil {
+		return err
+	}
+	// Services we already know about. A container that has stopped reports no
+	// ports, so the eligibility rule alone would drop a service the user merely
+	// stopped; this set lets grouping recognise it. See system.GroupServices.
+	knownIDs := make(map[string]bool, len(existing))
+	for _, e := range existing {
+		if e.Source == "discovered" {
+			knownIDs[e.ID] = true
+		}
+	}
+
 	now := time.Now()
 	var discovered []config.ServiceEntry
+	// scanned = instances this pass could actually enumerate; alive = every
+	// instance that still exists. MergeServices needs both to tell "the
+	// container is gone" from "we could not look". See config.MergeServices.
+	scanned := map[string]bool{}
+	alive := map[string]bool{}
 	for _, inst := range instances {
-		if inst.Status != "Running" || strings.HasPrefix(inst.Name, "bkup--") {
+		alive[inst.Name] = true
+		if !scannableInstance(inst) {
 			continue
 		}
 		if !system.DockerProbe(inst.Name).Available {
@@ -81,7 +111,11 @@ func runServiceDiscovery(appCfg *config.AppConfig) error {
 		if err != nil {
 			continue
 		}
-		for _, svc := range system.GroupServices(containers) {
+		scanned[inst.Name] = true
+		known := func(c system.DockerContainer) bool {
+			return knownIDs[config.ServiceID(inst.Name, c.Project, c.Name)]
+		}
+		for _, svc := range system.GroupServices(containers, known) {
 			// Choose an address the host can ACTUALLY reach, rather than
 			// trusting the instance's single best-guess IP. Multi-homed guests
 			// (the norm once Docker is installed) otherwise produce URLs that
@@ -108,11 +142,7 @@ func runServiceDiscovery(appCfg *config.AppConfig) error {
 		}
 	}
 
-	existing, err := config.LoadServices()
-	if err != nil {
-		return err
-	}
-	return config.SaveServices(config.MergeServices(existing, discovered))
+	return config.SaveServices(config.MergeServices(existing, discovered, scanned, alive, now))
 }
 
 // serviceOut is the API shape. It adds the computed fields the UI needs so the

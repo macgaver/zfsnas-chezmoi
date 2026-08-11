@@ -62,7 +62,7 @@ func TestGroupServicesCollapsesStack(t *testing.T) {
 		{ID: "2", Name: "app-web-1", Image: "nginx", State: "running", Project: "app", Ports: "0.0.0.0:8080->80/tcp"},
 		{ID: "3", Name: "app-redis-1", Image: "redis", State: "running", Project: "app", Ports: ""},
 	}
-	out := GroupServices(cs)
+	out := GroupServices(cs, nil)
 	if len(out) != 1 {
 		t.Fatalf("want 1 service for a 3-container stack, got %d", len(out))
 	}
@@ -79,11 +79,13 @@ func TestGroupServicesCollapsesStack(t *testing.T) {
 
 // Containers with no compose project each stand alone.
 func TestGroupServicesStandalone(t *testing.T) {
+	// Both fixtures publish a port: a standalone container that publishes
+	// nothing is no longer a service at all. See TestEligibleForService.
 	cs := []DockerContainer{
 		{ID: "1", Name: "pihole", Image: "pihole", State: "running", Ports: "0.0.0.0:8081->80/tcp"},
-		{ID: "2", Name: "watchtower", Image: "watchtower", State: "running", Ports: ""},
+		{ID: "2", Name: "portainer", Image: "portainer", State: "running", Ports: "0.0.0.0:9000->9000/tcp"},
 	}
-	out := GroupServices(cs)
+	out := GroupServices(cs, nil)
 	if len(out) != 2 {
 		t.Fatalf("want 2 standalone services, got %d", len(out))
 	}
@@ -101,7 +103,7 @@ func TestGroupServicesStackWithoutPorts(t *testing.T) {
 		{ID: "1", Name: "job-worker-1", Image: "worker", State: "running", Project: "job"},
 		{ID: "2", Name: "job-cron-1", Image: "cron", State: "running", Project: "job"},
 	}
-	out := GroupServices(cs)
+	out := GroupServices(cs, nil)
 	if len(out) != 1 {
 		t.Fatalf("want 1 service, got %d", len(out))
 	}
@@ -117,9 +119,9 @@ func TestGroupServicesIsDeterministic(t *testing.T) {
 		{ID: "1", Name: "s-b-1", Image: "b", State: "running", Project: "s", Ports: "0.0.0.0:8080->80/tcp"},
 		{ID: "2", Name: "s-a-1", Image: "a", State: "running", Project: "s", Ports: "0.0.0.0:8081->80/tcp"},
 	}
-	first := GroupServices(cs)
+	first := GroupServices(cs, nil)
 	for i := 0; i < 5; i++ {
-		got := GroupServices(cs)
+		got := GroupServices(cs, nil)
 		if len(got) != len(first) || got[0].Container != first[0].Container {
 			t.Fatalf("non-deterministic election: %q vs %q", got[0].Container, first[0].Container)
 		}
@@ -201,5 +203,159 @@ func TestFilterCandidateAddrsDropsDockerBridges(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != "192.168.2.8" {
 		t.Errorf("want the real NIC addresses first, got %v", got)
+	}
+}
+
+func TestLabelPort(t *testing.T) {
+	if got := LabelPort(map[string]string{"znas.service.port": "9000"}); got != 9000 {
+		t.Errorf("znas.service.port ignored: got %d want 9000", got)
+	}
+	// The gethomepage convention is supported so users who already annotate
+	// their compose files get correct ports for free.
+	if got := LabelPort(map[string]string{"homepage.port": " 8123 "}); got != 8123 {
+		t.Errorf("homepage.port ignored: got %d want 8123", got)
+	}
+	// znas.service.port is checked first when both are present.
+	both := map[string]string{"homepage.port": "1111", "znas.service.port": "2222"}
+	if got := LabelPort(both); got != 2222 {
+		t.Errorf("key precedence wrong: got %d want 2222", got)
+	}
+	// Garbage and out-of-range values yield 0 rather than a bogus port.
+	for _, bad := range []string{"", "http", "0", "70000", "-1"} {
+		if got := LabelPort(map[string]string{"znas.service.port": bad}); got != 0 {
+			t.Errorf("bad label %q returned %d, want 0", bad, got)
+		}
+	}
+	if got := LabelPort(nil); got != 0 {
+		t.Errorf("nil labels returned %d, want 0", got)
+	}
+}
+
+// The label must reach PickWebPort through GroupServices — the plumbing that
+// was missing, not just the lookup itself.
+func TestGroupServicesHonorsPortLabel(t *testing.T) {
+	out := GroupServices([]DockerContainer{{
+		Name:   "app",
+		Ports:  "0.0.0.0:32768->80/tcp",
+		Labels: map[string]string{"znas.service.port": "32768"},
+	}}, nil)
+	if len(out) != 1 {
+		t.Fatalf("want 1 service, got %d", len(out))
+	}
+	if out[0].Port != 32768 {
+		t.Errorf("label port not used by GroupServices: got %d want 32768", out[0].Port)
+	}
+}
+
+// Election must prefer the container that DECLARES a port over a sibling that
+// merely publishes a known web port.
+func TestGroupServicesElectionPrefersLabelledContainer(t *testing.T) {
+	out := GroupServices([]DockerContainer{
+		{Name: "stack-nginx", Project: "stack", Ports: "0.0.0.0:8080->8080/tcp"},
+		{Name: "stack-app", Project: "stack", Ports: "0.0.0.0:9999->9999/tcp",
+			Labels: map[string]string{"znas.service.port": "80"}},
+	}, nil)
+	if len(out) != 1 {
+		t.Fatalf("want 1 service, got %d", len(out))
+	}
+	if out[0].Container != "stack-app" {
+		t.Errorf("elected %q, want stack-app (it declares its port)", out[0].Container)
+	}
+}
+
+func TestEligibleForService(t *testing.T) {
+	cases := []struct {
+		name string
+		c    DockerContainer
+		want bool
+	}{
+		// The 49 entries that motivated this: GitLab CI helper containers.
+		// No compose project, no published ports, lifetime of one CI job.
+		{"ci runner build", DockerContainer{
+			Name: "runner-cuga6vblp-project-74296642-concurrent-0-ae08eb5f979a2b0a-build",
+		}, false},
+		{"ci runner predefined", DockerContainer{
+			Name: "runner-cuga6vblp-project-19549604-concurrent-0-8a7de5df452873c2-predefined",
+		}, false},
+		// A portless standalone daemon. No URL, cannot be opened. Dropping it
+		// is the accepted cost of the rule.
+		{"portless standalone daemon", DockerContainer{Name: "gitlab-runner"}, false},
+		// A standalone container that publishes something is a real service.
+		{"standalone with port", DockerContainer{
+			Name: "registry", Ports: "0.0.0.0:6000->5000/tcp",
+		}, true},
+		// A compose project is declared and intentional — kept, ports or not.
+		{"portless compose member", DockerContainer{
+			Name: "myscripts", Project: "myscripts",
+		}, true},
+		{"compose member with port", DockerContainer{
+			Name: "pihole", Project: "pihole-ftl", Ports: "0.0.0.0:53->53/tcp",
+		}, true},
+		// The label is the deliberate override for anything the rule would
+		// otherwise drop — host-network containers, UDP-only services.
+		{"portless standalone with label", DockerContainer{
+			Name: "hostnet-app", Labels: map[string]string{"znas.service.port": "8080"},
+		}, true},
+		// Known sharp edge: publishedPortRe matches only /tcp, so a standalone
+		// UDP-only container is dropped. Pinned here so the behaviour is a
+		// decision on record rather than a surprise.
+		{"standalone udp only", DockerContainer{
+			Name: "dns-only", Ports: "0.0.0.0:5353->53/udp",
+		}, false},
+	}
+	for _, tc := range cases {
+		if got := EligibleForService(tc.c); got != tc.want {
+			t.Errorf("%s: EligibleForService = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// End to end over the real buildserver3 shape: two keepers among CI noise.
+func TestGroupServicesDropsEphemeralContainers(t *testing.T) {
+	out := GroupServices([]DockerContainer{
+		{Name: "gitlab-runner", State: "running"},
+		{Name: "registry", State: "running", Ports: "0.0.0.0:6000->5000/tcp"},
+		{Name: "runner-cuga6vblp-project-74296642-concurrent-0-297262cef62de6b3-build", State: "running"},
+		{Name: "runner-cuga6vblp-project-74296642-concurrent-0-297262cef62de6b3-predefined", State: "exited"},
+		{Name: "stack-web", Project: "stack", State: "running", Ports: "0.0.0.0:443->443/tcp"},
+	}, nil)
+	if len(out) != 2 {
+		names := make([]string, len(out))
+		for i, s := range out {
+			names[i] = s.Container
+		}
+		t.Fatalf("want 2 services, got %d: %v", len(out), names)
+	}
+	if out[0].Container != "registry" {
+		t.Errorf("first service = %q, want registry", out[0].Container)
+	}
+	if out[1].Project != "stack" {
+		t.Errorf("second service project = %q, want stack", out[1].Project)
+	}
+}
+
+// Docker reports NO ports once a container exits. Judged on its current state
+// alone a stopped standalone service is indistinguishable from CI junk, so it
+// would silently vanish from the list — the regression this callback prevents.
+func TestGroupServicesKeepsKnownStoppedStandalone(t *testing.T) {
+	stopped := []DockerContainer{
+		{ID: "1", Name: "registry", Image: "registry", State: "exited", Ports: ""},
+		{ID: "2", Name: "runner-cuga6vblp-project-1-concurrent-0-abc-build", State: "exited"},
+	}
+	// Without history, both look identical and both are dropped.
+	if out := GroupServices(stopped, nil); len(out) != 0 {
+		t.Fatalf("want 0 services without history, got %d", len(out))
+	}
+	// With history, the one we already know as a service survives — and only it.
+	known := func(c DockerContainer) bool { return c.Name == "registry" }
+	out := GroupServices(stopped, known)
+	if len(out) != 1 {
+		t.Fatalf("want 1 service, got %d", len(out))
+	}
+	if out[0].Container != "registry" {
+		t.Errorf("kept the wrong container: %q", out[0].Container)
+	}
+	if out[0].State != "exited" {
+		t.Errorf("state lost: %q", out[0].State)
 	}
 }

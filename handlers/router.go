@@ -467,6 +467,13 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleExtStorageRunRsync(appCfg))))).Methods("POST")
 	r.Handle("/api/extstorage/{id}/rsync/log",
 		RequireAuth(http.HandlerFunc(HandleExtStorageRsyncLog(appCfg)))).Methods("GET")
+	// Unified job board: every background job type, one endpoint pair, one
+	// interlink fan-out. This is what makes a running job visible from every web
+	// session and every linked server rather than only the tab that started it.
+	r.Handle("/api/jobs",
+		RequireAuth(http.HandlerFunc(HandleJobs))).Methods("GET")
+	r.Handle("/api/jobs/aggregate",
+		RequireAuth(http.HandlerFunc(HandleJobsAggregate(appCfg)))).Methods("GET")
 	r.Handle("/api/rsync-jobs",
 		RequireAuth(http.HandlerFunc(HandleRsyncJobs))).Methods("GET")
 	r.Handle("/api/rsync-jobs/aggregate",
@@ -823,6 +830,14 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleFileBrowserRename)))).Methods("POST")
 	r.Handle("/api/files/copy",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleFileBrowserCopy)))).Methods("POST")
+	// Copy/move of anything large runs as a background job; these drive the
+	// progress popup and its Cancel button. Discovery across sessions and
+	// servers is handled by the shared job board (/api/jobs), which every
+	// transfer registers with.
+	r.Handle("/api/files/transfers/{id}/progress",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleFbTransferProgress)))).Methods("GET")
+	r.Handle("/api/files/transfers/{id}/cancel",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleFbTransferCancel)))).Methods("POST")
 
 	// --- LXD VM & Container management (experimental) ---
 	// /api/lxd/status and /api/lxd/enable/* are always registered so the frontend

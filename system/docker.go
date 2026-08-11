@@ -59,6 +59,10 @@ type DockerContainer struct {
 	Service     string   `json:"service"`      // com.docker.compose.service
 	WorkingDir  string   `json:"working_dir"`  // com.docker.compose.project.working_dir
 	ConfigFiles []string `json:"config_files"` // com.docker.compose.project.config_files (split on comma)
+	// Labels is the container's full label map, retained for service discovery
+	// (znas.service.port / homepage.port). Excluded from JSON: the Docker card
+	// does not read labels, and some images carry a great many of them.
+	Labels map[string]string `json:"-"`
 }
 
 // DockerProbeResult tells the frontend whether to render the Docker card.
@@ -229,6 +233,7 @@ func DockerListContainers(instance string) ([]DockerContainer, error) {
 			c.ID = c.ID[:12] // short ID for the UI; the long one is still on c by way of Name
 		}
 		if raw.Config.Labels != nil {
+			c.Labels = raw.Config.Labels
 			c.Project = raw.Config.Labels["com.docker.compose.project"]
 			c.Service = raw.Config.Labels["com.docker.compose.service"]
 			c.WorkingDir = raw.Config.Labels["com.docker.compose.project.working_dir"]
@@ -611,6 +616,7 @@ func podmanListContainers(instance string) ([]DockerContainer, error) {
 			c.Name = r.Names[0]
 		}
 		if r.Labels != nil {
+			c.Labels = r.Labels
 			c.Project = r.Labels["com.docker.compose.project"]
 			c.Service = r.Labels["com.docker.compose.service"]
 			c.WorkingDir = r.Labels["com.docker.compose.project.working_dir"]
