@@ -10,7 +10,7 @@ import (
 // disabled the scrub-errors and security-updates polling gates.
 func TestAnyTargetWantsCoversAllKeys(t *testing.T) {
 	keys := []EventKey{
-		EventPoolDegraded, EventSmartError, EventWearoutExceeded,
+		EventPoolDegraded, EventPoolDataErrors, EventSmartError, EventWearoutExceeded,
 		EventFailedLogin, EventSecurityUpdates, EventScrubErrors,
 		EventSnapshotFailure, EventReplicationFailure, EventUserCreated,
 		EventShareCreated, EventPoolActions, EventVMStartFailure,
@@ -20,7 +20,7 @@ func TestAnyTargetWantsCoversAllKeys(t *testing.T) {
 		EventUPSPowerChanged,
 	}
 	all := EventConfig{
-		PoolDegraded: true, SmartError: true, WearoutExceeded: true,
+		PoolDegraded: true, PoolDataErrors: true, SmartError: true, WearoutExceeded: true,
 		FailedLoginAlert: true, SecurityUpdates: true, ScrubErrors: true,
 		SnapshotFailure: true, ReplicationFailure: true, UserCreatedDeleted: true,
 		ShareCreatedDeleted: true, PoolActions: true, VMStartFailure: true,

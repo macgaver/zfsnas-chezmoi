@@ -26,6 +26,9 @@ type EventKey string
 
 const (
 	EventPoolDegraded    EventKey = "pool_degraded"
+	// EventPoolDataErrors covers a pool that is ONLINE with every counter at
+	// zero yet has permanently lost file data. pool_degraded never fires for it.
+	EventPoolDataErrors  EventKey = "pool_data_errors"
 	EventSmartError      EventKey = "smart_error"
 	EventWearoutExceeded EventKey = "wearout_exceeded"
 	EventFailedLogin     EventKey = "failed_login_alert"
@@ -56,6 +59,7 @@ func matchesEvent(key EventKey, ev EventConfig) bool {
 	}
 	switch key {
 	case EventPoolDegraded:    return ev.PoolDegraded
+	case EventPoolDataErrors:  return ev.PoolDataErrors
 	case EventSmartError:      return ev.SmartError
 	case EventWearoutExceeded: return ev.WearoutExceeded
 	case EventFailedLogin:     return ev.FailedLoginAlert
@@ -106,6 +110,7 @@ type SMTPConfig struct {
 // EventConfig holds per-event subscription flags and thresholds.
 type EventConfig struct {
 	PoolDegraded         bool `json:"pool_degraded"`
+	PoolDataErrors       bool `json:"pool_data_errors"`
 	SmartError           bool `json:"smart_error"`
 	WearoutExceeded      bool `json:"wearout_exceeded"`
 	WearoutThresholdPct  int  `json:"wearout_threshold_pct"`

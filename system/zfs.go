@@ -60,6 +60,15 @@ type Pool struct {
 	WriteErrors         int      `json:"write_errors"`    // sum of per-device WRITE errors across all data vdevs
 	CksumErrors         int      `json:"cksum_errors"`    // sum of per-device CKSUM errors across all data vdevs
 	DataErrors          bool     `json:"data_errors"`     // true when `zpool status` reports known (permanent) data errors
+	// DataErrorCount is the number ZFS reports ("errors: 21 data errors"),
+	// DataErrorFiles the entries `zpool status -v` could resolve, and
+	// DataErrorUnresolved the difference. The two legitimately disagree:
+	// records for files that have since been DELETED still count but no longer
+	// resolve to a name, which reads as "errors with no filename". Reporting
+	// the gap explicitly is what makes that state explainable.
+	DataErrorCount      int      `json:"data_error_count"`
+	DataErrorFiles      []string `json:"data_error_files,omitempty"`
+	DataErrorUnresolved int      `json:"data_error_unresolved"`
 	Operation           string   `json:"operation"`       // "" | "scrubbing" | "resilvering" | "expanding"
 	SizeStr             string   `json:"size_str"`
 	AllocStr            string   `json:"alloc_str"`
@@ -109,7 +118,7 @@ func GetPool() (*Pool, error) {
 	p.Ashift = poolAshift(p.Name)
 	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	p.Vdevs = poolVdevGroups(p.Name)
-	p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = poolErrorSummary(p.Name, p.Vdevs)
+	p.setErrorSummary(poolErrorSummary(p.Name, p.Vdevs))
 	return p, nil
 }
 
@@ -171,7 +180,7 @@ func GetAllPools() ([]*Pool, error) {
 		p.Ashift = poolAshift(p.Name)
 		p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 		p.Vdevs = poolVdevGroups(p.Name)
-		p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = poolErrorSummary(p.Name, p.Vdevs)
+		p.setErrorSummary(poolErrorSummary(p.Name, p.Vdevs))
 		pools = append(pools, p)
 	}
 	return pools, nil
@@ -206,7 +215,7 @@ func GetPoolByName(name string) (*Pool, error) {
 	p.Ashift = poolAshift(p.Name)
 	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	p.Vdevs = poolVdevGroups(p.Name)
-	p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = poolErrorSummary(p.Name, p.Vdevs)
+	p.setErrorSummary(poolErrorSummary(p.Name, p.Vdevs))
 	return p, nil
 }
 
@@ -793,26 +802,129 @@ func parseErrCount(s string) int {
 // vdev topology and detects whether `zpool status` reports known (permanent)
 // data errors — i.e. the "errors:" line is anything other than
 // "No known data errors".
-func poolErrorSummary(poolName string, vdevs []VdevGroup) (read, write, cksum int, dataErrors bool) {
+// dataErrorFileCap bounds the file list put on the API. A pool with thousands
+// of damaged files is already lost; listing them all would only bloat every
+// pool poll.
+const dataErrorFileCap = 200
+
+// dataErrorCountRe matches the count in NON-verbose `zpool status` output.
+// With -v this line is replaced by the "Permanent errors…" header and the
+// number is gone, which is why both invocations are needed.
+var dataErrorCountRe = regexp.MustCompile(`errors:\s+(\d+)\s+data error`)
+
+// parseDataErrorCount pulls the error count out of non-verbose status output.
+// "No known data errors" and verbose output both yield 0.
+func parseDataErrorCount(status string) int {
+	m := dataErrorCountRe.FindStringSubmatch(status)
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// parseDataErrorFiles extracts the affected entries from `zpool status -v`.
+//
+// Entries are kept VERBATIM — paths contain spaces, and the three observed
+// forms all carry meaning the UI renders differently:
+//
+//	/POOL/dir/file            a live file
+//	POOL/ds@snap:/dir/file    held by a snapshot
+//	<0x1a2b>:<0x5c6d>         an object that no longer resolves to a name
+//
+// Collection starts only after the header, so the (also indented) config block
+// above it can never leak in. An unrecognised format degrades to an empty list
+// rather than to garbage.
+func parseDataErrorFiles(statusV string) []string {
+	const header = "Permanent errors have been detected"
+	var out []string
+	started := false
+	for _, line := range strings.Split(statusV, "\n") {
+		if !started {
+			if strings.Contains(line, header) {
+				started = true
+			}
+			continue
+		}
+		entry := strings.TrimSpace(line)
+		if entry == "" {
+			continue // the blank line between header and first entry
+		}
+		out = append(out, entry)
+		if len(out) >= dataErrorFileCap {
+			break
+		}
+	}
+	return out
+}
+
+// dataErrorUnresolved reports how many error records could not be resolved to
+// a name. Floored at zero: ZFS counts records, while -v can list the same
+// damaged block once per snapshot referencing it, so the list can legitimately
+// be longer than the count.
+func dataErrorUnresolved(count, listed int) int {
+	if count-listed < 0 {
+		return 0
+	}
+	return count - listed
+}
+
+// poolErrors is everything `zpool status` knows about a pool's error state.
+// Returned as one value so a caller cannot pick up the device counters and
+// silently forget the data-error fields — which is exactly the omission that
+// let the Pool Fixer recommend `zpool clear` on a pool with unrecoverable
+// corruption.
+type poolErrors struct {
+	Read, Write, Cksum int
+	Data               bool
+	Count              int
+	Files              []string
+	Unresolved         int
+}
+
+func poolErrorSummary(poolName string, vdevs []VdevGroup) poolErrors {
+	var pe poolErrors
 	for _, g := range vdevs {
 		for _, d := range g.Disks {
-			read += d.ReadErr
-			write += d.WriteErr
-			cksum += d.CksumErr
+			pe.Read += d.ReadErr
+			pe.Write += d.WriteErr
+			pe.Cksum += d.CksumErr
 		}
 	}
 	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
-	if err == nil {
-		for _, line := range strings.Split(string(out), "\n") {
-			tr := strings.TrimSpace(line)
-			if strings.HasPrefix(tr, "errors:") {
-				msg := strings.TrimSpace(strings.TrimPrefix(tr, "errors:"))
-				dataErrors = msg != "" && !strings.EqualFold(msg, "No known data errors")
-				break
-			}
+	if err != nil {
+		return pe
+	}
+	status := string(out)
+	for _, line := range strings.Split(status, "\n") {
+		tr := strings.TrimSpace(line)
+		if strings.HasPrefix(tr, "errors:") {
+			msg := strings.TrimSpace(strings.TrimPrefix(tr, "errors:"))
+			pe.Data = msg != "" && !strings.EqualFold(msg, "No known data errors")
+			break
 		}
 	}
-	return
+	if !pe.Data {
+		return pe
+	}
+	// Only affected pools pay for the second call. The verbose form is NOT a
+	// superset: it replaces the "N data errors" line with the file header, so
+	// the count has to come from the plain output above.
+	pe.Count = parseDataErrorCount(status)
+	if outV, errV := exec.Command("sudo", "zpool", "status", "-v", poolName).Output(); errV == nil {
+		pe.Files = parseDataErrorFiles(string(outV))
+	}
+	pe.Unresolved = dataErrorUnresolved(pe.Count, len(pe.Files))
+	return pe
+}
+
+// setErrorSummary copies a poolErrors onto the pool.
+func (p *Pool) setErrorSummary(pe poolErrors) {
+	p.ReadErrors, p.WriteErrors, p.CksumErrors, p.DataErrors = pe.Read, pe.Write, pe.Cksum, pe.Data
+	p.DataErrorCount, p.DataErrorFiles, p.DataErrorUnresolved = pe.Count, pe.Files, pe.Unresolved
 }
 
 func poolSpareDevs(poolName string) (raw, resolved, statuses []string) {

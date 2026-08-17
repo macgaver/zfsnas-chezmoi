@@ -18661,6 +18661,7 @@ function updateAuthFields() {
 function _buildEventSubsHTML(p) {
   return `
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-pool"><span>Pool health degraded (DEGRADED / FAULTED)</span></label>
+    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-pooldata"><span>Pool has permanent data errors (files lost)</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-smart"><span>SMART error detected on any disk</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-wearout"><span>Disk wearout exceeds <input type="number" id="al-${p}-wearout-pct" value="80" min="1" max="100" onclick="event.stopPropagation()">% <i class="info-tip tip-left tip-down" data-tip="Sends an alert when any SSD/NVMe reports wearout above this threshold."></i></span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-login"><span>Failed logins exceed <input type="number" id="al-${p}-login-count" value="5" min="1" max="1000" onclick="event.stopPropagation()"> attempts</span></label>
@@ -18695,6 +18696,7 @@ function _loadEventSubs(p, ev) {
   const setChk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = !!v; };
   const setNum = (id, v, d) => { const e = document.getElementById(id); if (e) e.value = v || d; };
   setChk(`al-${p}-ev-pool`,     ev.pool_degraded);
+  setChk(`al-${p}-ev-pooldata`, ev.pool_data_errors);
   setChk(`al-${p}-ev-smart`,    ev.smart_error);
   setChk(`al-${p}-ev-wearout`,  ev.wearout_exceeded);
   setNum(`al-${p}-wearout-pct`, ev.wearout_threshold_pct, 80);
@@ -18726,6 +18728,7 @@ function _collectEventSubs(p) {
   const num = (id, d) => parseInt(document.getElementById(id)?.value) || d;
   return {
     pool_degraded:          chk(`al-${p}-ev-pool`),
+    pool_data_errors:       chk(`al-${p}-ev-pooldata`),
     smart_error:            chk(`al-${p}-ev-smart`),
     wearout_exceeded:       chk(`al-${p}-ev-wearout`),
     wearout_threshold_pct:  num(`al-${p}-wearout-pct`, 80),
@@ -19144,13 +19147,17 @@ function _slowLoadHint(el, what, ms) {
 
 function poolStatusLabel(pool) {
   if (pool.operation) return pool.operation.toUpperCase();
+  // An ONLINE pool can still have permanently lost file data: every counter
+  // reads 0 and ZFS still says ONLINE. Saying only "ONLINE" is what made a real
+  // incident unreadable — the pool looked healthy for eight days.
+  if (pool.health === 'ONLINE' && pool.data_errors) return 'ONLINE \u2022 DATA ERRORS';
   return pool.health;
 }
 
 function poolStatusColor(pool) {
   if (pool.operation === 'scrubbing' || pool.operation === 'expanding') return '#0a84ff';
   if (pool.operation === 'resilvering') return '#5ac8fa';
-  if (pool.health === 'ONLINE') return 'var(--accent-3)';
+  if (pool.health === 'ONLINE') return pool.data_errors ? 'var(--accent-warn)' : 'var(--accent-3)';
   if (pool.health === 'DEGRADED') return 'var(--accent-warn)';
   return 'var(--accent-danger)';
 }
@@ -19539,11 +19546,17 @@ function updatePoolNavDot() {
   // Also show yellow when any encrypted pool has its key locked.
   const anyKeyLocked = allPoolsData.some(p => p.encrypted && p.key_locked);
 
+  // And when any pool has permanent data errors. Such a pool is ONLINE, so the
+  // `worst` scan above leaves it green — the whole point of this state is that
+  // ZFS health alone does not reveal it.
+  const anyDataErrors = allPoolsData.some(p => p.data_errors);
+
   // Show blue when any pool has an active informational operation (scrub, resilver, expand).
   const anyActiveOp = allPoolsData.some(p => p.operation === 'scrubbing' || p.operation === 'resilvering' || p.operation === 'expanding');
 
   const color = worst === 'FAULTED'  ? '#ff453a' :
                 worst === 'DEGRADED' ? '#ffd60a' :
+                anyDataErrors        ? '#ffd60a' :
                 anyKeyLocked         ? '#f0b429' :
                 anyActiveOp          ? '#0a84ff' :
                                        '#32d74b';
@@ -19558,6 +19571,9 @@ function updatePoolNavDot() {
   } else if (worst === 'DEGRADED') {
     const names = allPoolsData.filter(p => ['DEGRADED','OFFLINE'].includes((p.health||'').toUpperCase())).map(p => p.name).join(', ');
     _setLiveAlert('pool-health', { severity: 'warn', label: 'Pool degraded', message: names, page: 'pool' });
+  } else if (allPoolsData.some(p => p.data_errors)) {
+    const names = allPoolsData.filter(p => p.data_errors).map(p => p.name).join(', ');
+    _setLiveAlert('pool-health', { severity: 'warn', label: 'Pool has permanent data errors', message: names, page: 'pool' });
   } else if (anyKeyLocked) {
     const names = allPoolsData.filter(p => p.encrypted && p.key_locked).map(p => p.name).join(', ');
     _setLiveAlert('pool-health', { severity: 'warn', label: 'Encrypted pool key locked', message: names, page: 'pool' });
@@ -20080,7 +20096,8 @@ function renderPoolExists(el, pool) {
   // `zpool clear` (+ watch the disk) and should surface the wizard too.
   const poolDevErrs = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.cksum_errors || 0);
   const showFixer = hasPerm('manage_pool_dataset') &&
-    (pool.health === 'SUSPENDED' || pool.health === 'DEGRADED' || pool.health === 'FAULTED' || poolDevErrs > 0);
+    (pool.health === 'SUSPENDED' || pool.health === 'DEGRADED' || pool.health === 'FAULTED' ||
+     poolDevErrs > 0 || pool.data_errors);
   const fixerBtn = showFixer
     ? `<button class="btn btn-sm" onclick="openPoolFixerWizard()"
         style="background:linear-gradient(135deg,#6e40c9 0%,#2d7dd2 50%,#0dbbbd 100%);color:#fff;border:none;font-weight:600;letter-spacing:.02em;box-shadow:0 0 12px rgba(110,64,201,0.45);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg> Pool Fixer Wizard</button>`
@@ -22112,6 +22129,13 @@ async function openPoolFixerWizard() {
     _openFixerSuspended(pool, btn);
   } else if (pool.health === 'DEGRADED' || pool.health === 'FAULTED') {
     await _openFixerDegraded(pool, btn);
+  } else if (pool.data_errors) {
+    // MUST be tested before devErrs. A pool can have BOTH non-zero device
+    // counters and permanently lost data; if the device branch wins, the wizard
+    // offers `zpool clear`, which cannot repair data and merely resets the
+    // counters — the exact misdiagnosis that made a real incident look as
+    // though the wizard had destroyed the pool.
+    _openFixerDataErrors(pool, btn);
   } else if (devErrs > 0) {
     // Pool is ONLINE but ZFS logged device errors (e.g. checksum errors a scrub
     // already repaired). The right first step is `zpool clear`.
@@ -22307,6 +22331,98 @@ async function _openFixerDegraded(pool, btn) {
       <a href="https://openzfs.github.io/openzfs-docs/man/master/8/zpool.8.html" target="_blank" rel="noopener"
          style="color:var(--accent);text-decoration:underline;">OpenZFS zpool(8) manual</a>
       — in particular the <strong>DEVICE FAILURE AND RECOVERY</strong> section.
+    </div>`;
+}
+
+// Pool with PERMANENT data errors: blocks that failed checksum with no
+// surviving redundancy. Nothing in software can repair these, so this scene
+// explains and instructs — it exposes no action button at all.
+function _openFixerDataErrors(pool, btn) {
+  _fixerScene = 'data-errors';
+  btn.style.display = 'none';   // explanatory only: there is nothing safe to click
+
+  const files = pool.data_error_files || [];
+  const unresolved = pool.data_error_unresolved || 0;
+  const count = pool.data_error_count || files.length;
+
+  const fileRow = f => {
+    const isSnap = /^[^/][^:]*@[^:]+:/.test(f);
+    const isOpaque = /^<0x[0-9a-f]+>/i.test(f);
+    const tag = isOpaque
+      ? `<span style="color:var(--text-3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--border);border-radius:20px;padding:0 6px;margin-right:7px;">deleted</span>`
+      : isSnap
+      ? `<span style="color:#f0b429;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:1px solid rgba(240,180,41,.4);border-radius:20px;padding:0 6px;margin-right:7px;">snapshot</span>`
+      : `<span style="color:var(--accent-danger);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:1px solid rgba(248,81,73,.4);border-radius:20px;padding:0 6px;margin-right:7px;">live</span>`;
+    return `<div style="padding:5px 0;border-top:1px solid var(--border);font-size:11px;font-family:'SF Mono',monospace;word-break:break-all;line-height:1.5;">${tag}${esc(f)}</div>`;
+  };
+
+  document.getElementById('pool-fixer-content').innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:rgba(247,181,0,0.07);border:1px solid rgba(247,181,0,0.35);border-radius:var(--radius-sm);">
+      <span style="font-size:26px;line-height:1;flex-shrink:0;color:#f0b429;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+      <div>
+        <div style="font-weight:600;font-size:14px;color:var(--text-1);margin-bottom:4px;">
+          ${count} permanent data error${count === 1 ? '' : 's'} — file data has been lost</div>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.55;">
+          These blocks failed their checksum and there was no surviving copy to rebuild them from.
+          <strong>No software can repair this</strong> — not a scrub, not a resilver, and not
+          <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">zpool clear</code>.
+          The pool itself is healthy and still serving; only the listed data is gone.
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:14px;padding:14px;background:rgba(110,64,201,0.07);border:1px solid rgba(110,64,201,0.35);border-radius:var(--radius-sm);">
+      <span style="font-size:22px;line-height:1;flex-shrink:0;color:#a371f7;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg></span>
+      <div>
+        <div style="font-weight:600;font-size:14px;color:var(--text-1);margin-bottom:4px;">Suspect the hardware — not necessarily a disk</div>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.55;">
+          Disks fail independently. When several members of the <strong>same vdev</strong> report errors on the
+          <strong>same block</strong>, the corruption most likely arrived before the data reached the disks:
+          <strong>non-ECC or failing RAM</strong>, a bad HBA/controller, marginal SATA/SAS cabling, or an unstable PSU.
+          Replacing a disk will not help in that case, and the damage will recur.
+          <br><br>
+          Check memory first (<code style="background:var(--surface);padding:1px 5px;border-radius:4px;">edac-util</code>
+          or <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">memtest86+</code>), then SMART on
+          every member, then cabling. Run a scrub after any hardware change.
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:6px;">
+        Affected files${files.length ? ` (${files.length} listed)` : ''}</div>
+      ${files.length ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 12px 10px;max-height:230px;overflow-y:auto;">
+        ${files.map(fileRow).join('')}
+      </div>` : `<div style="font-size:13px;color:var(--text-2);">ZFS did not resolve any filenames for these errors.</div>`}
+      ${files.length >= 200 ? `<div style="font-size:12px;color:var(--text-3);margin-top:6px;">List truncated at 200 entries — run <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">zpool status -v ${esc(pool.name)}</code> for the full set.</div>` : ''}
+      ${unresolved > 0 ? `<div style="font-size:12px;color:var(--text-3);margin-top:8px;line-height:1.55;">
+        <strong>${unresolved}</strong> further error${unresolved === 1 ? '' : 's'} ${unresolved === 1 ? 'has' : 'have'} no filename.
+        Those records point at objects that have since been deleted — often files you already replaced.
+        They disappear once nothing references the damaged blocks and a scrub completes cleanly.</div>` : ''}
+    </div>
+
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:6px;">How to get back to a healthy state</div>
+      <div style="font-size:13px;color:var(--text-2);line-height:1.7;">
+        <strong>1.</strong> Replace each <em>live</em> file above from a backup or its original source.
+        If a copy aborts on a read error, use
+        <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">ddrescue</code> or
+        <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">dd conv=noerror,sync</code>
+        to get everything that is still readable.<br>
+        <strong>2.</strong> Destroy <em>every</em> snapshot listed above. Until you do, the old damaged blocks are
+        still referenced and the errors come straight back. Per-snapshot <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">USED</code>
+        often reads near zero here because the blocks are shared between several snapshots — check the dataset's
+        <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">usedbysnapshots</code> for the real figure.<br>
+        <strong>3.</strong> <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">zpool clear ${esc(pool.name)}</code><br>
+        <strong>4.</strong> <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">zpool scrub ${esc(pool.name)}</code>,
+        and let it finish.<br>
+        <strong>5.</strong> The list is only truly gone once that scrub completes finding nothing.
+      </div>
+      <div style="margin-top:10px;padding:10px 12px;background:rgba(248,81,73,0.07);border:1px solid rgba(248,81,73,0.3);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);line-height:1.55;">
+        <strong>Do not stop at step 3.</strong> <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">zpool clear</code> on its own
+        only resets the counters. It repairs nothing, the errors return on the next scrub, and zeroing the counters
+        hides the device-level warning that tells you a drive is going bad.
+      </div>
     </div>`;
 }
 

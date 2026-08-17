@@ -371,16 +371,17 @@ func StartHealthPoller(configDir string) {
 		lastWearoutAlerted  := map[string]time.Time{}
 		lastSmartAlerted    := map[string]time.Time{}
 		lastScrubState      := map[string]string{}   // pool → last seen scrub state
+		lastPoolDataErrors  := map[string]bool{}     // pool → had permanent data errors last poll
 		lastSecUpdatesCheck := time.Time{}
 		secUpdatesArmed     := true // fires on first occurrence; re-arms once updates are gone
 
 		time.Sleep(30 * time.Second)
-		runHealthCheck(lastWearoutAlerted, lastSmartAlerted, lastScrubState, &lastSecUpdatesCheck, &secUpdatesArmed, configDir)
+		runHealthCheck(lastWearoutAlerted, lastSmartAlerted, lastScrubState, lastPoolDataErrors, &lastSecUpdatesCheck, &secUpdatesArmed, configDir)
 
 		tick := time.NewTicker(5 * time.Minute)
 		defer tick.Stop()
 		for range tick.C {
-			runHealthCheck(lastWearoutAlerted, lastSmartAlerted, lastScrubState, &lastSecUpdatesCheck, &secUpdatesArmed, configDir)
+			runHealthCheck(lastWearoutAlerted, lastSmartAlerted, lastScrubState, lastPoolDataErrors, &lastSecUpdatesCheck, &secUpdatesArmed, configDir)
 		}
 	}()
 }
@@ -397,6 +398,7 @@ func runHealthCheck(
 	lastWearoutAlerted  map[string]time.Time,
 	lastSmartAlerted    map[string]time.Time,
 	lastScrubState      map[string]string,
+	lastPoolDataErrors  map[string]bool,
 	lastSecUpdatesCheck *time.Time,
 	secUpdatesArmed     *bool,
 	configDir string,
@@ -500,6 +502,57 @@ func runHealthCheck(
 					fmt.Sprintf("%d failed login attempts were detected since the last reset.", n),
 				)
 			}(count)
+		}
+	}
+
+	// --- Permanent data errors — a pool that is ONLINE yet has lost file data ---
+	//
+	// Unlike scrub_errors this is a CONDITION, not an event: it persists until
+	// the user repairs it. So an unknown → true transition (the first poll after
+	// startup) fires too. A restart re-alerting on a still-present fault is
+	// correct — the absence of that is why a real incident sat unnoticed for
+	// eight days while the pool showed ONLINE and green.
+	if anyTargetWantsEvent(cfg, alerts.EventPoolDataErrors) {
+		pools, err := system.GetAllPools()
+		if err == nil {
+			for _, pool := range pools {
+				prev, seen := lastPoolDataErrors[pool.Name]
+				lastPoolDataErrors[pool.Name] = pool.DataErrors
+				switch {
+				case pool.DataErrors && (!seen || !prev):
+					name, n := pool.Name, pool.DataErrorCount
+					files := pool.DataErrorFiles
+					go func() {
+						detail := ""
+						for i, f := range files {
+							if i == 5 {
+								detail += fmt.Sprintf("\n… and %d more", len(files)-5)
+								break
+							}
+							detail += "\n" + f
+						}
+						alerts.Send(
+							alerts.EventPoolDataErrors,
+							fmt.Sprintf("Permanent data errors on pool %s", name),
+							"ZFS Pool Has Permanent Data Errors",
+							fmt.Sprintf("Pool '%s' reports %d permanent data error(s). These blocks cannot be "+
+								"repaired by scrub, resilver or 'zpool clear' — the affected files must be "+
+								"restored. Open the Pool Fixer for the affected file list and recovery "+
+								"steps.%s", name, n, detail),
+						)
+					}()
+				case !pool.DataErrors && seen && prev:
+					name := pool.Name
+					go func() {
+						alerts.Send(
+							alerts.EventPoolDataErrors,
+							fmt.Sprintf("Data errors cleared on pool %s", name),
+							"ZFS Pool Data Errors Cleared",
+							fmt.Sprintf("Pool '%s' no longer reports permanent data errors.", name),
+						)
+					}()
+				}
+			}
 		}
 	}
 
