@@ -119,6 +119,38 @@ type sudoCheck struct {
 	// non-experimental hosts. (v6.5.30 fix.)
 }
 
+// sudoListGrantsBare reports whether `sudo -l` grants cmdPath with NO argument
+// spec at all. Such an entry permits ANY arguments, so it satisfies every
+// argument-bearing check — a bare grant is strictly WIDER than "cmd <args>".
+//
+// It also shows up on sudo-rs hosts: `sudo -l` there DISPLAYS an
+// argument-wildcard rule ("/usr/sbin/zpool *") as a bare path, even though the
+// rule is stored and enforced with its wildcard. Reading that display literally
+// reported "zpool *", "zfs *", "smartctl *" … as missing on hosts whose grants
+// already covered them.
+//
+// Entries are separated by commas and wrapped across lines, so both are treated
+// as separators. A token counts as bare only when it is a lone path — that keeps
+// "/usr/bin/tee /etc/exports" from being mistaken for a bare `tee` grant.
+func sudoListGrantsBare(sudoList, cmdPath, binary string) bool {
+	sep := func(r rune) bool { return r == ',' || r == '\n' }
+	for _, tok := range strings.FieldsFunc(sudoList, sep) {
+		t := strings.TrimSpace(tok)
+		if i := strings.Index(t, "NOPASSWD:"); i >= 0 {
+			t = strings.TrimSpace(t[i+len("NOPASSWD:"):])
+		}
+		fields := strings.Fields(t)
+		if len(fields) != 1 {
+			continue // carries arguments — not a bare grant
+		}
+		if fields[0] == cmdPath || fields[0] == "/"+binary ||
+			strings.HasSuffix(fields[0], "/"+binary) {
+			return true
+		}
+	}
+	return false
+}
+
 // requiredSudoChecks lists every entry covered by the hardened sudoers template
 // in SECURITY.md. The check flags any entry whose expected string is absent from
 // the running user's "sudo -l -n" output.
@@ -270,7 +302,8 @@ func CheckSudoAccess() SudoStatus {
 		wildcardNeedle := path + " *"
 		wildcardAlt := "/" + chk.Binary + " *"
 		if !strings.Contains(sudoList, needle) && !strings.Contains(sudoList, altNeedle) &&
-			!strings.Contains(sudoList, wildcardNeedle) && !strings.Contains(sudoList, wildcardAlt) {
+			!strings.Contains(sudoList, wildcardNeedle) && !strings.Contains(sudoList, wildcardAlt) &&
+			!sudoListGrantsBare(sudoList, path, chk.Binary) {
 			missing = append(missing, chk.Name)
 		}
 	}

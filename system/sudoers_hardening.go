@@ -790,10 +790,48 @@ func buildSudoersContent(required string, silencedMissing, silencedExtra []strin
 			}
 		}
 		// Add ZFSNAS_EXTRA to the grant line.
-		content = strings.Replace(content, "ZFSNAS_SECURITY", "ZFSNAS_SECURITY, ZFSNAS_EXTRA", 1)
+		content = appendAliasToGrant(content, "ZFSNAS_EXTRA")
 		content = strings.TrimRight(content, "\n") + "\n" + sb.String()
 	}
 
+	return content
+}
+
+// appendAliasToGrant adds an alias to the user-spec grant statement
+// ("zfsnas ALL=(ALL) NOPASSWD: …"), handling the fact that the statement is
+// continued across lines with a trailing backslash.
+//
+// It MUST target the grant rather than the first textual match of an alias
+// name. Aliases are DEFINED above the grant, so replacing the first occurrence
+// of e.g. "ZFSNAS_SECURITY" rewrites that alias's own declaration header into
+//
+//	Cmnd_Alias ZFSNAS_SECURITY, ZFSNAS_EXTRA = \
+//
+// which sudo rejects with a syntax error. A rejected sudoers file grants
+// nothing at all, so the portal silently loses every privilege, and every sudo
+// call on the host starts emitting a parse warning.
+//
+// If no grant statement is found the content is returned unchanged: an alias
+// that is defined but never referenced is still valid sudoers, whereas a
+// corrupted declaration is not.
+func appendAliasToGrant(content, alias string) string {
+	lines := strings.Split(content, "\n")
+	for i, l := range lines {
+		if !strings.Contains(l, "NOPASSWD:") {
+			continue
+		}
+		// Walk to the last physical line of this continued statement.
+		j := i
+		for j < len(lines)-1 && strings.HasSuffix(strings.TrimRight(lines[j], " \t"), "\\") {
+			j++
+		}
+		last := strings.TrimRight(lines[j], " \t")
+		if last == "" {
+			return content
+		}
+		lines[j] = last + ", " + alias
+		return strings.Join(lines, "\n")
+	}
 	return content
 }
 
