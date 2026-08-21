@@ -383,6 +383,25 @@ func widenWildcardsForSudoRS(s string) string {
 		// ExtMountBase prefix check).
 		{"/usr/bin/umount /mnt/zfsnas-ext/*", "/usr/bin/umount *"},
 		{"/usr/bin/rmdir /mnt/zfsnas-ext/*", "/usr/bin/rmdir *"},
+		// ZFSNAS_MERGERFS (v6.7.13) — every entry below carried a wildcard with
+		// a prefix ("/tmp/znas-mergerfs/*", "/mnt/*") or a suffix ("*.mount"),
+		// which sudo-rs rejects. The alias shipped without matching widenings,
+		// so on a sudo-rs host the parser desynced at the first entry, the whole
+		// alias was dropped (`sudo -l` printed it as `???`) and every sudo call
+		// on the box emitted a wall of parse errors. Widening grants nothing new:
+		// ZFSNAS_APT already allows "apt-get *", ZFSNAS_FILES already allows a
+		// bare "tee"/"mount" and "rm -f *". The unit name, package path and mount
+		// point are all built in Go (system/mergerfs.go) before invocation.
+		{"/usr/bin/apt-get install -y /tmp/znas-mergerfs/*", "/usr/bin/apt-get install -y *"},
+		{"/usr/bin/tar -xzf /tmp/znas-mergerfs/* -C /usr/local *", "/usr/bin/tar -xzf *"},
+		{"/usr/bin/install -m0755 /tmp/znas-mergerfs/* *", "/usr/bin/install -m0755 *"},
+		{"/usr/bin/tee /etc/systemd/system/*.mount", "/usr/bin/tee *"},
+		{"/usr/bin/rm -f /etc/systemd/system/*.mount", "/usr/bin/rm -f *"},
+		{"/usr/bin/setfattr -n user.mergerfs.* *", "/usr/bin/setfattr -n *"},
+		{"/usr/bin/mount /mnt/*", "/usr/bin/mount *"},
+		{"/usr/bin/umount /mnt/*", "/usr/bin/umount *"},
+		{"/usr/bin/systemctl enable --now *.mount", "/usr/bin/systemctl enable --now *"},
+		{"/usr/bin/systemctl disable --now *.mount", "/usr/bin/systemctl disable --now *"},
 	}
 	for _, r := range repls {
 		s = strings.Replace(s, r[0], r[1], 1)
