@@ -1096,6 +1096,8 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/tee /etc/systemd/system/zfsnas.service":                        "Writes the systemd unit file when the portal registers itself as a system service.",
 	"/usr/bin/tee /etc/modprobe.d/zfs.conf":                                  "Persists ARC size limits across reboots (v6.3.22+).",
 	"/usr/bin/tee /sys/module/zfs/parameters/zfs_arc_max":                    "Applies a new ARC maximum immediately via the ZFS sysfs interface without requiring a reboot.",
+	"/usr/bin/tee /proc/sys/vm/swappiness":                                   "Memory Swapping (v6.8.7+): applies vm.swappiness immediately. Low values keep VM guest memory resident instead of paging it to disk.",
+	"/usr/bin/tee /etc/sysctl.d/60-zfsnas-swappiness.conf":                   "Memory Swapping (v6.8.7+): persists vm.swappiness across reboots via a sysctl drop-in. Fixed path; no wildcard.",
 	"/usr/bin/tee /sys/module/zfs/parameters/zfs_arc_min":                    "Applies a new ARC minimum immediately via the ZFS sysfs interface without requiring a reboot.",
 	"/usr/bin/tee /etc/sudoers.d/zfsnas":                                     "Lets the portal write its own sudoers file when using the Sudoers Hardening feature. Required so in-app changes continue to work after sudo is restricted.",
 	"/usr/bin/cat /etc/sudoers.d/zfsnas":                                     "Lets the portal read its own sudoers file so the Sudoers Review diff is always accurate and detects manual edits (v6.3.32+).",
@@ -1473,6 +1475,8 @@ Cmnd_Alias ZFSNAS_SYSTEM = \
     /usr/bin/systemctl restart zfsnas, \
     /usr/bin/tee /etc/modprobe.d/zfs.conf, \
     /usr/bin/tee /sys/module/zfs/parameters/zfs_arc_max, \
+    /usr/bin/tee /proc/sys/vm/swappiness, \
+    /usr/bin/tee /etc/sysctl.d/60-zfsnas-swappiness.conf, \
     /usr/bin/tee /sys/module/zfs/parameters/zfs_arc_min
 
 # ── System journal log viewer ─────────────────────────────────────────────────

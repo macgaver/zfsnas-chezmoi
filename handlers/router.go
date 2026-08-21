@@ -364,6 +364,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// Status is read by Settings → Virtualization (admin) and the topbar
 	// gauge / dashboard chart (every authenticated user sees the live
 	// counters; we keep status auth-only, no admin gate).
+	r.Handle("/api/system/swappiness",
+		RequireAuth(http.HandlerFunc(HandleSwappinessStatus))).Methods("GET")
+	r.Handle("/api/system/swappiness",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetSwappiness)))).Methods("PUT")
 	r.Handle("/api/memcomp/status",
 		RequireAuth(http.HandlerFunc(HandleMemCompStatus))).Methods("GET")
 	r.Handle("/api/memcomp/config",
