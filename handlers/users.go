@@ -19,7 +19,7 @@ import (
 // HandleDisableTOTP removes 2FA from a user.
 // Admins can disable 2FA for any user; non-admins can only disable their own.
 func HandleDisableTOTP(w http.ResponseWriter, r *http.Request) {
-	id   := mux.Vars(r)["id"]
+	id := mux.Vars(r)["id"]
 	sess := MustSession(r)
 
 	// Non-admins (including standard users) may only affect their own account.
@@ -40,7 +40,7 @@ func HandleDisableTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.TOTPEnabled = false
-	user.TOTPSecret  = ""
+	user.TOTPSecret = ""
 
 	if err := config.SaveUsers(users); err != nil {
 		jsonErr(w, http.StatusInternalServerError, "failed to save user")
@@ -116,16 +116,20 @@ func HandleListUsers(w http.ResponseWriter, r *http.Request) {
 // HandleCreateUser creates a new user (admin only).
 func HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Username                 string                      `json:"username"`
-		Email                    string                      `json:"email"`
-		Password                 string                      `json:"password"`
-		SMBPassword              string                      `json:"smb_password"`
-		Role                     string                      `json:"role"`
-		SMBHomeFolder            bool                        `json:"smb_home_folder"`
-		UID                      *int                        `json:"uid"`
-		GID                      *int                        `json:"gid"`
-		StandardPerms            *config.StandardPermissions `json:"standard_perms"`
-		ApproveExistingSystemUser bool                       `json:"approve_existing_system_user"`
+		Username    string `json:"username"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		SMBPassword string `json:"smb_password"`
+		// SSHLogin gives this user a real Linux account with a shell, so they
+		// can log in over SSH. Off by default: an SMB-only user must never get
+		// a shell as a side effect of being created.
+		SSHLogin                  bool                        `json:"ssh_login"`
+		Role                      string                      `json:"role"`
+		SMBHomeFolder             bool                        `json:"smb_home_folder"`
+		UID                       *int                        `json:"uid"`
+		GID                       *int                        `json:"gid"`
+		StandardPerms             *config.StandardPermissions `json:"standard_perms"`
+		ApproveExistingSystemUser bool                        `json:"approve_existing_system_user"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -296,6 +300,17 @@ func HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		log.Printf("users: EnsureSambaUser for %s: %v", req.Username, err)
 	}
 
+	// SSH login: give the account a real shell and password. EnsureSambaUser
+	// above deliberately makes a NO-login account, so this must come after it
+	// (it re-points the shell) and only when the admin asked for it.
+	sshNote := ""
+	if req.SSHLogin {
+		if err := system.EnsureShellUser(req.Username, req.Password); err != nil {
+			log.Printf("users: EnsureShellUser for %s: %v", req.Username, err)
+			sshNote = "SSH login could not be enabled: " + err.Error()
+		}
+	}
+
 	// Create SMB home directory and update smb.conf valid users if applicable.
 	if appCfg, err := config.LoadAppConfig(); err == nil && appCfg.SMBHomeDataset != "" {
 		if req.SMBHomeFolder {
@@ -319,7 +334,7 @@ func HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		Action:  audit.ActionCreateUser,
 		Target:  req.Username,
 		Result:  audit.ResultOK,
-		Details: "role: " + req.Role,
+		Details: "role: " + req.Role + map[bool]string{true: ", ssh login enabled", false: ""}[req.SSHLogin],
 	})
 	go alerts.Send(
 		alerts.EventUserCreated,
@@ -328,17 +343,23 @@ func HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		"User '"+req.Username+"' (role: "+req.Role+") was created by "+sess.Username+".",
 	)
 
-	jsonCreated(w, map[string]string{"id": user.ID, "username": user.Username})
+	resp := map[string]string{"id": user.ID, "username": user.Username}
+	if sshNote != "" {
+		// The portal account exists and works; surface the SSH problem rather
+		// than failing the whole creation the admin just completed.
+		resp["warning"] = sshNote
+	}
+	jsonCreated(w, resp)
 }
 
 // HandleUpdateUser updates a user's details.
 // Admins can update any user's email, password, role, and permissions.
 // Non-admins can only update their own password.
 func HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
-	id   := mux.Vars(r)["id"]
+	id := mux.Vars(r)["id"]
 	sess := MustSession(r)
 	isAdmin := sess.Role == config.RoleAdmin
-	isSelf  := sess.UserID == id
+	isSelf := sess.UserID == id
 
 	// Non-admins can only update their own account.
 	if !isAdmin && !isSelf {

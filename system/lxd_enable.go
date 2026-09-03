@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -845,6 +846,9 @@ func LXDEnableFeature(ctx context.Context, storagePool string, job *LXDEnableJob
 	}
 
 	// Step 3 — Configure NIC bridges
+	// One NAT network per physical link-up NIC (host-nat, host-nat2, …),
+	// created alongside the vmbrN LAN bridges so both options exist for guests.
+	lxdEnsureHostNatNetworks(ctx, job)
 	if err := lxdStep3Bridges(ctx, job); err != nil {
 		done(err)
 		return
@@ -1452,6 +1456,137 @@ func lastNonEmptyLine(s string) string {
 }
 
 // lxdConfigureExisting applies incremental configuration to an already-initialised LXD:
+// HostNatNetworkName returns the name of the i-th NAT network: the first is
+// plain `host-nat` (the canonical one, referenced by the default profile and
+// by older setups), and subsequent ones are numbered from 2 — `host-nat2`,
+// `host-nat3`, … There is one per physical link-up NIC, mirroring the
+// vmbr0/vmbr1/… LAN bridges, so a guest can be put behind NAT on the same
+// physical port it would otherwise be bridged onto.
+func HostNatNetworkName(i int) string {
+	if i <= 0 {
+		return "host-nat"
+	}
+	return fmt.Sprintf("host-nat%d", i+1)
+}
+
+// IsHostNatNetwork reports whether a network name is one of ours (host-nat,
+// host-nat2, …). Used wherever the canonical name used to be compared
+// literally — those places must keep treating the numbered ones as internal.
+func IsHostNatNetwork(name string) bool {
+	if name == "host-nat" {
+		return true
+	}
+	if !strings.HasPrefix(name, "host-nat") {
+		return false
+	}
+	for _, r := range name[len("host-nat"):] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return len(name) > len("host-nat")
+}
+
+// physicalLinkUpNICs lists physical NICs that currently have carrier — the
+// same rule the appliance image uses when it decides which ports to bridge.
+func physicalLinkUpNICs() []string {
+	entries, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if name == "lo" || virtualIfRe.MatchString(name) {
+			continue
+		}
+		if _, err := os.Stat("/sys/class/net/" + name + "/device"); err != nil {
+			continue // not a physical device
+		}
+		car, err := os.ReadFile("/sys/class/net/" + name + "/carrier")
+		if err != nil || strings.TrimSpace(string(car)) != "1" {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// nicHasIPv4 reports whether a physical NIC is carrying an IPv4 address —
+// either directly, or through the bridge it is enslaved to. On the appliance
+// every cabled port is a bridge member and the BRIDGE holds the lease, so
+// asking the NIC alone would always answer "no".
+func nicHasIPv4(nic string) bool {
+	if hasIPv4Addr(nic) {
+		return true
+	}
+	if master, err := os.Readlink("/sys/class/net/" + nic + "/master"); err == nil {
+		return hasIPv4Addr(master[strings.LastIndex(master, "/")+1:])
+	}
+	return false
+}
+
+func hasIPv4Addr(iface string) bool {
+	out, err := exec.Command("ip", "-4", "-o", "addr", "show", "dev", iface).Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "inet ")
+}
+
+// physicalUplinkNICs is physicalLinkUpNICs narrowed to the ports that actually
+// reach a network: up, cabled AND addressed. A NAT network exists to give
+// guests a way out, so pairing one with a port that has no address of its own
+// would be pairing it with nothing.
+func physicalUplinkNICs() []string {
+	var out []string
+	for _, n := range physicalLinkUpNICs() {
+		if nicHasIPv4(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// HostNatUplinkKey is the Incus network config key recording which physical
+// port a NAT network was created for. The pairing cannot be derived later —
+// a NAT bridge has no physical port — so it is written down at creation.
+const HostNatUplinkKey = "user.zfsnas.uplink"
+
+// lxdEnsureHostNatNetworks creates one NAT network per physical link-up NIC,
+// named by HostNatNetworkName. Each gets its own auto-allocated subnet, so a
+// guest can be attached to the NAT that corresponds to a given port. Existing
+// networks are left untouched.
+func lxdEnsureHostNatNetworks(ctx context.Context, job *LXDEnableJob) {
+	nics := physicalUplinkNICs()
+	if len(nics) == 0 {
+		nics = []string{""} // always provide the canonical host-nat
+	}
+	for i, nic := range nics {
+		name := HostNatNetworkName(i)
+		out, _ := exec.Command("incus", "network", "show", name).Output()
+		if len(strings.TrimSpace(string(out))) > 0 {
+			job.log(name + " already exists.")
+			// Networks created before the pairing was recorded show up with no
+			// uplink at all; fill it in rather than leaving them unlabelled.
+			if nic != "" && !strings.Contains(string(out), HostNatUplinkKey) {
+				_ = runLXCLog(ctx, job, "network", "set", name, HostNatUplinkKey, nic)
+			}
+			continue
+		}
+		job.log("Creating NAT bridge " + name + " for " + nic + "…")
+		args := []string{"network", "create", name,
+			"ipv4.address=auto", "ipv4.nat=true", "ipv6.address=none"}
+		if nic != "" {
+			args = append(args, HostNatUplinkKey+"="+nic)
+		}
+		if err := runLXCLog(ctx, job, args...); err != nil {
+			job.log("Warning: could not create " + name + ": " + err.Error())
+		}
+	}
+}
+
 // sets core.https_address and ensures the host-nat bridge exists.
 func lxdConfigureExisting(ctx context.Context, storagePool, hostname string, job *LXDEnableJob) error {
 	// Set API listen address

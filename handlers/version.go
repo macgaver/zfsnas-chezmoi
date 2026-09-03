@@ -51,7 +51,24 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 		// upgraded — frontend shows a "Server Restarted" popup with a
 		// Refresh button.
 		"startup_time_unix":   version.StartedAt.Unix(),
+		// v6.8.28: appliance-mode fields for the SPA boot globals.
+		"appliance":         system.ApplianceMode(),
+		"appliance_release": applianceReleaseString(),
+		"persist_status":    system.PersistStatus(),
 	})
+}
+
+// applianceReleaseString formats /etc/zfsnas-release for display,
+// e.g. "6.8.28 (2026-08-28)"; empty off-appliance.
+func applianceReleaseString() string {
+	v, d := system.ApplianceRelease()
+	if v == "" {
+		return ""
+	}
+	if d != "" {
+		return v + " (" + d + ")"
+	}
+	return v
 }
 
 // serverIP returns the primary non-loopback IPv4 address.

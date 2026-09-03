@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -298,7 +299,14 @@ func doAutoUpdate(appCfg *config.AppConfig) {
 		log.Printf("[auto-update] cannot determine executable path: %v", err)
 		return
 	}
-	destDir := filepath.Dir(exePath)
+	destPath := updaterDestPath(exePath)
+	destDir := filepath.Dir(destPath)
+	if destPath != exePath { // appliance: persist store may not have bin/ yet
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			log.Printf("[auto-update] persist store not writable: %v", err)
+			return
+		}
+	}
 
 	log.Printf("[auto-update] downloading v%s…", latest)
 	tmpPath, err := updater.Download(info.DownloadURL, destDir)
@@ -315,8 +323,8 @@ func doAutoUpdate(appCfg *config.AppConfig) {
 		}
 	}
 
-	log.Printf("[auto-update] replacing binary at %s…", exePath)
-	if err := updater.Replace(tmpPath, exePath); err != nil {
+	log.Printf("[auto-update] replacing binary at %s…", destPath)
+	if err := updater.Replace(tmpPath, destPath); err != nil {
 		log.Printf("[auto-update] replace failed: %v", err)
 		return
 	}
@@ -334,6 +342,12 @@ func doAutoUpdate(appCfg *config.AppConfig) {
 	config.SaveAppConfig(appCfg)
 
 	log.Printf("[auto-update] updated to v%s — restarting process", latest)
+	if system.ApplianceMode() {
+		// Restart through systemd so run-zfsnas.sh re-evaluates the override.
+		log.Printf("[auto-update] appliance mode — restarting via systemctl")
+		_ = exec.Command("systemctl", "restart", "zfsnas.service").Start()
+		return
+	}
 	if err := updater.Restart(exePath); err != nil {
 		log.Printf("[auto-update] syscall.Exec failed (%v) — exiting for systemd restart", err)
 		os.Exit(1)
@@ -450,7 +464,14 @@ func HandleBinaryUpdateApply(appCfg *config.AppConfig) http.HandlerFunc {
 			done(false, "cannot determine executable path: "+err.Error())
 			return
 		}
-		destDir := filepath.Dir(exePath)
+		destPath := updaterDestPath(exePath)
+		destDir := filepath.Dir(destPath)
+		if destPath != exePath { // appliance: persist store may not have bin/ yet
+			if err := os.MkdirAll(destDir, 0755); err != nil {
+				done(false, "persist store not writable: "+err.Error())
+				return
+			}
+		}
 
 		send("Step 3/5: Downloading binary to " + destDir + "…")
 		tmpPath, err := updater.Download(info.DownloadURL, destDir)
@@ -471,8 +492,8 @@ func HandleBinaryUpdateApply(appCfg *config.AppConfig) http.HandlerFunc {
 			send("No signature asset — skipping post-download verification")
 		}
 
-		send("Step 5/5: Replacing binary at " + exePath + "…")
-		if err := updater.Replace(tmpPath, exePath); err != nil {
+		send("Step 5/5: Replacing binary at " + destPath + "…")
+		if err := updater.Replace(tmpPath, destPath); err != nil {
 			done(false, "replace failed: "+err.Error())
 			return
 		}
@@ -493,6 +514,12 @@ func HandleBinaryUpdateApply(appCfg *config.AppConfig) http.HandlerFunc {
 			"message": "binary replaced — restarting now",
 		}))
 		conn.Close()
+
+		if system.ApplianceMode() {
+			// Restart through systemd so run-zfsnas.sh re-evaluates the override.
+			_ = exec.Command("systemctl", "restart", "zfsnas.service").Start()
+			return
+		}
 
 		// Preferred path: replace process image in-place (same PID, no systemd restart event).
 		if err := updater.Restart(exePath); err != nil {

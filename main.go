@@ -51,7 +51,13 @@ func main() {
 	configDir := flag.String("config", "./config", "Path to config directory")
 	setHTTPSPort := flag.Int("set-https-port", 0, "Persist a new HTTPS port to config and use it this run (1–65535)")
 	experimentalMode := flag.Bool("experimental", false, "Enable experimental features (e.g. LXD VM/container management)")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.Version)
+		os.Exit(0)
+	}
 
 	// ===== Sudo check =====
 	sudoStatus := system.CheckSudoAccess()
@@ -308,6 +314,13 @@ func main() {
 
 	// ===== Auto-update scheduler =====
 	handlers.StartAutoUpdateScheduler(appCfg)
+
+	// ===== USB appliance: one-shot update check on the first boot of a stick.
+	//       The image ships the binary that was current when it was built; this
+	//       pulls the latest signed release once, then the scheduler above owns
+	//       updates. Runs in the background — a slow or absent network must
+	//       never delay the portal coming up. No-op off-appliance. =====
+	go handlers.RunApplianceFirstBootUpdate(appCfg)
 
 	// ===== Recycle bin nightly cleaner =====
 	system.StartRecycleCleaner(absConfig)

@@ -696,6 +696,14 @@ func HandleListStoragePools(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, names)
 }
 
+// HandleDefaultRootPool returns the storage pool that the `default` profile's
+// root disk resolves to, so the create dialogs can label their "profile
+// default" option with the datastore it will actually use.
+// GET /api/lxd/default-root-pool
+func HandleDefaultRootPool(w http.ResponseWriter, r *http.Request) {
+	jsonOK(w, map[string]string{"pool": system.LXDDefaultProfileRootPool()})
+}
+
 // HandleListNetworks returns LXD network names.
 // GET /api/lxd/networks
 func HandleListNetworks(w http.ResponseWriter, r *http.Request) {

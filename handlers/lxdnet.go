@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"zfsnas/internal/audit"
 	"zfsnas/system"
 
@@ -19,6 +21,71 @@ func HandleListLXDNetworks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, nets)
+}
+
+// HandleGetHostBridge returns how a host-managed bridge (one defined in
+// /etc/network/interfaces, e.g. the appliance's vmbr0) is addressed.
+// GET /api/lxd/host-bridges/{name}
+func HandleGetHostBridge(w http.ResponseWriter, r *http.Request) {
+	cfg, err := system.GetHostBridgeConfig(mux.Vars(r)["name"])
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !cfg.Exists {
+		jsonErr(w, http.StatusNotFound, "not a host-managed bridge")
+		return
+	}
+	jsonOK(w, cfg)
+}
+
+// HandleSetHostBridge switches a host-managed bridge between DHCP and a static
+// address. Only addressing is rewritten — bridge_ports and the rest of the
+// stanza are preserved.
+// PUT /api/lxd/host-bridges/{name}
+func HandleSetHostBridge(w http.ResponseWriter, r *http.Request) {
+	sess := MustSession(r)
+	var cfg system.HostBridgeConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	cfg.Name = mux.Vars(r)["name"]
+	if err := system.SetHostBridgeConfig(cfg); err != nil {
+		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionHostBridgeEdit,
+			Target: cfg.Name, Result: audit.ResultError, Details: err.Error()})
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionHostBridgeEdit,
+		Target: cfg.Name, Result: audit.ResultOK,
+		Details: "host bridge addressing set to " + cfg.Mode})
+	msg := "Saved. Choose \"Apply now\" to activate it, or it takes effect on the next reboot."
+	// Two interfaces with a gateway = two default routes, and the box starts
+	// answering on an address whose replies leave by the other NIC. Say so
+	// while the admin is still looking at the dialog.
+	if gws := system.GatewayIfaces(); len(gws) > 1 {
+		msg += " Warning: " + strings.Join(gws, " and ") +
+			" both set a gateway — only one interface should carry the default route."
+	}
+	jsonOK(w, map[string]string{"message": msg})
+}
+
+// HandleApplyHostBridge brings a host-managed bridge down and up so a saved
+// change takes effect without rebooting.
+// POST /api/lxd/host-bridges/{name}/apply
+func HandleApplyHostBridge(w http.ResponseWriter, r *http.Request) {
+	sess := MustSession(r)
+	name := mux.Vars(r)["name"]
+	if err := system.ApplyHostBridge(name); err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionHostBridgeEdit,
+		Target: name, Result: audit.ResultOK, Details: "applied (ifdown/ifup)"})
+	jsonOK(w, map[string]string{
+		"message": "Applying " + name + " now. If you are connected through it, this page will lose contact — reopen the portal on its new address.",
+	})
 }
 
 // HandleGetLXDNetwork returns detail for a single LXD network.
@@ -149,7 +216,6 @@ func HandleSetInterfaceMTU(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"ok": "mtu updated"})
 }
 
-
 // HandleGetBridgeStats returns cumulative rx/tx byte counters for a bridge interface.
 // GET /api/lxd/network-bridges/{name}/stats
 func HandleGetBridgeStats(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +273,12 @@ func HandleCreateStoragePool(w http.ResponseWriter, r *http.Request) {
 		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDStorageCreate, Target: req.Name, Result: audit.ResultError, Details: err.Error()})
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// A brand-new Incus install has an empty `default` profile: without a root
+	// disk every instance creation fails with "No root device could be found".
+	// Wire the first datastore in so the pool is actually usable.
+	if err := system.LXDEnsureDefaultProfileRootDisk(req.Name); err != nil {
+		log.Printf("storage pool %s created but attaching it to the default profile failed: %v", req.Name, err)
 	}
 	audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDStorageCreate, Target: req.Name, Result: audit.ResultOK})
 	jsonOK(w, map[string]string{"ok": "created"})

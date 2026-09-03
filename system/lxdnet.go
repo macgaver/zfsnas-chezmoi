@@ -7,13 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 // BridgeMember is an instance (VM or container) attached to an LXD bridge.
 type BridgeMember struct {
 	Name        string `json:"name"`
-	Type        string `json:"type"`        // "virtual-machine" | "container"
+	Type        string `json:"type"` // "virtual-machine" | "container"
 	Status      string `json:"status"`
 	Description string `json:"description"`
 	DeviceName  string `json:"device_name"` // NIC device name inside the instance
@@ -159,29 +160,47 @@ func GetBridgeMembers(bridge string) ([]BridgeMember, error) {
 // LXDNetwork represents a single LXD network as returned by lxc network list/show.
 type LXDNetwork struct {
 	Name        string            `json:"name"`
-	Type        string            `json:"type"`    // "bridge", "physical", "vlan", etc.
+	Type        string            `json:"type"` // "bridge", "physical", "vlan", etc.
 	Managed     bool              `json:"managed"`
 	Description string            `json:"description"`
-	State       string            `json:"state"`   // "Created" | ""
+	State       string            `json:"state"` // "Created" | ""
 	IPv4        string            `json:"ipv4"`
 	IPv6        string            `json:"ipv6"`
 	Config      map[string]string `json:"config"`
 	UsedBy      []string          `json:"used_by"` // raw /1.0/instances/... URIs
 	VMCount     int               `json:"vm_count"`
+	// Ports are the interfaces enslaved to this bridge (its bridge_ports),
+	// read from the kernel. Without them the bridges table cannot say WHICH
+	// physical NIC a bridge is actually carrying traffic on — the appliance
+	// ships vmbr0/vmbr1/… and they are indistinguishable otherwise.
+	Ports []string `json:"ports"`
+	// Uplink is the physical NIC traffic leaves through for a NAT network.
+	// A NAT bridge has no NIC enslaved to it — Incus masquerades onto the
+	// host's default route — so without this the table could only say
+	// "internal", which does not answer "which port does this actually use".
+	// UplinkVia is the interface the default route points at (often a bridge,
+	// e.g. vmbr0), and Uplink is the physical port under it.
+	Uplink    string `json:"uplink"`
+	UplinkVia string `json:"uplink_via"`
+	// UplinkPinned is true when Uplink is the port the network was created
+	// for (recorded on the network) rather than a guess from today's default
+	// route. The UI says different things about the two.
+	UplinkPinned bool `json:"uplink_pinned"`
+	NAT          bool `json:"nat"`
 }
 
 // LXDNetworkCreateRequest holds parameters for creating a new LXD bridge network.
 type LXDNetworkCreateRequest struct {
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	BridgeType      string `json:"bridge_type"`      // "nat" | "vlan" | "plain" | "isolated"
-	MTU             int    `json:"mtu"`              // 0 = default (1500)
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	BridgeType  string `json:"bridge_type"` // "nat" | "vlan" | "plain" | "isolated"
+	MTU         int    `json:"mtu"`         // 0 = default (1500)
 	// nat + isolated fields
-	IPv4Address     string `json:"ipv4_address"`     // e.g. "10.10.10.1/24"
-	IPv4NAT         bool   `json:"ipv4_nat"`
-	IPv4DHCP        bool   `json:"ipv4_dhcp"`        // isolated only: hand out IPs from the CIDR (no NAT either way)
-	IPv6Address     string `json:"ipv6_address"`     // e.g. "fd00::1/64" or "" for none
-	IPv6NAT         bool   `json:"ipv6_nat"`
+	IPv4Address string `json:"ipv4_address"` // e.g. "10.10.10.1/24"
+	IPv4NAT     bool   `json:"ipv4_nat"`
+	IPv4DHCP    bool   `json:"ipv4_dhcp"`    // isolated only: hand out IPs from the CIDR (no NAT either way)
+	IPv6Address string `json:"ipv6_address"` // e.g. "fd00::1/64" or "" for none
+	IPv6NAT     bool   `json:"ipv6_nat"`
 	// vlan/plain fields
 	ParentInterface string `json:"parent_interface"` // e.g. "enxa0cec8cd42e7"
 	VLANTag         int    `json:"vlan_tag"`         // >0 = create VLAN sub-interface
@@ -237,9 +256,111 @@ func ListLXDNetworks() ([]LXDNetwork, error) {
 				n.VMCount++
 			}
 		}
+		if r.Type == "bridge" {
+			n.Ports = bridgePorts(r.Name)
+			n.NAT = r.Config["ipv4.nat"] == "true" || r.Config["ipv6.nat"] == "true"
+			if n.NAT {
+				n.Uplink, n.UplinkVia = natUplinkFor(r.Name, r.Config)
+				n.UplinkPinned = r.Config[HostNatUplinkKey] != ""
+			}
+		}
 		nets = append(nets, n)
 	}
 	return nets, nil
+}
+
+// parseDefaultRouteIface pulls the device out of `ip route show default`
+// output, e.g. "default via 192.168.2.1 dev vmbr0 onlink" → "vmbr0".
+// Split out from the command call so it can be tested without a host route.
+func parseDefaultRouteIface(routeOutput string) string {
+	for _, line := range strings.Split(routeOutput, "\n") {
+		f := strings.Fields(line)
+		if len(f) == 0 || f[0] != "default" {
+			continue
+		}
+		for i := 0; i < len(f)-1; i++ {
+			if f[i] == "dev" {
+				return f[i+1]
+			}
+		}
+	}
+	return ""
+}
+
+// natUplinkFor returns the physical NIC a NAT network belongs to, plus the
+// interface its traffic currently leaves by.
+//
+// The pairing is recorded on the network when it is created (one host-nat per
+// addressed port), because it cannot be worked out afterwards: a NAT bridge has
+// no physical port of its own. Without that key every NAT network would answer
+// with whatever the default route says today — which is why two of them used to
+// name the same NIC.
+func natUplinkFor(name string, cfg map[string]string) (phys, via string) {
+	_, defVia := natUplink()
+	if nic := cfg[HostNatUplinkKey]; nic != "" {
+		return nic, defVia
+	}
+	// Networks created before the key existed: our own are numbered in the same
+	// order as the ports they were made for, so recover the pairing from the
+	// position rather than showing the same NIC for all of them.
+	if i := hostNatIndex(name); i >= 0 {
+		if nics := physicalUplinkNICs(); i < len(nics) {
+			return nics[i], defVia
+		}
+	}
+	return natUplink()
+}
+
+// hostNatIndex maps host-nat → 0, host-nat2 → 1, … and -1 for anything else.
+func hostNatIndex(name string) int {
+	if !IsHostNatNetwork(name) {
+		return -1
+	}
+	if name == "host-nat" {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimPrefix(name, "host-nat"))
+	if err != nil || n < 2 {
+		return -1
+	}
+	return n - 1
+}
+
+// natUplink returns the physical NIC the host's default route leaves through,
+// plus the interface the route names (which is usually a bridge).
+func natUplink() (phys, via string) {
+	out, err := exec.Command("ip", "route", "show", "default").Output()
+	if err != nil {
+		return "", ""
+	}
+	via = parseDefaultRouteIface(string(out))
+	if via == "" {
+		return "", ""
+	}
+	// If the route leaves through a bridge, the interesting answer is the
+	// physical port underneath it, not the bridge name the user already sees.
+	for _, p := range bridgePorts(via) {
+		if !strings.HasPrefix(p, "veth") && !strings.HasPrefix(p, "tap") {
+			return p, via
+		}
+	}
+	return via, via
+}
+
+// bridgePorts lists the interfaces enslaved to a bridge, from
+// /sys/class/net/<bridge>/brif. Empty for anything that is not a live kernel
+// bridge (a managed network that has not been brought up yet, for instance).
+func bridgePorts(name string) []string {
+	entries, err := os.ReadDir("/sys/class/net/" + name + "/brif")
+	if err != nil {
+		return nil
+	}
+	ports := make([]string, 0, len(entries))
+	for _, e := range entries {
+		ports = append(ports, e.Name())
+	}
+	sort.Strings(ports)
+	return ports
 }
 
 // osBridgeIPv4 returns the first IPv4 CIDR assigned to an OS bridge interface
@@ -507,9 +628,67 @@ func setLXDNetworkDescription(name, description string) error {
 
 // CreateLXDNetwork creates a new LXD bridge network and, for VLAN-backed bridges,
 // writes the necessary /etc/network/interfaces stanza.
+
+// hostManagedBridgeSource reports which host network config file defines a
+// bridge of this name ("" when none does). Used to stop an Incus managed
+// network from colliding with a bridge netplan/ifupdown already owns.
+// Overridable in tests.
+var (
+	netplanDirForTest     = "/etc/netplan"
+	interfacesFileForTest = "/etc/network/interfaces"
+)
+
+func hostManagedBridgeSource(name string) string {
+	if name == "" {
+		return ""
+	}
+	// netplan: the bridge appears as a key under `bridges:`; matching the
+	// name followed by a colon is enough to spot it in any of the yaml files.
+	if entries, err := os.ReadDir(netplanDirForTest); err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+				continue
+			}
+			path := netplanDirForTest + "/" + e.Name()
+			b, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(string(b), "\n") {
+				if strings.TrimSpace(line) == name+":" {
+					return path
+				}
+			}
+		}
+	}
+	// ifupdown: `iface <name> inet …`
+	if b, err := os.ReadFile(interfacesFileForTest); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			f := strings.Fields(line)
+			if len(f) >= 2 && f[0] == "iface" && f[1] == name {
+				return interfacesFileForTest
+			}
+		}
+	}
+	return ""
+}
+
 func CreateLXDNetwork(req LXDNetworkCreateRequest) error {
 	if req.Name == "" {
 		return fmt.Errorf("name is required")
+	}
+	// Refuse to take over a bridge the HOST already manages (netplan or
+	// /etc/network/interfaces). Incus would happily create a managed network
+	// of the same name and put its own address on that interface: the box
+	// then has two managers for one bridge, the host's DHCP lease disappears
+	// and — when it is the LAN bridge — the portal becomes unreachable. The
+	// USB appliance ships vmbr0/vmbr1 configured this way, so this is a live
+	// footgun there, not a theoretical one.
+	if owner := hostManagedBridgeSource(req.Name); owner != "" {
+		return fmt.Errorf("%q is already a host-managed bridge (defined in %s). "+
+			"Creating an Incus network with the same name would take the interface over and "+
+			"drop its address — pick a different name, or attach instances to %q directly",
+			req.Name, owner, req.Name)
 	}
 
 	mtuArg := ""
@@ -878,9 +1057,9 @@ func ListPhysicalInterfaces() ([]PhysicalInterface, error) {
 
 // BridgeStats holds cumulative rx/tx byte counters read from /proc/net/dev.
 type BridgeStats struct {
-	Interface string       `json:"interface"`
-	RxBytes   int64        `json:"rx_bytes"`
-	TxBytes   int64        `json:"tx_bytes"`
+	Interface string        `json:"interface"`
+	RxBytes   int64         `json:"rx_bytes"`
+	TxBytes   int64         `json:"tx_bytes"`
 	Members   []BridgeStats `json:"members,omitempty"`
 }
 
@@ -1080,7 +1259,7 @@ func GetStoragePoolMembers(pool string) ([]BridgeMember, error) {
 					} `json:"network"`
 				}
 				if json.Unmarshal(stateOut, &state) == nil {
-					outer:
+				outer:
 					for dev, iface := range state.Network {
 						if dev == "lo" {
 							continue

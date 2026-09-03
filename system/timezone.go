@@ -29,8 +29,42 @@ func GetTimezone() string {
 	return "UTC"
 }
 
+var (
+	zoneinfoDir   = "/usr/share/zoneinfo"
+	localtimePath = "/etc/localtime"
+	timezonePath  = "/etc/timezone"
+)
+
+// setTimezoneApplianceMode writes THROUGH the bind-mounted /etc/localtime
+// (timedatectl's symlink swap gets EBUSY on a bind mount) so the change
+// lands in the persist store, and records the zone name in /etc/timezone.
+func setTimezoneApplianceMode(tz string) error {
+	if tz == "" || strings.Contains(tz, "..") || strings.ContainsAny(tz, " \t\n\\") {
+		return fmt.Errorf("invalid timezone %q", tz)
+	}
+	b, err := os.ReadFile(filepath.Join(zoneinfoDir, tz))
+	if err != nil {
+		return fmt.Errorf("unknown timezone %q: %w", tz, err)
+	}
+	f, err := os.OpenFile(localtimePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.WriteFile(timezonePath, []byte(tz+"\n"), 0644)
+}
+
 // SetTimezone sets the system timezone using timedatectl.
 func SetTimezone(tz string) error {
+	if ApplianceMode() {
+		return setTimezoneApplianceMode(tz)
+	}
 	out, err := exec.Command("sudo", "timedatectl", "set-timezone", tz).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))

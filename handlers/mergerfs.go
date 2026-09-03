@@ -59,6 +59,9 @@ func HandleInstallMergerFS(appCfg *config.AppConfig) http.HandlerFunc {
 // HandleUninstallMergerFS removes the feature (admin). POST /api/prerequisites/uninstall-mergerfs
 func HandleUninstallMergerFS(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if applianceBlock(w) {
+			return
+		}
 		sess := MustSession(r)
 		mergerfsMu.Lock()
 		pools := appCfg.MergerFS.Pools

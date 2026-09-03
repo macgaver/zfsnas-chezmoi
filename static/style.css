@@ -2745,7 +2745,10 @@ body.sidebar-overlay #sidebar {
   color: var(--text); cursor: pointer; font-size: 13px; padding: 9px 14px;
   transition: background .12s;
 }
-.row-menu-dropdown button:hover { background: var(--surface2); }
+.row-menu-dropdown button:hover:not(:disabled) { background: var(--surface2); }
+/* A menu action that currently does nothing (e.g. "Apply now" with no pending
+   network change) stays visible but clearly inert. */
+.row-menu-dropdown button:disabled { opacity: 0.4; cursor: not-allowed; }
 .row-menu-dropdown button.danger { color: var(--accent-danger); }
 .row-menu-dropdown .menu-sep {
   border: none; border-top: 1px solid var(--border); margin: 3px 0;
@@ -3870,3 +3873,10 @@ body.is-phone .lxd-table-card thead th { position: static; }
 
 /* Long-press menu also drives the left-nav service rows on touch devices. */
 .nav-compute-instance { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+
+/* v6.8.28 appliance: OS packages are managed by reflashing the USB image */
+body.appliance .osupdate-ui { display: none !important; }
+body.appliance .uninstall-ui { display: none !important; }
+/* Elements that only make sense while running from the USB appliance image
+   (e.g. the SSH-unlock card — off-appliance SSH is managed normally). */
+body:not(.appliance) .appliance-only { display: none !important; }

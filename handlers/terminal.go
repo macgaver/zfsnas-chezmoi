@@ -58,6 +58,9 @@ func HandleTerminal(w http.ResponseWriter, r *http.Request) {
 // Same persistent-session machinery as the host shell, so a dropped browser can
 // reattach and keep watching the upgrade.
 func HandleUpdaterTerminal(w http.ResponseWriter, r *http.Request) {
+	if applianceBlock(w) {
+		return
+	}
 	conn, err := termUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return

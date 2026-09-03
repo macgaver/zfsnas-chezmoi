@@ -1132,6 +1132,9 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/chgrp sambashare *":                                            "Sets group ownership of a share directory to sambashare (v6.3.27+).",
 	"/usr/sbin/exportfs -ra":                                                 "Reloads all NFS exports after the export table is updated.",
 	"/usr/bin/timedatectl set-timezone *":                                    "Sets the system timezone from the Settings > System page.",
+	"/usr/bin/tee /etc/hostname":                                             "Writes the server name chosen in Settings > General, so it survives a reboot. Fixed destination; the name itself is validated in-process and piped in, so no argument wildcard is granted.",
+	"/usr/bin/tee /etc/hosts":                                                "Updates the loopback entry that names this host after a rename — without it every call that resolves the machine's own name (sudo, Samba) stalls or warns.",
+	"/usr/bin/hostname -F /etc/hostname":                                     "Applies the new server name to the running kernel, read from the file written just above. Takes no user-controlled argument by design.",
 	"/usr/sbin/shutdown *":                                                   "Allows scheduled shutdown/reboot from the power menu and from the UPS shutdown watcher.",
 	"/usr/sbin/modprobe zfs":                                                 "Loads the ZFS kernel module after installation if it is not already loaded.",
 	"/usr/bin/systemctl restart zfsnas":                                      "Restarts the portal service from the power menu (v3.0.0+).",
@@ -1496,7 +1499,10 @@ Cmnd_Alias ZFSNAS_SYSTEM = \
     /usr/bin/tee /sys/module/zfs/parameters/zfs_arc_max, \
     /usr/bin/tee /proc/sys/vm/swappiness, \
     /usr/bin/tee /etc/sysctl.d/60-zfsnas-swappiness.conf, \
-    /usr/bin/tee /sys/module/zfs/parameters/zfs_arc_min
+    /usr/bin/tee /sys/module/zfs/parameters/zfs_arc_min, \
+    /usr/bin/tee /etc/hostname, \
+    /usr/bin/tee /etc/hosts, \
+    /usr/bin/hostname -F /etc/hostname
 
 # ── System journal log viewer ─────────────────────────────────────────────────
 # since v6.6.12 — read-only journalctl access for the Log Viewer screen (the

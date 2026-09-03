@@ -437,6 +437,9 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 // Body: { "package": "targetcli-fb" | "minio" }
 func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if applianceBlock(w) {
+			return
+		}
 		var req struct {
 			Package string `json:"package"`
 		}

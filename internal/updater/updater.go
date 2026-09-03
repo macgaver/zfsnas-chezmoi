@@ -17,7 +17,16 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 )
+
+// metaClient is used for the small metadata requests (release JSON, .sig
+// files). It carries a timeout because a hung connection would otherwise block
+// forever: net/http's default client has none, and the appliance runs its
+// first-boot check on a network that may be half up. Binary downloads keep
+// using the default client — a whole-request timeout is the wrong tool for a
+// 27 MB body on a slow link.
+var metaClient = &http.Client{Timeout: 30 * time.Second}
 
 const repoAPI = "https://api.github.com/repos/macgaver/zfsnas-chezmoi/releases/latest"
 const repoReleasesAPI = "https://api.github.com/repos/macgaver/zfsnas-chezmoi/releases"
@@ -35,7 +44,7 @@ type ReleaseInfo struct {
 type ReleaseSummary struct {
 	Tag         string `json:"tag"`
 	Name        string `json:"name"`
-	Body        string `json:"body"`        // raw markdown from GitHub
+	Body        string `json:"body"`         // raw markdown from GitHub
 	PublishedAt string `json:"published_at"` // RFC3339
 	DownloadURL string `json:"download_url"`
 	SigURL      string `json:"sig_url"`
@@ -44,7 +53,7 @@ type ReleaseSummary struct {
 
 // CheckLatest calls the GitHub Releases API and returns the latest release info.
 func CheckLatest() (ReleaseInfo, error) {
-	resp, err := http.Get(repoAPI)
+	resp, err := metaClient.Get(repoAPI)
 	if err != nil {
 		return ReleaseInfo{}, fmt.Errorf("github API: %w", err)
 	}
@@ -223,7 +232,16 @@ func Download(url, destDir string) (string, error) {
 
 // Replace atomically replaces destPath with the file at tmpPath.
 func Replace(tmpPath, destPath string) error {
-	return os.Rename(tmpPath, destPath)
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return err
+	}
+	// A power cut mid-upgrade must not leave a truncated override on disk;
+	// force the rename (and the data it points at) out to the device.
+	if f, err := os.OpenFile(destPath, os.O_RDONLY, 0); err == nil {
+		f.Sync()
+		f.Close()
+	}
+	return nil
 }
 
 // Restart replaces the current process image with the binary at exePath via
@@ -247,7 +265,7 @@ func ExePath() (string, error) {
 // n stable results are available after filtering.
 func CheckReleases(n int) ([]ReleaseSummary, error) {
 	u := fmt.Sprintf("%s?per_page=%d", repoReleasesAPI, n*3)
-	resp, err := http.Get(u)
+	resp, err := metaClient.Get(u)
 	if err != nil {
 		return nil, fmt.Errorf("github API: %w", err)
 	}
@@ -351,7 +369,7 @@ func CheckRelease(tag string) (ReleaseInfo, error) {
 
 // downloadText fetches a URL and returns its body as a string.
 func downloadText(url string) (string, error) {
-	resp, err := http.Get(url)
+	resp, err := metaClient.Get(url)
 	if err != nil {
 		return "", err
 	}

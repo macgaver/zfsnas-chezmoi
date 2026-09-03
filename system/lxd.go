@@ -79,11 +79,11 @@ func lxdNormalizeSizeStr(s string) string {
 
 // LXDInstance represents a LXD virtual machine or container.
 type LXDInstance struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"` // human-readable display name
-	Type        string   `json:"type"`        // "virtual-machine" | "container"
-	Status      string   `json:"status"`      // "Running", "Stopped", "Starting", "Stopping", ...
-	IPv4        string   `json:"ipv4"`
+	Name        string `json:"name"`
+	Description string `json:"description"` // human-readable display name
+	Type        string `json:"type"`        // "virtual-machine" | "container"
+	Status      string `json:"status"`      // "Running", "Stopped", "Starting", "Stopping", ...
+	IPv4        string `json:"ipv4"`
 	// IPv4All lists every global IPv4 the instance holds. A guest running
 	// Docker is multi-homed (real NIC(s) + docker0 + a bridge per compose
 	// network), and which one is routable from THIS host varies, so service
@@ -4707,6 +4707,47 @@ func LXDListProfiles() ([]string, error) {
 }
 
 // LXDListStoragePools lists LXD storage pool names.
+// LXDEnsureDefaultProfileRootDisk points the `default` profile's root disk at
+// the given pool when the profile has none.
+//
+// Incus refuses to create an instance that has no root device ("No root device
+// could be found"), and an instance created without an explicit
+// `-d root,pool=…` inherits the profile's. A portal user who creates their
+// first datastore from the Datastores page (rather than through the
+// enable-virtualization flow, which sets this up) would otherwise be left with
+// a pool that no instance can use. Existing root disks are never touched — the
+// user's own layout wins.
+func LXDEnsureDefaultProfileRootDisk(pool string) error {
+	if pool == "" {
+		return nil
+	}
+	if existing := LXDDefaultProfileRootPool(); existing != "" {
+		return nil // already wired up; leave it alone
+	}
+	out, err := exec.Command("incus", "profile", "device", "add", "default",
+		"root", "disk", "path=/", "pool="+pool).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("attach root disk to default profile: %s",
+			strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// LXDDefaultProfileRootPool returns the storage pool that the `default`
+// profile's root disk points at — i.e. the pool an instance actually lands on
+// when it is created WITHOUT an explicit `-d root,pool=…`. The create dialogs
+// show this so "default" is not a mystery: the user sees which datastore the
+// profile resolves to. Returns "" when Incus is not initialised, the profile
+// has no root disk, or the root disk names no pool.
+func LXDDefaultProfileRootPool() string {
+	out, err := exec.Command("incus", "profile", "device", "get",
+		"default", "root", "pool").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func LXDListStoragePools() ([]string, error) {
 	out, err := exec.Command("incus", "storage", "list", "--format", "json").Output()
 	if err != nil {
@@ -4971,7 +5012,15 @@ func LXDCreateVM(req LXDCreateVMRequest, logCh chan<- string) error {
 	// requested size. Setting size here ensures the volume is created
 	// at the right size on the very first call.
 	if req.RootPool != "" {
-		args = append(args, "-d", "root,pool="+req.RootPool)
+		// `--storage`, not `-d root,pool=…`: `-d` OVERRIDES a device that the
+		// profile already defines, so on a fresh Incus whose `default` profile
+		// has no root disk it fails with "Cannot override config for device
+		// root: Device not found in profile devices" (and creating with no
+		// pool at all fails with "No root device could be found").
+		// `--storage` attaches the root disk to the instance itself, which
+		// works whether or not the profile has one — and never mutates the
+		// shared profile.
+		args = append(args, "--storage", req.RootPool)
 	}
 	if req.RootSizeGB > 0 {
 		// ZFS requires volsize to be a multiple of the pool's volblocksize
@@ -5446,6 +5495,16 @@ func LXDCreateContainer(req LXDCreateContainerRequest, logCh chan<- string) erro
 	}
 
 	args := []string{"init", image, req.Name, "-p", profile}
+	// Attach the root disk at init time via --storage. The post-init
+	// `config device override root` below can only override a device the
+	// PROFILE already defines: on a fresh Incus whose `default` profile has
+	// no root disk, both that override and a bare create fail ("Device not
+	// found in profile devices" / "No root device could be found").
+	// --storage gives the instance its own root disk regardless, and leaves
+	// the shared profile untouched.
+	if req.RootPool != "" {
+		args = append(args, "--storage", req.RootPool)
+	}
 	if req.CPUCores > 0 {
 		args = append(args, "-c", fmt.Sprintf("limits.cpu=%d", req.CPUCores))
 	}
@@ -5557,10 +5616,16 @@ func LXDCreateContainer(req LXDCreateContainerRequest, logCh chan<- string) erro
 
 	// Root disk pool + size.
 	if req.DiskSizeGB > 0 || req.RootPool != "" {
-		dArgs := []string{"config", "device", "override", req.Name, "root"}
+		// The pool was set by --storage at init, which gives the instance its
+		// OWN root device — so this pass uses `device set` (an `override`
+		// would fail with "The device already exists"). When no pool was
+		// requested the root disk still comes from the profile, and only
+		// `override` can copy it down to the instance, so pick accordingly.
+		verb := "override"
 		if req.RootPool != "" {
-			dArgs = append(dArgs, "pool="+req.RootPool)
+			verb = "set"
 		}
+		dArgs := []string{"config", "device", verb, req.Name, "root"}
 		if req.DiskSizeGB > 0 {
 			// %vGiB so fractional sizes (e.g. 0.1 from an MB unit pick)
 			// pass through as "0.1GiB" — incus accepts decimals here.
@@ -5568,7 +5633,15 @@ func LXDCreateContainer(req LXDCreateContainerRequest, logCh chan<- string) erro
 			// matches the number the operator typed (the old %vGB form
 			// underreported by ~6.87% per GB — see lxd_root sizeBytes
 			// comment).
-			dArgs = append(dArgs, fmt.Sprintf("size=%vGiB", req.DiskSizeGB))
+			size := fmt.Sprintf("%vGiB", req.DiskSizeGB)
+			// The two verbs take different argument shapes: `override`
+			// accepts key=value, `set` wants the key and value as separate
+			// arguments (passing key=value there just prints its usage).
+			if verb == "set" {
+				dArgs = append(dArgs, "size", size)
+			} else {
+				dArgs = append(dArgs, "size="+size)
+			}
 		}
 		log("Configuring root disk…")
 		if out, err := exec.Command("incus", dArgs...).CombinedOutput(); err != nil {
@@ -8550,7 +8623,6 @@ func LXDMoveStorage(name, targetPool string) error {
 	}
 	return nil
 }
-
 
 // lxdAllGlobalIPv4s returns every global IPv4 the instance holds, with the
 // best-guess address first so callers that probe in order try the most likely

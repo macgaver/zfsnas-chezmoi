@@ -108,6 +108,9 @@ func HandleUnattendedStatus(w http.ResponseWriter, r *http.Request) {
 // rewriting /etc/apt/apt.conf.d/20auto-upgrades — the same knob
 // `dpkg-reconfigure unattended-upgrades` toggles. Admin only.
 func HandleUnattendedSet(w http.ResponseWriter, r *http.Request) {
+	if applianceBlock(w) {
+		return
+	}
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -383,6 +386,9 @@ func HandleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 // client is fast-forwarded through the buffered output and then receives
 // new lines live until the job finishes.
 func HandleApplyUpdates(w http.ResponseWriter, r *http.Request) {
+	if applianceBlock(w) {
+		return
+	}
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return

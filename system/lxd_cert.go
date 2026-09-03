@@ -40,7 +40,7 @@ import (
 )
 
 const lxdServerCertPath = "/var/lib/incus/server.crt"
-const lxdServerKeyPath  = "/var/lib/incus/server.key"
+const lxdServerKeyPath = "/var/lib/incus/server.key"
 
 // defaultRouteIface returns the name of the interface used by the default IPv4
 // route. This is the most reliable signal of "the address peers reach us on".
@@ -75,9 +75,10 @@ func defaultRouteIface() string {
 // pin core.https_address to an internal IP. Down interfaces are also skipped.
 func localPublicIPs() []net.IP {
 	skipPrefixes := []string{"lxdbr", "lxcbr", "virbr", "docker", "veth", "tap"}
-	skipExact := map[string]bool{
-		"host-nat": true, // bridge created by lxdConfigureExisting (always internal)
-	}
+	// host-nat, host-nat2, … are all ours and all internal — see
+	// IsHostNatNetwork. Matching only the bare name would let host-nat2's
+	// private address be picked as the server's public IP.
+	skipExact := map[string]bool{}
 
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -106,7 +107,7 @@ func localPublicIPs() []net.IP {
 		if iface.Flags&net.FlagUp == 0 {
 			continue // skip DOWN interfaces — their IPs aren't reachable
 		}
-		if skipExact[iface.Name] {
+		if skipExact[iface.Name] || IsHostNatNetwork(iface.Name) {
 			continue
 		}
 		skip := false

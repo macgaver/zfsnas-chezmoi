@@ -39,8 +39,8 @@ type ProxmoxVMNIC struct {
 // inner blob format is shared, which is why a drop-in import is worth a
 // best-effort attempt.
 type ProxmoxVMTPM struct {
-	StorageVol string `json:"storage_vol"`     // "<storage>:<volume>"
-	Version    string `json:"version"`         // "v2.0" | "v1.2"
+	StorageVol string `json:"storage_vol"` // "<storage>:<volume>"
+	Version    string `json:"version"`     // "v2.0" | "v1.2"
 	SizeBytes  int64  `json:"size_bytes"`
 }
 
@@ -458,9 +458,9 @@ func shellSingleQuote(s string) string {
 // importProxmoxTPM is the best-effort TPM state migration from Proxmox to
 // the just-created Incus VM. Compatibility gates:
 //
-//	- TPM v2.0 only (Incus' swtpm has no TPM 1.2 support).
-//	- swtpm available on the local host.
-//	- File size in [64 B, 4 MiB].
+//   - TPM v2.0 only (Incus' swtpm has no TPM 1.2 support).
+//   - swtpm available on the local host.
+//   - File size in [64 B, 4 MiB].
 //
 // On success, the TPM device is added to the Incus VM and the state file
 // is placed at the standard Incus path. On any failure the function
@@ -714,9 +714,22 @@ func ImportProxmoxVM(ctx context.Context, conn ProxmoxSSHConn, vm ProxmoxVM, req
 		log("  ⚠ VM is running — disk snapshot is live and may be inconsistent.")
 	}
 
-	// Step 1: Create empty LXD VM.
+	// Step 1: Create empty LXD VM, with its root disk on the chosen datastore.
+	//
+	// The pool MUST be set here, at init: Incus refuses to move an existing
+	// root disk to another pool afterwards ("Cannot update root disk device
+	// pool name to X"), and a plain `init --empty` inherits the default
+	// profile's root disk — which points at whatever pool that profile names.
+	// Importing into any other datastore then failed on the very next step.
+	// `--storage` attaches the root disk to the INSTANCE (not the shared
+	// profile), so it also survives the `profile remove` below.
 	log(fmt.Sprintf("Creating LXD VM '%s' (vCPU=%d, RAM=%d MB)...", vmName, vm.CPU, vm.MemoryMB))
-	if out, err := exec.Command("incus", "init", "--empty", vmName, "--vm").CombinedOutput(); err != nil {
+	rootSize := ""
+	if len(vm.Disks) > 0 {
+		rootSize = proxmoxSizeToLXD(vm.Disks[0].SizeStr)
+	}
+	initArgs := proxmoxInitArgs(vmName, req.StoragePool, rootSize)
+	if out, err := exec.Command("incus", initArgs...).CombinedOutput(); err != nil {
 		return fmt.Errorf("lxc init: %s: %s", err.Error(), strings.TrimSpace(string(out)))
 	}
 
@@ -814,17 +827,10 @@ func ImportProxmoxVM(ctx context.Context, conn ProxmoxSSHConn, vm ProxmoxVM, req
 		var zvolDataset string
 
 		if i == 0 {
-			// Root disk: add device, LXD creates the backing zvol.
-			devArgs := []string{"config", "device", "add", vmName, "root", "disk",
-				"path=/", "pool=" + req.StoragePool, "boot.priority=1",
-			}
-			if lxdSize != "" {
-				devArgs = append(devArgs, "size="+lxdSize)
-			}
-			if out, err := exec.Command("incus", devArgs...).CombinedOutput(); err != nil {
-				rollback()
-				return fmt.Errorf("add root disk: %s: %s", err.Error(), strings.TrimSpace(string(out)))
-			}
+			// Root disk: already attached at init (pool + size + boot.priority),
+			// because Incus will not let it change pools after the fact. LXD
+			// created the backing zvol with it.
+			//
 			// The default profile gives the VM an eth0 NIC on the LXD managed
 			// bridge. Remove the profile now that the root disk is set at instance
 			// level; otherwise adding the imported NICs to the same bridge causes
@@ -1018,7 +1024,7 @@ fi`, disk.StorageVol)
 		if i == 0 && !vm.IsUEFI && diskHasEFISystemPartition(blockDev) {
 			log("  Root disk has an EFI System Partition → switching this VM to UEFI boot (the Proxmox config didn't indicate UEFI, so SeaBIOS/CSM was configured, which can't boot it).")
 			vm.IsUEFI = true
-			exec.Command("incus", "config", "unset", vmName, "security.csm").Run()           //nolint:errcheck
+			exec.Command("incus", "config", "unset", vmName, "security.csm").Run()            //nolint:errcheck
 			exec.Command("incus", "config", "set", vmName, "security.secureboot=false").Run() //nolint:errcheck
 		}
 
@@ -1138,6 +1144,20 @@ func getLXDPoolSource(poolName string) string {
 
 // proxmoxSizeToLXD converts a Proxmox disk size string (e.g. "32G", "512M")
 // into the IEC form expected by LXD (e.g. "32GiB", "512MiB").
+// proxmoxInitArgs builds the `incus init` command for an imported VM. Split
+// out so the one thing that broke imports into a non-default datastore — the
+// root pool not being set at creation time — is covered by a test.
+func proxmoxInitArgs(vmName, pool, rootSize string) []string {
+	args := []string{"init", "--empty", vmName, "--vm"}
+	if pool != "" {
+		args = append(args, "--storage", pool)
+	}
+	if rootSize != "" {
+		args = append(args, "-d", "root,size="+rootSize)
+	}
+	return append(args, "-d", "root,boot.priority=1")
+}
+
 func proxmoxSizeToLXD(s string) string {
 	if s == "" {
 		return ""

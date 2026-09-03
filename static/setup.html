@@ -69,6 +69,18 @@
                  placeholder="Repeat password" autocomplete="new-password" required>
         </div>
 
+        <div class="form-group" style="display:flex;align-items:flex-start;gap:9px;">
+          <input type="checkbox" id="ssh_login" name="ssh_login" checked
+                 style="margin-top:3px;width:auto;flex:0 0 auto;">
+          <label for="ssh_login" style="font-weight:400;line-height:1.45;">
+            Allow this account to log in over SSH
+            <span style="display:block;font-size:12px;opacity:.75;">
+              Creates a matching system account with the same password, so you can
+              reach a shell. You can turn this off later from Settings.
+            </span>
+          </label>
+        </div>
+
         <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
           Create Administrator Account
         </button>
@@ -104,6 +116,7 @@
             email:            form.email.value.trim(),
             password:         password,
             confirm_password: confirm,
+            ssh_login:        form.ssh_login.checked,
           }),
         });
 

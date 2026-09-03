@@ -344,6 +344,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/prereqs/install-service",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleInstallService)))).Methods("POST")
 
+	// --- USB appliance: SSH unlock (admin only, appliance mode only) ---
+	r.Handle("/api/appliance/ssh-access",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceSSHAccess)))).Methods("POST")
+
 	// --- Sudoers Hardening (admin only) ---
 	r.Handle("/api/sudoers/status",
 		RequireAuth(RequirePermission("review_sudoers")(HandleSudoersStatus(appCfg)))).Methods("GET")
@@ -405,6 +409,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleGetSettings(appCfg)))).Methods("GET")
 	r.Handle("/api/settings",
 		RequireAuth(RequirePermission("edit_settings")(http.HandlerFunc(HandleUpdateSettings(appCfg))))).Methods("PUT")
+	r.Handle("/api/settings/hostname",
+		RequireAuth(http.HandlerFunc(HandleGetHostname))).Methods("GET")
+	r.Handle("/api/settings/hostname",
+		RequireAuth(RequirePermission("edit_settings")(http.HandlerFunc(HandleSetHostname)))).Methods("PUT")
 	r.Handle("/api/settings/timezone",
 		RequireAuth(http.HandlerFunc(HandleGetTimezone))).Methods("GET")
 	r.Handle("/api/settings/timezone",
@@ -1009,6 +1017,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleListProfiles))).Methods("GET")
 	r.Handle("/api/lxd/storage-pools",
 		RequireAuth(http.HandlerFunc(HandleListStoragePools))).Methods("GET")
+	r.Handle("/api/lxd/default-root-pool",
+		RequireAuth(http.HandlerFunc(HandleDefaultRootPool))).Methods("GET")
 	r.Handle("/api/lxd/storage-pools-detail",
 		RequireAuth(http.HandlerFunc(HandleListStoragePoolInfos))).Methods("GET")
 	r.Handle("/api/lxd/storage-pools-detail",
@@ -1039,6 +1049,12 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_networking")(http.HandlerFunc(HandleEditLXDNetwork)))).Methods("PUT")
 	r.Handle("/api/lxd/network-bridges/{name}",
 		RequireAuth(RequirePermission("manage_networking")(http.HandlerFunc(HandleDeleteLXDNetwork)))).Methods("DELETE")
+	r.Handle("/api/lxd/host-bridges/{name}",
+		RequireAuth(RequireNetView(http.HandlerFunc(HandleGetHostBridge)))).Methods("GET")
+	r.Handle("/api/lxd/host-bridges/{name}",
+		RequireAuth(RequirePermission("manage_networking")(http.HandlerFunc(HandleSetHostBridge)))).Methods("PUT")
+	r.Handle("/api/lxd/host-bridges/{name}/apply",
+		RequireAuth(RequirePermission("manage_networking")(http.HandlerFunc(HandleApplyHostBridge)))).Methods("POST")
 	r.Handle("/api/lxd/network-bridges/{name}/members",
 		RequireAuth(http.HandlerFunc(HandleGetBridgeMembers))).Methods("GET")
 	r.Handle("/api/lxd/network-bridges/{name}/stats",

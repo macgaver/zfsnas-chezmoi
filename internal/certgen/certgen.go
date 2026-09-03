@@ -48,12 +48,25 @@ func Generate(certFile, keyFile string) error {
 		return err
 	}
 
+	// NOTE: these two files are fsynced before returning. Without that, the
+	// data can sit in the page cache / filesystem journal: on the USB
+	// appliance the config directory lives on a commit=60 filesystem, so a
+	// power cut or reset within the first minute of the very first boot
+	// leaves 0-byte cert and key files behind — and the portal can then
+	// never start its HTTPS listener again on any later boot.
 	certOut, err := os.Create(certFile)
 	if err != nil {
 		return err
 	}
-	defer certOut.Close()
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+		certOut.Close()
+		return err
+	}
+	if err := certOut.Sync(); err != nil {
+		certOut.Close()
+		return err
+	}
+	if err := certOut.Close(); err != nil {
 		return err
 	}
 
@@ -61,13 +74,29 @@ func Generate(certFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
-	defer keyOut.Close()
 
 	privDER, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
+		keyOut.Close()
 		return err
 	}
-	return pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: privDER})
+	if err := pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: privDER}); err != nil {
+		keyOut.Close()
+		return err
+	}
+	if err := keyOut.Sync(); err != nil {
+		keyOut.Close()
+		return err
+	}
+	if err := keyOut.Close(); err != nil {
+		return err
+	}
+	// fsync the directory too, so the new entries themselves are durable.
+	if d, err := os.Open(filepath.Dir(certFile)); err == nil {
+		d.Sync()
+		d.Close()
+	}
+	return nil
 }
 
 // Exists returns true if both cert and key files exist.
@@ -242,7 +271,10 @@ func ExportCertZip(certsDir, name string) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	zw := zip.NewWriter(buf)
 
-	for _, pair := range []struct{ n string; d []byte }{{name + ".crt", certData}, {name + ".key", keyData}} {
+	for _, pair := range []struct {
+		n string
+		d []byte
+	}{{name + ".crt", certData}, {name + ".key", keyData}} {
 		f, err := zw.Create(pair.n)
 		if err != nil {
 			return nil, err
@@ -256,4 +288,3 @@ func ExportCertZip(certsDir, name string) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
-

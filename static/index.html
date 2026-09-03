@@ -2033,7 +2033,7 @@
               </tr>
             </thead>
             <tbody id="replication-tasks-body">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -2151,16 +2151,16 @@
               <div id="os-info-line" style="font-size:13px;color:var(--text-3);">Loading…</div>
               <div id="os-autoupdate-line" style="display:none;align-items:center;gap:7px;margin-top:4px;">
                 <span id="os-autoupdate-text" style="font-size:12px;line-height:1.4;"></span>
-                <i class="info-tip" style="cursor:pointer;flex-shrink:0;" title="About automatic OS updates"
+                <i class="info-tip osupdate-ui" style="cursor:pointer;flex-shrink:0;" title="About automatic OS updates"
                    onclick="document.getElementById('modal-autoupdate-info').classList.remove('hidden')"></i>
-                <span onclick="openAutoUpdateModal()" title="Configure automatic OS updates"
+                <span class="osupdate-ui" onclick="openAutoUpdateModal()" title="Configure automatic OS updates"
                    style="cursor:pointer;color:var(--text-3);font-size:14px;line-height:1;flex-shrink:0;transition:color .15s;"
                    onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-3)'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
               </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <button class="btn btn-ghost btn-sm" onclick="checkUpdates()" id="btn-check-updates"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M3 12a9 9 0 0 0 9 9c2.52 0 4.93-1 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg> Check for Updates</button>
-              <div style="position:relative;display:inline-block;">
+              <button class="btn btn-ghost btn-sm osupdate-ui" onclick="checkUpdates()" id="btn-check-updates"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M3 12a9 9 0 0 0 9 9c2.52 0 4.93-1 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg> Check for Updates</button>
+              <div class="osupdate-ui" style="position:relative;display:inline-block;">
                 <button class="btn btn-primary btn-sm hidden" onclick="toggleUpdateMenu(event)" id="btn-apply-updates"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg> Install Updates&nbsp;<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m6 9 6 6 6-6"/></svg></button>
                 <div id="update-mode-menu" class="hidden" style="position:absolute;right:0;bottom:calc(100% + 6px);z-index:200;min-width:270px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.45);overflow:hidden;">
                   <button type="button" onclick="closeUpdateMenu();applyUpdates();" style="display:block;width:100%;text-align:left;padding:11px 14px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text-1);cursor:pointer;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
@@ -3164,7 +3164,7 @@
                   <div style="display:grid;grid-template-columns:1fr 140px;gap:12px;">
                     <div class="form-group" style="margin:0;">
                       <label>Storage Pool</label>
-                      <select id="lxd-vm-root-pool" class="input"><option value="">default</option></select>
+                      <select id="lxd-vm-root-pool" class="input"><option value="">Profile default</option></select>
                     </div>
                     <div class="form-group" style="margin:0;">
                       <label>Size</label>
@@ -3447,7 +3447,7 @@
                   <div style="display:grid;grid-template-columns:1fr 140px;gap:12px;">
                     <div class="form-group" style="margin:0;">
                       <label>Storage Pool</label>
-                      <select id="lxd-ct-root-pool" class="input"><option value="">default</option></select>
+                      <select id="lxd-ct-root-pool" class="input"><option value="">Profile default</option></select>
                     </div>
                     <div class="form-group" style="margin:0;">
                       <label>Size</label>
@@ -4180,6 +4180,7 @@
               <tr>
                 <th class="lxd-sortable" data-net-table="bridges" data-net-key="name" onclick="sortNetworksTable('bridges','name')">Name<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:80px;" data-net-table="bridges" data-net-key="type" onclick="sortNetworksTable('bridges','type')">Type<span class="sort-arrow"></span></th>
+                <th class="lxd-sortable" style="width:120px;" data-net-table="bridges" data-net-key="ports_label" onclick="sortNetworksTable('bridges','ports_label')">Physical NIC<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="bridges" data-net-key="ipv4" onclick="sortNetworksTable('bridges','ipv4')">IPv4<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="bridges" data-net-key="ipv6" onclick="sortNetworksTable('bridges','ipv6')">IPv6<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:60px;" data-net-table="bridges" data-net-key="vm_count" onclick="sortNetworksTable('bridges','vm_count')">VMs<span class="sort-arrow"></span></th>
@@ -4188,7 +4189,7 @@
               </tr>
             </thead>
             <tbody id="lxd-networks-tbody-bridges">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -4198,6 +4199,7 @@
               <tr>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="name" onclick="sortNetworksTable('others','name')">Name<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:80px;" data-net-table="others" data-net-key="type" onclick="sortNetworksTable('others','type')">Type<span class="sort-arrow"></span></th>
+                <th class="lxd-sortable" style="width:120px;" data-net-table="others" data-net-key="ports_label" onclick="sortNetworksTable('others','ports_label')">Physical NIC<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="ipv4" onclick="sortNetworksTable('others','ipv4')">IPv4<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="ipv6" onclick="sortNetworksTable('others','ipv6')">IPv6<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:60px;" data-net-table="others" data-net-key="vm_count" onclick="sortNetworksTable('others','vm_count')">VMs<span class="sort-arrow"></span></th>
@@ -4206,9 +4208,60 @@
               </tr>
             </thead>
             <tbody id="lxd-other-networks-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Edit host-managed bridge (ifupdown) addressing -->
+      <div class="modal-backdrop hidden" id="modal-host-bridge" onclick="if(event.target===this)this.classList.add('hidden')">
+        <div class="modal" style="max-width:560px;">
+          <div class="modal-header">
+            <h3>Bridge settings — <span id="hb-name" style="font-family:monospace;"></span></h3>
+            <button class="modal-close" onclick="document.getElementById('modal-host-bridge').classList.add('hidden')"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div id="hb-msg" class="alert hidden" style="margin:0 24px 8px;"></div>
+          <div style="padding:0 24px 8px;">
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;">
+              Physical NIC: <span id="hb-ports" style="font-family:monospace;color:var(--text-1);"></span>
+              <i class="info-tip" data-tip="The interface enslaved to this bridge. Changing addressing here never detaches it — only the address settings are rewritten."></i>
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label">Addressing</label>
+              <select id="hb-mode" class="input" onchange="_hbToggleStatic()">
+                <option value="dhcp">DHCP — get an address automatically</option>
+                <option value="static">Static — set the address manually</option>
+                <option value="manual">None — no address on this bridge</option>
+              </select>
+            </div>
+            <div id="hb-static-fields" style="display:none;">
+              <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label">Address (CIDR) <span style="color:var(--danger);">*</span></label>
+                <input type="text" id="hb-address" class="input" placeholder="192.168.1.50/24">
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Include the prefix length, e.g. <code>/24</code></div>
+              </div>
+              <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label">Gateway</label>
+                <input type="text" id="hb-gateway" class="input" placeholder="192.168.1.1">
+              </div>
+              <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label">DNS servers</label>
+                <input type="text" id="hb-dns" class="input" placeholder="1.1.1.1 9.9.9.9">
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Space-separated</div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--text-3);margin-bottom:8px;">
+              Changing the address of the bridge you are connected through will drop this session — reconnect on the new address.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" onclick="document.getElementById('modal-host-bridge').classList.add('hidden')">Close</button>
+            <button class="btn btn-primary" onclick="saveHostBridge()">Save</button>
+            <button class="btn" id="hb-apply-btn" disabled
+              onclick="applyHostBridge(document.getElementById('modal-host-bridge').dataset.bridge)"
+              title="Nothing to apply — this interface already runs its saved settings">Apply now</button>
+          </div>
         </div>
       </div>
 
@@ -4642,7 +4695,7 @@
               </tr>
             </thead>
             <tbody id="lxd-datastores-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -4707,7 +4760,7 @@
                 <th style="width:44px;"></th>
               </tr></thead>
               <tbody id="vdisks-tbody">
-                <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+                <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -6221,6 +6274,36 @@ Select the Console tab to load.</pre>
           </div>
 
           <button class="btn btn-primary btn-sm" onclick="saveSettings();saveTimezone();" style="margin-top:8px;">Apply</button>
+        </div>
+
+        <!-- ── 2. Server Name ── -->
+        <div class="card">
+          <h3 style="margin-bottom:4px;">Server Name
+            <i class="info-tip tip-down" style="margin-left:6px;" data-tip="The hostname this server answers to on the network.&#10;&#10;Applied immediately and written to /etc/hostname, so it survives a reboot. The loopback entry in /etc/hosts is updated with it.&#10;&#10;Letters, digits and hyphens only, at most 63 characters — no dots: the domain part comes from DNS, not from here.&#10;&#10;Services that advertise the old name (SMB/NetBIOS, mDNS, the TLS certificate) keep using it until they are restarted or the certificate is regenerated."></i>
+          </h3>
+          <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Rename the server. The change is live and persists across reboots.</p>
+          <div id="hostname-msg" class="alert hidden"></div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Hostname</label>
+            <input type="text" id="settings-hostname" class="input" maxlength="63" placeholder="nas" style="max-width:320px;font-family:'SF Mono',monospace;">
+          </div>
+          <button class="btn btn-primary btn-sm" id="hostname-apply-btn" onclick="applyHostname()" style="margin-top:8px;">Apply</button>
+        </div>
+
+        <!-- ── USB appliance: SSH access (appliance-only) ── -->
+        <div class="card appliance-only">
+          <h3 style="margin-bottom:4px;">SSH access</h3>
+          <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">SSH ships locked. Set a root password and/or paste a public key to enable remote shell access. Stored on the persist partition — survives reboots and image reflashes.</p>
+          <div id="appl-ssh-msg" class="alert hidden"></div>
+          <div class="form-group">
+            <label>Root Password</label>
+            <input type="password" id="appl-ssh-pw" placeholder="Leave blank to skip" style="max-width:320px;">
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Authorized Public Key</label>
+            <textarea id="appl-ssh-key" class="input" rows="2" placeholder="ssh-ed25519 AAAA… user@host" style="width:100%;font-family:'SF Mono',monospace;font-size:13px;"></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="applSaveSSHAccess()" style="margin-top:8px;">Save</button>
         </div>
 
         <!-- ── 3. Folder TreeMap Schedule ── -->
@@ -8049,7 +8132,7 @@ Select the Console tab to load.</pre>
 </div>
 
 <!-- Automatic OS updates — configure popup -->
-<div class="modal-backdrop hidden" id="modal-autoupdate-config" onclick="if(event.target===this)this.classList.add('hidden')">
+<div class="modal-backdrop hidden osupdate-ui" id="modal-autoupdate-config" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal" style="max-width:480px;">
     <div class="modal-header">
       <div style="display:flex;align-items:center;gap:10px;">
@@ -8765,6 +8848,11 @@ Select the Console tab to load.</pre>
         <input type="checkbox" id="new-smb-home" style="width:15px;height:15px;accent-color:var(--accent-2);">
         Home User Folder
         <i class="info-tip tip-down" data-tip="When enabled and a home-folder dataset is configured in SMB Shares &gt; Configure, this user's personal folder is created inside that dataset and served as their SMB home share (\\server\username)."></i>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:16px;">
+        <input type="checkbox" id="new-ssh-login" style="width:15px;height:15px;accent-color:var(--accent-2);">
+        Allow SSH login
+        <i class="info-tip tip-down" data-tip="Creates a matching Linux account with a shell and this password so the user can log in over SSH.&#10;&#10;Off by default: an SMB-only user gets a no-login account and should stay that way."></i>
       </label>
       <!-- Advanced Settings collapsible -->
       <div style="margin-bottom:16px;">
@@ -11881,6 +11969,7 @@ Select the Console tab to load.</pre>
         <span id="sysinfo-host-label" style="margin-left:8px;font-family:'SF Mono',monospace;font-size:13px;font-weight:500;color:var(--text-3);"></span>
       </h3>
       <div style="display:flex;align-items:center;gap:14px;flex-shrink:0;">
+        <span id="sysinfo-appliance-badge"></span>
         <div id="sysinfo-uptime" title="Time since the server was last booted" style="display:none;align-items:center;gap:8px;padding:5px 13px;border-radius:20px;background:rgba(48,209,88,0.10);border:1px solid rgba(48,209,88,0.35);">
           <span style="color:#30d158;font-size:14px;line-height:1;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
           <span style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);">Uptime</span>
@@ -12664,6 +12753,42 @@ function _serverRestartRefresh() {
   window.location.reload();
 }
 
+// v6.8.28: appliance-mode boot globals. Called wherever /api/version JSON
+// lands, including _softRelayRefresh (relay rule: every boot global must be
+// re-applied after an InterLink switch).
+function _setApplianceGlobals(d) {
+  window._appliance        = !!d.appliance;
+  window._applianceRelease = d.appliance_release || '';
+  window._persistStatus    = d.persist_status || '';
+  document.body.classList.toggle('appliance', window._appliance);
+  _renderPersistBanner();
+}
+
+// v6.8.28: persist-store health banner. "degraded" = red, permanent;
+// "overlap-lost" = amber, dismissible (one-time event, data already gone).
+function _renderPersistBanner() {
+  const old = document.getElementById('persist-banner');
+  if (old) old.remove();
+  const st = window._persistStatus;
+  if (st !== 'degraded' && st !== 'overlap-lost') return;
+  const d = document.createElement('div');
+  d.id = 'persist-banner';
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;' +
+    'padding:8px 16px;text-align:center;font-size:13px;font-weight:600;color:#fff;' +
+    'background:' + (st === 'degraded' ? 'var(--accent-danger)' : '#a06e00');
+  d.textContent = st === 'degraded'
+    ? 'Running WITHOUT persistence — settings will not survive a reboot (no usable space on the USB stick).'
+    : 'Previous settings could not be recovered from this stick (the new image overlapped the old data). Starting fresh.';
+  if (st === 'overlap-lost') {
+    const x = document.createElement('button');
+    x.textContent = '×';
+    x.style.cssText = 'margin-left:12px;background:none;border:none;color:#fff;cursor:pointer;font-size:15px;line-height:1;';
+    x.onclick = () => d.remove();
+    d.appendChild(x);
+  }
+  document.body.appendChild(d);
+}
+
 // Server-restart watchdog: poll /api/version every 30 s and compare its
 // startup_time_unix to the first value we saw. A change means the
 // process was restarted (manual systemctl, in-place binary upgrade,
@@ -12939,6 +13064,7 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
     window._mergerfsEnabled    = !!d.mergerfs_enabled;
     window._servicesEnabled    = d.services_enabled !== false;
     window._serviceProxyEnabled = d.service_proxy_enabled !== false;
+    _setApplianceGlobals(d);
     _applyServicesNavVisibility();
     updateVirtTabVisibility(window._lxdAvailable);
     if (typeof updateMonitorTabVisibility === 'function') updateMonitorTabVisibility();
@@ -14218,6 +14344,21 @@ function _renderSysInfo(data) {
     hostLbl.textContent = id ? '· ' + id : '';
   }
 
+  // v6.8.28: USB appliance identity badge — next to the uptime pill.
+  // Shape mirrors #sysinfo-uptime exactly (padding:5px 13px / radius:20px /
+  // inline-flex+align-items:center) and text styling mirrors its
+  // #sysinfo-uptime-val span (13px/700/var(--text-1)/nowrap), just with a
+  // neutral surface/border instead of the green uptime accent. No ".pill"
+  // CSS class exists in the codebase, so this stays plain inline style
+  // (matching the file's convention of inline-styled elements) rather than
+  // introducing a dangling/unbacked class.
+  const applianceBadgeEl = document.getElementById('sysinfo-appliance-badge');
+  if (applianceBadgeEl) {
+    applianceBadgeEl.innerHTML = (window._appliance && window._applianceRelease
+      ? `<span style="display:inline-flex;align-items:center;padding:5px 13px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);font-size:13px;font-weight:700;color:var(--text-1);white-space:nowrap;line-height:1;" title="Running from the read-only USB image">USB appliance ${esc(window._applianceRelease)}</span>`
+      : '');
+  }
+
   // Uptime badge (top right, next to the close button). Hidden when the
   // backend didn't report it (e.g. a relay peer on an older build).
   const upBadge = document.getElementById('sysinfo-uptime');
@@ -15198,10 +15339,10 @@ async function _updateMergerFSPrereqStatus() {
     if (d.installed) {
       stat.innerHTML = znasIcon('check', {size:14, style:'color:#30d158;vertical-align:-0.15em'}) + ' Installed';
       stat.style.color = '#30d158'; stat.style.fontWeight = '600';
-      if (btn) { btn.textContent = 'Uninstall'; btn.disabled = false; btn.setAttribute('onclick','uninstallMergerFS()'); }
+      if (btn) { btn.textContent = 'Uninstall'; btn.disabled = false; btn.setAttribute('onclick','uninstallMergerFS()'); btn.classList.add('uninstall-ui'); }
     } else {
       stat.textContent = 'Not installed'; stat.style.color = 'var(--text-3)'; stat.style.fontWeight = '';
-      if (btn) { btn.style.display = ''; btn.disabled = false; btn.textContent = 'Install MergerFS'; btn.setAttribute('onclick','installMergerFS()'); }
+      if (btn) { btn.style.display = ''; btn.disabled = false; btn.textContent = 'Install MergerFS'; btn.setAttribute('onclick','installMergerFS()'); btn.classList.remove('uninstall-ui'); }
     }
   } catch (_) {}
 }
@@ -16491,6 +16632,7 @@ function openCreateUser() {
   csRefresh('new-role');
   document.getElementById('new-password-label').textContent = 'Password';
   document.getElementById('new-smb-home').checked = false;
+  document.getElementById('new-ssh-login').checked = false;
   document.getElementById('new-uid').value = '';
   document.getElementById('new-gid').value = '';
   // Reset standard permissions checkboxes.
@@ -16549,6 +16691,7 @@ async function submitCreateUser(e) {
     email:          document.getElementById('new-email').value.trim(),
     role,
     smb_home_folder: document.getElementById('new-smb-home').checked,
+    ssh_login:       document.getElementById('new-ssh-login').checked,
   };
   const pw = document.getElementById('new-password').value;
   if (role === 'smb-only') body.smb_password = pw;
@@ -17368,6 +17511,7 @@ async function loadSettings() {
     if (liveToggle) liveToggle.checked = !!appSettings.live_update_enabled;
   } catch {}
   loadTimezone();
+  loadHostname();
   loadTreeMapScheduleSettings();
   loadNTPStatus();
   loadWebSessionPolicy();
@@ -17582,6 +17726,92 @@ async function saveTimezone() {
     alertEl.textContent = data.error || 'Failed to set timezone.';
     alertEl.classList.remove('hidden');
   }
+}
+
+// ── Server Name (General tab card) ─────────────────────────────────────────
+async function loadHostname() {
+  const el = document.getElementById('settings-hostname');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/settings/hostname');
+    const d = await r.json();
+    if (r.ok && d.hostname) { el.value = d.hostname; el.dataset.saved = d.hostname; }
+  } catch {}
+}
+
+function _hostnameMsg(text, isErr) {
+  const el = document.getElementById('hostname-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'alert ' + (isErr ? 'alert-error' : 'alert-success');
+  el.classList.remove('hidden');
+}
+
+async function applyHostname() {
+  const el  = document.getElementById('settings-hostname');
+  const btn = document.getElementById('hostname-apply-btn');
+  if (!el) return;
+  const name = el.value.trim();
+  // Renaming the server is worth a confirmation: anything that reached the box
+  // by its old name — SMB mounts, bookmarks, other ZNAS peers — has to be
+  // pointed at the new one.
+  showConfirm({
+    title: 'Rename this server to ' + esc(name) + '?',
+    body: '<p>The new name takes effect immediately and after every reboot.</p>' +
+          '<p style="margin-top:8px">Anything that reaches this server by its current name — SMB mounts, ' +
+          'bookmarks, InterLink peers — keeps working only if you point it at the new name. ' +
+          'The TLS certificate still carries the old name until it is regenerated.</p>',
+    confirmText: 'Rename',
+    onConfirm: async () => {
+      if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+      try {
+        const r = await fetch('/api/settings/hostname', {
+          method: 'PUT', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ hostname: name }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || r.statusText);
+        el.dataset.saved = d.hostname || name;
+        _hostnameMsg(d.message || 'Hostname changed.', false);
+        // The sidebar and the tab title carry the hostname — refresh them so
+        // the page does not keep showing the name the box no longer has.
+        const shown = d.hostname || name;
+        window._serverHostname = shown;
+        document.title = 'ZNAS - ' + shown.toUpperCase();
+        const hl = document.getElementById('sidebar-hostname-label');
+        if (hl) hl.textContent = shown;
+        const hb = document.getElementById('sidebar-hostname');
+        if (hb) hb.title = shown;
+      } catch (e) {
+        _hostnameMsg(e.message, true);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Apply'; }
+      }
+    }
+  });
+}
+
+// ── USB appliance: SSH access (General tab card, appliance-only) ───────────
+async function applSaveSSHAccess() {
+  const pw  = document.getElementById('appl-ssh-pw').value;
+  const key = document.getElementById('appl-ssh-key').value.trim();
+  if (!pw && !key) return _applSSHMsg('Enter a password and/or a public key.', true);
+  try {
+    const r = await fetch('/api/appliance/ssh-access', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ root_password: pw, authorized_key: key })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    document.getElementById('appl-ssh-pw').value = '';
+    _applSSHMsg('Saved — SSH login for root is now enabled.', false);
+  } catch (e) { _applSSHMsg('Failed: ' + e.message, true); }
+}
+function _applSSHMsg(txt, isErr) {
+  const el = document.getElementById('appl-ssh-msg');
+  el.textContent = txt;
+  el.className = 'alert ' + (isErr ? 'alert-error' : 'alert-success');
+  el.classList.remove('hidden');
 }
 
 // ── Web Login Timeout (Security tab card) ───────────────────────────────────
@@ -30183,7 +30413,7 @@ function _optFeatMenu(e, feature) {
   const uninstallCall = feature === 'lxd'
     ? `_closeOptFeatMenus();openLXDUninstallModal()`
     : `_closeOptFeatMenus();uninstallFeature('${pkg}')`;
-  const itemHtml = redetectBtn + `<button onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
+  const itemHtml = redetectBtn + `<button class="uninstall-ui" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
   dd.innerHTML = itemHtml;
   document.body.appendChild(dd);
   const rect = btn.getBoundingClientRect();
@@ -32206,6 +32436,7 @@ function _interlinkSidForHostname(hn, list) {
 // openTermWindow centralises the relay-aware routing (→ peer:<sid>:updater:<host>
 // when relaying), the same path every instance terminal now uses.
 function openInteractiveUpdate() {
+  if (window._appliance) { return; } // hidden anyway; guard direct calls
   openTermWindow('updater:' + (window._serverHostname || 'host'));
 }
 
@@ -37454,7 +37685,7 @@ async function loadReplicationPage() {
   const tasks = await r.json();
   _repTasksCache = tasks || [];
   if (!tasks || tasks.length === 0) {
-    body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No replication tasks configured. Click <strong>+ New Task</strong> to create one.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No replication tasks configured. Click <strong>+ New Task</strong> to create one.</td></tr>`;
     return;
   }
   body.innerHTML = tasks.map(t => {
@@ -50081,6 +50312,27 @@ let _lxdAvailable = false;
 let _experimentalMode = false;
 let _lxdNetworks  = [];
 let _lxdPools     = [];
+let _lxdDefaultRootPool = '';   // pool the `default` profile's root disk uses
+
+// The first entry of the root-pool selectors sends an EMPTY value, which means
+// "don't pass -d root,pool=… and let Incus use the default profile". Naming it
+// just "default" reads like a datastore called `default`, which it usually is
+// not — show the datastore it actually resolves to instead.
+function _rootPoolOptions() {
+  const opts = _lxdPools.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  if (_lxdDefaultRootPool) {
+    // The profile has a root disk, so the empty value is safe and is the
+    // sensible default — name the datastore it resolves to.
+    return `<option value="">${esc('Profile default (' + _lxdDefaultRootPool + ')')}</option>` + opts;
+  }
+  if (_lxdPools.length) {
+    // No root disk in the default profile: sending an empty pool would fail
+    // with Incus's "No root device could be found". Offer only real
+    // datastores, first one preselected.
+    return opts;
+  }
+  return '<option value="">No datastore yet — create one first</option>';
+}
 let _lxdMachineVersions = null; // cached {i440fx: [...], q35: [...]}
 let _lxdVMDisks   = [];     // extra disk rows
 let _lxdVMExistingDisks = []; // existing zvol attachment rows
@@ -53134,11 +53386,13 @@ async function openNewVMModal() {
   initCustomSelect('lxd-vm-root-size-unit');
   initCustomSelect('lxd-vm-root-pool');
 
-  const [pools, networks] = await Promise.all([
+  const [pools, networks, defPool] = await Promise.all([
     fetch('/api/incus/storage-pools').then(r=>r.json()).catch(()=>[]),
-    fetch('/api/incus/bridges').then(r=>r.json()).catch(()=>({managed:[],all:[]}))
+    fetch('/api/incus/bridges').then(r=>r.json()).catch(()=>({managed:[],all:[]})),
+    fetch('/api/incus/default-root-pool').then(r=>r.json()).catch(()=>({pool:''}))
   ]);
   _lxdPools    = pools || [];
+  _lxdDefaultRootPool = (defPool && defPool.pool) || '';
   const bridgesData = networks || {managed:[], all:[]};
   _lxdAvailBridges  = bridgesData;
   _lxdBridgeObjects = bridgesData.objects || [];
@@ -53147,7 +53401,7 @@ async function openNewVMModal() {
 
   // Populate root pool selector
   const rpSel = document.getElementById('lxd-vm-root-pool');
-  rpSel.innerHTML = '<option value="">default</option>' + _lxdPools.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  rpSel.innerHTML = _rootPoolOptions();
   csRefresh('lxd-vm-root-pool');
 
   // Init multi-drive CDROM list (empty by default)
@@ -55955,18 +56209,20 @@ async function openNewContainerModal(opts) {
   initCustomSelect('lxd-ct-nic0-bridge');
   initCustomSelect('lxd-ct-nic0-ipv4mode');
 
-  const [pools, bridgesData] = await Promise.all([
+  const [pools, bridgesData, defPool] = await Promise.all([
     fetch('/api/incus/storage-pools').then(r=>r.json()).catch(()=>[]),
-    fetch('/api/incus/bridges').then(r=>r.json()).catch(()=>({managed:[],all:[]}))
+    fetch('/api/incus/bridges').then(r=>r.json()).catch(()=>({managed:[],all:[]})),
+    fetch('/api/incus/default-root-pool').then(r=>r.json()).catch(()=>({pool:''}))
   ]);
   _lxdPools         = pools || [];
+  _lxdDefaultRootPool = (defPool && defPool.pool) || '';
   _lxdAvailBridges  = bridgesData || {managed:[],all:[]};
   _lxdBridgeObjects = _lxdAvailBridges.objects || [];
   _lxdNetworks = _lxdAvailBridges.all || [];
 
   // Populate root pool selector
   const rpSel = document.getElementById('lxd-ct-root-pool');
-  rpSel.innerHTML = '<option value="">default</option>' + _lxdPools.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  rpSel.innerHTML = _rootPoolOptions();
   csRefresh('lxd-ct-root-pool');
 
   // Populate NIC0 bridge selector — default to vmbr0 (LAN bridge) when present.
@@ -58235,6 +58491,7 @@ async function _softRelayRefresh() {
         if (typeof d.lxd_metrics_enabled === 'boolean')  window._lxdMetricsEnabled = d.lxd_metrics_enabled;
         if (typeof updateVirtTabVisibility === 'function')   updateVirtTabVisibility(window._lxdAvailable);
         if (typeof updateMonitorTabVisibility === 'function') updateMonitorTabVisibility();
+        _setApplianceGlobals(d);
       }
     } catch(_) {}
 
@@ -61761,13 +62018,13 @@ let _deleteBridgePendingName = '';
 async function loadLXDNetworks() {
   const tbodyBridges = document.getElementById('lxd-networks-tbody-bridges');
   if (!tbodyBridges) return;
-  tbodyBridges.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:24px;">Loading…</td></tr>';
+  tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">Loading…</td></tr>';
   try {
     const res = await fetch('/api/incus/network-bridges');
     if (res.status === 404) {
       const al = document.getElementById('lxd-networks-alert');
       if (al) { al.textContent = 'No VM Networking detected'; al.classList.remove('hidden'); }
-      tbodyBridges.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:24px;">No Bridge Network</td></tr>';
+      tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">No Bridge Network</td></tr>';
       return;
     }
     if (!res.ok) throw new Error(await res.text());
@@ -61779,7 +62036,7 @@ async function loadLXDNetworks() {
     const msg = e.message && e.message.includes('not found') ? null : e.message;
     const al = document.getElementById('lxd-networks-alert');
     if (al) { al.textContent = msg || 'No VM Networking detected'; al.classList.remove('hidden'); }
-    tbodyBridges.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:24px;">'+(msg ? esc(msg) : 'No Bridge Network')+'</td></tr>';
+    tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">'+(msg ? esc(msg) : 'No Bridge Network')+'</td></tr>';
   }
 }
 
@@ -61794,19 +62051,24 @@ function renderLXDNetworksTable(nets) {
   const tbodyOther = document.getElementById('lxd-other-networks-tbody');
   if (!tbodyBridges || !tbodyOther) return;
   if (!nets || nets.length === 0) {
-    tbodyBridges.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
-    tbodyOther.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>';
+    tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
+    tbodyOther.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>';
     return;
   }
+  // ports_label backs the sortable "Physical NIC" column.
+  (nets || []).forEach(n => {
+    const phys = (n.ports || []).filter(p => !/^(veth|tap|macvlan|vlan)/.test(p));
+    n.ports_label = phys.length ? phys.join(', ') : (n.nat && n.uplink ? n.uplink : '');
+  });
   _bridgesCache = (nets || []).filter(n => n.type === 'bridge');
   _othersCache = (nets || []).filter(n => n.type !== 'bridge');
   _sortArr(_bridgesCache, _bridgesSortKey, _bridgesSortDir);
   _sortArr(_othersCache, _othersSortKey, _othersSortDir);
   tbodyBridges.innerHTML = _bridgesCache.length === 0
-    ? '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
     : _bridgesCache.map(n => _renderNetworkRow(n)).join('');
   tbodyOther.innerHTML = _othersCache.length === 0
-    ? '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
     : _othersCache.map(n => _renderNetworkRow(n)).join('');
 }
 
@@ -61828,10 +62090,43 @@ function _renderNetworkRow(n) {
   const descEl = n.description
     ? `<span style="font-size:12px;color:var(--text-2);">${esc(n.description)}</span>`
     : `<span style="font-size:12px;color:var(--text-3);font-style:italic;">—</span>`;
+  // Which physical NIC carries this bridge. A managed Incus bridge normally
+  // has only virtual ports (vethX / tapX) — those are instance NICs, not the
+  // uplink, so they are not worth showing as "the physical NIC".
+  const physPorts = (n.ports || []).filter(p => !/^(veth|tap|macvlan|vlan)/.test(p));
+  let portsEl;
+  if (physPorts.length) {
+    // A LAN bridge: the NIC is enslaved to it.
+    portsEl = `<span style="font-family:monospace;font-size:12px;">${esc(physPorts.join(', '))}</span>`;
+  } else if (n.nat && n.uplink) {
+    // A NAT bridge has no NIC of its own. When it was created for a specific
+    // port (one host-nat per addressed port) we show that port; otherwise the
+    // only answer available is where the host's default route goes today.
+    if (n.uplink_pinned) {
+      const routed = n.uplink_via && n.uplink_via !== n.uplink;
+      const tip = `This NAT network belongs to ${n.uplink}. Guest traffic is masqueraded onto the host routing table`
+        + (routed ? `, which today leaves through ${n.uplink_via}.` : '.');
+      portsEl = `<span style="font-family:monospace;font-size:12px;" title="${esc(tip)}">${esc(n.uplink)}</span>`;
+    } else {
+      const via = n.uplink_via && n.uplink_via !== n.uplink
+        ? ` <span style="color:var(--text-3);">via ${esc(n.uplink_via)}</span>` : '';
+      portsEl = `<span style="font-family:monospace;font-size:12px;" title="NAT egress: traffic from this network leaves through ${esc(n.uplink)}${n.uplink_via && n.uplink_via !== n.uplink ? ' (the host default route uses ' + esc(n.uplink_via) + ')' : ''}">${esc(n.uplink)}${via}</span>`;
+    }
+  } else if (n.type === 'bridge') {
+    portsEl = `<span style="font-size:12px;color:var(--text-3);font-style:italic;" title="No physical port and no NAT — this network is isolated from the LAN">isolated</span>`;
+  } else {
+    portsEl = `<span style="font-size:12px;color:var(--text-3);">—</span>`;
+  }
   let actionsEl = '';
   if (n.managed || n.type === 'vlan') {
     actionsEl = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
       onclick='toggleNetBurger(event,${JSON.stringify(n.name)},${n.vm_count},${JSON.stringify(n.type)},${n.managed})'><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
+  } else if (n.type === 'bridge') {
+    // Host-managed bridges (the appliance's vmbr0/vmbr1, or any bridge defined
+    // in /etc/network/interfaces) get a menu too — previously only Incus-managed
+    // ones did, so a pre-configured bridge could not be edited from the UI at all.
+    actionsEl = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
+      onclick='toggleHostBridgeBurger(event,${JSON.stringify(n.name)})'><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
   } else if (n.type === 'physical') {
     actionsEl = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
       onclick='togglePhysicalIfaceBurger(event,${JSON.stringify(n.name)})'><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
@@ -61839,6 +62134,7 @@ function _renderNetworkRow(n) {
   return `<tr>
     <td style="font-family:monospace;font-weight:600;">${esc(n.name)}</td>
     <td>${typeBadge}</td>
+    <td>${portsEl}</td>
     <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.ipv4 || '—')}</td>
     <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.ipv6 || '—')}</td>
     <td style="text-align:center;">${vmPill}</td>
@@ -61856,14 +62152,14 @@ function sortNetworksTable(table, key) {
     else { _bridgesSortKey = key; _bridgesSortDir = 'asc'; }
     _sortArr(_bridgesCache, _bridgesSortKey, _bridgesSortDir);
     tbody.innerHTML = _bridgesCache.length === 0
-      ? '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
+      ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
       : _bridgesCache.map(n => _renderNetworkRow(n)).join('');
   } else {
     if (_othersSortKey === key) _othersSortDir = _othersSortDir === 'asc' ? 'desc' : 'asc';
     else { _othersSortKey = key; _othersSortDir = 'asc'; }
     _sortArr(_othersCache, _othersSortKey, _othersSortDir);
     tbody.innerHTML = _othersCache.length === 0
-      ? '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
+      ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
       : _othersCache.map(n => _renderNetworkRow(n)).join('');
   }
   // Update sort arrows: clear all headers for this table, then mark the active one.
@@ -62302,6 +62598,150 @@ function toggleNetBurger(e, name, vmCount, type, managed) {
   _openNetMenu = dd;
   const close = () => { _closeNetMenus(); document.removeEventListener('click', close); };
   setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+// Menu for a HOST-managed bridge (defined in /etc/network/interfaces — the
+// appliance's vmbr0/vmbr1, or any the admin added). Incus does not own these,
+// so the managed-bridge menu above does not apply to them; before this they
+// had no menu at all and could not be edited from the portal.
+function toggleHostBridgeBurger(e, name) {
+  e.stopPropagation();
+  if (_openNetMenu && _openNetMenu._key === 'host-' + name) { _closeNetMenus(); return; }
+  _closeNetMenus();
+  const dd = document.createElement('div');
+  dd.className = 'row-menu-dropdown';
+  dd._key = 'host-' + name;
+  dd.addEventListener('click', ev => ev.stopPropagation());
+  const mk = (label, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', () => { if (b.disabled) return; _closeNetMenus(); fn(); });
+    dd.appendChild(b);
+    return b;
+  };
+  mk('Edit IP settings…', () => openHostBridgeModal(name));
+  const applyBtn = mk('Apply now', () => applyHostBridge(name));
+  // Only offer it when there is a saved change the interface is not running —
+  // the state comes from the backend, so the menu asks before enabling.
+  applyBtn.disabled = true;
+  applyBtn.title = 'Nothing to apply — this interface already runs its saved settings';
+  fetch('/api/incus/host-bridges/' + encodeURIComponent(name))
+    .then(r => r.ok ? r.json() : null)
+    .then(c => {
+      if (!c || !c.pending || !applyBtn.isConnected) return;
+      applyBtn.disabled = false;
+      applyBtn.title = 'Bring the interface down and up so the saved change takes effect now';
+    })
+    .catch(() => {});
+  mk('Edit MTU', () => openMTUEditModal(name));
+  document.body.appendChild(dd);
+  dd.style.position = 'fixed';
+  const rect = e.currentTarget.getBoundingClientRect();
+  dd.style.top  = (rect.bottom + 4) + 'px';
+  dd.style.left = Math.max(0, rect.right - dd.offsetWidth) + 'px';
+  _openNetMenu = dd;
+  const close = () => { _closeNetMenus(); document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+async function openHostBridgeModal(name) {
+  const m = document.getElementById('modal-host-bridge');
+  document.getElementById('hb-name').textContent = name;
+  document.getElementById('hb-ports').textContent = '…';
+  document.getElementById('hb-msg').className = 'alert hidden';
+  m.dataset.bridge = name;
+  m.classList.remove('hidden');
+  initCustomSelect('hb-mode');   // project rule: never a raw <select>
+  try {
+    const r = await fetch('/api/incus/host-bridges/' + encodeURIComponent(name));
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    const c = await r.json();
+    document.getElementById('hb-ports').textContent = (c.ports || []).join(', ') || 'none';
+    document.getElementById('hb-mode').value = c.mode === 'static' ? 'static' : (c.mode === 'manual' ? 'manual' : 'dhcp');
+    document.getElementById('hb-address').value = c.address || '';
+    document.getElementById('hb-gateway').value = c.gateway || '';
+    document.getElementById('hb-dns').value = (c.dns || []).join(' ');
+    csRefresh('hb-mode');
+    _hbToggleStatic();
+    _hbSetApplyEnabled(!!c.pending);
+  } catch (e) {
+    _hbMsg('Could not read the bridge: ' + e.message, true);
+  }
+}
+
+function _hbToggleStatic() {
+  const isStatic = document.getElementById('hb-mode').value === 'static';
+  document.getElementById('hb-static-fields').style.display = isStatic ? '' : 'none';
+}
+
+// "Apply now" is only meaningful while the saved stanza differs from what the
+// interface is running, so it stays greyed out until then — either because the
+// backend reported the interface as pending, or because we just saved.
+function _hbSetApplyEnabled(on) {
+  const b = document.getElementById('hb-apply-btn');
+  if (!b) return;
+  b.disabled = !on;
+  b.title = on
+    ? 'Bring the interface down and up so the saved change takes effect now'
+    : 'Nothing to apply — this interface already runs its saved settings';
+}
+
+function _hbMsg(text, isErr) {
+  const el = document.getElementById('hb-msg');
+  el.textContent = text;
+  el.className = 'alert ' + (isErr ? 'alert-error' : 'alert-success');
+  el.classList.remove('hidden');
+}
+
+// Bring the bridge down and up so a saved change takes effect without a
+// reboot. If it is the bridge carrying this session, the page loses contact —
+// that is expected and the toast says so before it happens.
+async function applyHostBridge(name) {
+  if (!name) return;
+  showConfirm({
+    title: 'Apply ' + esc(name) + ' now?',
+    body: '<p>' + esc(name) + ' goes down and comes back up with its saved settings.</p>' +
+          '<p style="margin-top:8px">If you are connected to the portal through ' + esc(name) +
+          ', this page will lose contact — reopen it on the new address. A reboot applies it too.</p>',
+    confirmText: 'Apply now',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        const r = await fetch('/api/incus/host-bridges/' + encodeURIComponent(name) + '/apply', { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || r.statusText);
+        showToast(d.message || ('Applying ' + name + '…'), 'success');
+        _hbSetApplyEnabled(false);
+      } catch (e) {
+        showToast('Could not apply ' + name + ': ' + e.message, 'error');
+      }
+    }
+  });
+}
+
+async function saveHostBridge() {
+  const m = document.getElementById('modal-host-bridge');
+  const name = m.dataset.bridge;
+  const mode = document.getElementById('hb-mode').value;
+  const body = { mode: mode };
+  if (mode === 'static') {
+    body.address = document.getElementById('hb-address').value.trim();
+    body.gateway = document.getElementById('hb-gateway').value.trim();
+    const dns = document.getElementById('hb-dns').value.trim();
+    body.dns = dns ? dns.split(/\s+/) : [];
+  }
+  try {
+    const r = await fetch('/api/incus/host-bridges/' + encodeURIComponent(name), {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    _hbMsg(d.message || 'Saved.', false);
+    _hbSetApplyEnabled(true);
+    loadLXDNetworks();
+  } catch (e) {
+    _hbMsg('Failed: ' + e.message, true);
+  }
 }
 
 function togglePhysicalIfaceBurger(e, name) {
@@ -62852,13 +63292,13 @@ let _vdSort = { key: 'name', dir: 1 };
 async function loadDatastoreVDisks() {
   const tbody = document.getElementById('vdisks-tbody');
   if (!tbody || !_currentDatastoreName) return;
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
   try {
     const r = await fetch(`/api/incus/storage-pools/${encodeURIComponent(_currentDatastoreName)}/vdisks`);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'load failed');
     _vdRows = (await r.json()) || [];
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Could not load virtual disks: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Could not load virtual disks: ${esc(e.message)}</td></tr>`;
     return;
   }
   renderVDisks();
@@ -62891,7 +63331,7 @@ function renderVDisks() {
     if (el) el.innerHTML = _vdSort.key === k ? (_vdSort.dir > 0 ? ' <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m18 15-6-6-6 6"/></svg>' : ' <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m6 9 6 6 6-6"/></svg>') : '';
   });
   if (!_vdRows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No virtual disks on this datastore.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No virtual disks on this datastore.</td></tr>';
     return;
   }
   const val = (r) => {
@@ -63157,7 +63597,7 @@ async function loadLXDDatastores() {
     _lxdStorageCacheDS = pools || [];
     renderDatastoresNav(_lxdStorageCacheDS);
     if (!pools || pools.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No storage pools configured.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No storage pools configured.</td></tr>';
       return;
     }
     tbody.innerHTML = pools.map(p => {

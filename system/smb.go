@@ -902,6 +902,14 @@ func EnsureSambaUser(username, password string, uid, gid *int) error {
 			return fmt.Errorf("smbpasswd: %s", strings.TrimSpace(string(out)))
 		}
 	}
+	// On the USB appliance /etc/passwd & friends are restored from the persist
+	// store at boot, so a user created here would vanish on the next reboot —
+	// while Samba's passdb (which IS persisted) kept its entry, leaving an SMB
+	// user with no Unix account (UID 4294967295) that can never log in.
+	// No-op off-appliance.
+	if err := SyncAuthToPersistStore(); err != nil {
+		return fmt.Errorf("samba user created but persisting the account failed (it would not survive a reboot): %w", err)
+	}
 	return nil
 }
 

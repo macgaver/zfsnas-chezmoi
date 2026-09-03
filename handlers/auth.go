@@ -18,6 +18,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
+	"zfsnas/system"
 )
 
 // HandleSetupPage serves the first-run setup HTML page.
@@ -87,6 +88,10 @@ func HandleSetup(w http.ResponseWriter, r *http.Request) {
 		Email           string `json:"email"`
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirm_password"`
+		// SSHLogin also creates a Linux account with this name and password so
+		// the first admin can reach a shell. On the USB appliance that is the
+		// only way in besides the portal, which is why the wizard ticks it.
+		SSHLogin bool `json:"ssh_login"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -138,7 +143,18 @@ func HandleSetup(w http.ResponseWriter, r *http.Request) {
 		Details: "first admin account created",
 	})
 
-	jsonOK(w, map[string]string{"message": "admin account created"})
+	msg := "admin account created"
+	if req.SSHLogin {
+		// Best-effort: the portal account is already created and usable, so a
+		// failure here must not fail setup — report it instead of rolling back
+		// an account the user just typed a password for.
+		if err := system.EnsureShellUser(req.Username, req.Password); err != nil {
+			msg += " (SSH login could not be enabled: " + err.Error() + ")"
+		} else {
+			msg += "; SSH login enabled"
+		}
+	}
+	jsonOK(w, map[string]string{"message": msg})
 }
 
 // sessionDurationsFor turns the configured WebSessionPolicy into the

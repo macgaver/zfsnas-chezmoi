@@ -131,6 +131,9 @@ func HandleLXDUninstallCheck(w http.ResponseWriter, r *http.Request) {
 // /api/lxd/enable/progress (same job structure).
 // POST /api/lxd/uninstall/start
 func HandleLXDUninstallStart(w http.ResponseWriter, r *http.Request) {
+	if applianceBlock(w) {
+		return
+	}
 	counts := system.LXDCountInstances()
 	if !counts.CanUninstall {
 		jsonErr(w, http.StatusConflict, fmt.Sprintf(
