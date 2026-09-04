@@ -87,13 +87,16 @@ func HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type safeUser struct {
-		ID            string                      `json:"id"`
-		Username      string                      `json:"username"`
-		Email         string                      `json:"email"`
-		Role          string                      `json:"role"`
-		CreatedAt     time.Time                   `json:"created_at"`
-		TOTPEnabled   bool                        `json:"totp_enabled"`
-		SMBHomeFolder bool                        `json:"smb_home_folder"`
+		ID            string    `json:"id"`
+		Username      string    `json:"username"`
+		Email         string    `json:"email"`
+		Role          string    `json:"role"`
+		CreatedAt     time.Time `json:"created_at"`
+		TOTPEnabled   bool      `json:"totp_enabled"`
+		SMBHomeFolder bool      `json:"smb_home_folder"`
+		// SSHLogin is read from the system account, not from users.json: the
+		// shell is the truth, and it can be changed outside the portal.
+		SSHLogin      bool                        `json:"ssh_login"`
 		StandardPerms *config.StandardPermissions `json:"standard_perms,omitempty"`
 	}
 
@@ -107,6 +110,7 @@ func HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:     u.CreatedAt,
 			TOTPEnabled:   u.TOTPEnabled,
 			SMBHomeFolder: u.SMBHomeFolder,
+			SSHLogin:      system.ShellLoginEnabled(u.Username),
 			StandardPerms: u.StandardPerms,
 		}
 	}
@@ -310,6 +314,11 @@ func HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 			sshNote = "SSH login could not be enabled: " + err.Error()
 		}
 	}
+	// An admin who can reach a shell gets the sudo group, so `sudo -s` works
+	// with their own password. Non-admins never do, however they were created.
+	if err := system.SyncSudoAccess(req.Username, req.Role == config.RoleAdmin); err != nil {
+		log.Printf("users: SyncSudoAccess for %s: %v", req.Username, err)
+	}
 
 	// Create SMB home directory and update smb.conf valid users if applicable.
 	if appCfg, err := config.LoadAppConfig(); err == nil && appCfg.SMBHomeDataset != "" {
@@ -395,6 +404,7 @@ func HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		Password      string                      `json:"password"`
 		Role          string                      `json:"role"`
 		SMBHomeFolder *bool                       `json:"smb_home_folder"`
+		SSHLogin      *bool                       `json:"ssh_login"`
 		StandardPerms *config.StandardPermissions `json:"standard_perms"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -424,6 +434,12 @@ func HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := system.EnsureSambaUser(user.Username, req.Password, user.UID, user.GID); err != nil {
 			log.Printf("users: EnsureSambaUser (password sync) for %s: %v", user.Username, err)
+		}
+		// Same for the SSH password, when this account has shell access.
+		if system.ShellLoginEnabled(user.Username) {
+			if err := system.EnsureShellUser(user.Username, req.Password); err != nil {
+				log.Printf("users: EnsureShellUser (password sync) for %s: %v", user.Username, err)
+			}
 		}
 		audit.Log(audit.Entry{
 			User:   sess.Username,
@@ -514,6 +530,34 @@ func HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// SSH login: turn it on or off, and keep the Linux password in step with
+	// the portal one. Without that last part a user who changed their password
+	// would keep signing in over SSH with the old one.
+	sshNote := ""
+	if req.SSHLogin != nil {
+		if *req.SSHLogin {
+			if err := system.EnsureShellUser(user.Username, req.Password); err != nil {
+				sshNote = "SSH login could not be enabled: " + err.Error()
+				log.Printf("users: EnsureShellUser for %s: %v", user.Username, err)
+			}
+		} else if err := system.DisableShellLogin(user.Username); err != nil {
+			sshNote = "SSH login could not be disabled: " + err.Error()
+			log.Printf("users: DisableShellLogin for %s: %v", user.Username, err)
+		}
+	} else if passwordChanged && system.ShellLoginEnabled(user.Username) {
+		if err := system.EnsureShellUser(user.Username, req.Password); err != nil {
+			sshNote = "the SSH password could not be updated: " + err.Error()
+			log.Printf("users: EnsureShellUser (password sync) for %s: %v", user.Username, err)
+		}
+	}
+
+	// Reconcile sudo AFTER the SSH block above, so it sees the final state.
+	// This runs on every update, not just SSH ones: a demotion from admin has
+	// to take root away again, or the account keeps it forever.
+	if err := system.SyncSudoAccess(user.Username, user.Role == config.RoleAdmin); err != nil {
+		log.Printf("users: SyncSudoAccess for %s: %v", user.Username, err)
+	}
+
 	audit.Log(audit.Entry{
 		User:   sess.Username,
 		Role:   sess.Role,
@@ -522,7 +566,11 @@ func HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		Result: audit.ResultOK,
 	})
 
-	jsonOK(w, map[string]string{"message": "user updated"})
+	resp := map[string]string{"message": "user updated"}
+	if sshNote != "" {
+		resp["warning"] = sshNote
+	}
+	jsonOK(w, resp)
 }
 
 // HandleDeleteUser removes a user by ID (admin only).

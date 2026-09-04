@@ -4181,6 +4181,7 @@
                 <th class="lxd-sortable" data-net-table="bridges" data-net-key="name" onclick="sortNetworksTable('bridges','name')">Name<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:80px;" data-net-table="bridges" data-net-key="type" onclick="sortNetworksTable('bridges','type')">Type<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:120px;" data-net-table="bridges" data-net-key="ports_label" onclick="sortNetworksTable('bridges','ports_label')">Physical NIC<span class="sort-arrow"></span></th>
+                <th class="lxd-sortable" style="width:96px;" data-net-table="bridges" data-net-key="speed_mbps" onclick="sortNetworksTable('bridges','speed_mbps')">Speed<i class="info-tip" data-tip="The link speed the physical NIC has currently negotiated with its switch, read from the kernel (/sys/class/net/&lt;nic&gt;/speed).&#10;&#10;Shows a dash when there is nothing to report: the network has no physical port, or the port has no carrier — an unplugged NIC has negotiated nothing.&#10;&#10;For a NAT network this is the uplink it masquerades onto."></i><span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="bridges" data-net-key="ipv4" onclick="sortNetworksTable('bridges','ipv4')">IPv4<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="bridges" data-net-key="ipv6" onclick="sortNetworksTable('bridges','ipv6')">IPv6<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:60px;" data-net-table="bridges" data-net-key="vm_count" onclick="sortNetworksTable('bridges','vm_count')">VMs<span class="sort-arrow"></span></th>
@@ -4189,7 +4190,7 @@
               </tr>
             </thead>
             <tbody id="lxd-networks-tbody-bridges">
-              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+              <tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -4200,6 +4201,7 @@
                 <th class="lxd-sortable" data-net-table="others" data-net-key="name" onclick="sortNetworksTable('others','name')">Name<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:80px;" data-net-table="others" data-net-key="type" onclick="sortNetworksTable('others','type')">Type<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:120px;" data-net-table="others" data-net-key="ports_label" onclick="sortNetworksTable('others','ports_label')">Physical NIC<span class="sort-arrow"></span></th>
+                <th class="lxd-sortable" style="width:96px;" data-net-table="others" data-net-key="speed_mbps" onclick="sortNetworksTable('others','speed_mbps')">Speed<i class="info-tip" data-tip="The link speed the physical NIC has currently negotiated with its switch, read from the kernel (/sys/class/net/&lt;nic&gt;/speed).&#10;&#10;Shows a dash when there is nothing to report: the network has no physical port, or the port has no carrier — an unplugged NIC has negotiated nothing.&#10;&#10;For a NAT network this is the uplink it masquerades onto."></i><span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="ipv4" onclick="sortNetworksTable('others','ipv4')">IPv4<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="ipv6" onclick="sortNetworksTable('others','ipv6')">IPv6<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:60px;" data-net-table="others" data-net-key="vm_count" onclick="sortNetworksTable('others','vm_count')">VMs<span class="sort-arrow"></span></th>
@@ -4208,7 +4210,7 @@
               </tr>
             </thead>
             <tbody id="lxd-other-networks-tbody">
-              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>
+              <tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>
             </tbody>
           </table>
         </div>
@@ -7982,6 +7984,10 @@ Select the Console tab to load.</pre>
           <button onclick="upsServiceAction('restart')" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--text-1);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Restart</button>
           <div style="border-top:1px solid var(--border);"></div>
           <button onclick="document.getElementById('ups-svc-dropdown').classList.add('hidden');upsDetect()" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--text-2);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">⟳ Re-scan for UPS</button>
+          <div style="border-top:1px solid var(--border);"></div>
+          <!-- Filled by upsServiceMenu() so the tick reflects the current
+               preference each time the menu is opened. -->
+          <div id="ups-hide-if-none-slot"></div>
         </div>
       </div>
     </div>
@@ -9210,6 +9216,15 @@ Select the Console tab to load.</pre>
         Home User Folder
         <i class="info-tip tip-down" data-tip="When enabled and a home-folder dataset is configured in SMB Shares &gt; Configure, this user's personal folder is created inside that dataset and served as their SMB home share (\\server\username)."></i>
       </label>
+
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-top:16px;">
+        <input type="checkbox" id="eu-ssh-login" style="width:15px;height:15px;accent-color:var(--accent-2);" onchange="onEditSSHLoginChange()">
+        Allow SSH login
+        <i class="info-tip tip-down" data-tip="Gives this user a Linux account with a shell so they can log in over SSH.&#10;&#10;Turning it ON needs a password: set one in the field above at the same time, since the Linux account has its own password.&#10;&#10;Turning it OFF locks the account and takes the shell away — the SMB access and the portal login are untouched.&#10;&#10;Reflects the account's real state on this server, not a stored flag."></i>
+      </label>
+      <div id="eu-ssh-hint" class="hidden" style="font-size:12px;color:var(--warning,var(--text-3));margin-top:6px;">
+        Set a new password above as well — the Linux account needs one to allow SSH login.
+      </div>
 
       <!-- 2FA section — only shown when editing own account -->
       <div id="eu-2fa-section" class="hidden" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
@@ -12777,7 +12792,11 @@ function _renderPersistBanner() {
     'padding:8px 16px;text-align:center;font-size:13px;font-weight:600;color:#fff;' +
     'background:' + (st === 'degraded' ? 'var(--accent-danger)' : '#a06e00');
   d.textContent = st === 'degraded'
-    ? 'Running WITHOUT persistence — settings will not survive a reboot (no usable space on the USB stick).'
+    // Do NOT name a cause here: the hook degrades for several different
+    // reasons (no live medium, no room, partitioning/mkfs/mount failure) and
+    // all of them arrive as the same "degraded" token. Claiming "no usable
+    // space" sent a real toram-persistence bug down the wrong path once.
+    ? 'Running WITHOUT persistence — settings will not survive a reboot. Run "dmesg | grep zfsnas-persist" on the appliance for the reason.'
     : 'Previous settings could not be recovered from this stick (the new image overlapped the old data). Starting fresh.';
   if (st === 'overlap-lost') {
     const x = document.createElement('button');
@@ -16406,6 +16425,10 @@ function openEditUser(id) {
   csRefresh('eu-role');
   document.getElementById('eu-password').value = '';
   document.getElementById('eu-smb-home').checked = !!u.smb_home_folder;
+  const sshEl = document.getElementById('eu-ssh-login');
+  sshEl.checked = !!u.ssh_login;
+  sshEl.dataset.wasOn = u.ssh_login ? '1' : '';
+  document.getElementById('eu-ssh-hint').classList.add('hidden');
   document.getElementById('edit-user-alert').classList.add('hidden');
   document.getElementById('edit-user-ok').classList.add('hidden');
 
@@ -16414,6 +16437,7 @@ function openEditUser(id) {
   document.getElementById('eu-email').closest('.form-group').classList.toggle('hidden', selfOnly);
   document.getElementById('eu-role').closest('.form-group').classList.toggle('hidden', selfOnly);
   document.getElementById('eu-smb-home').parentElement.classList.toggle('hidden', selfOnly);
+  document.getElementById('eu-ssh-login').parentElement.classList.toggle('hidden', selfOnly);
 
   // Populate standard permissions panel.
   const sp = u.standard_perms || {};
@@ -16459,6 +16483,17 @@ function _euCheckScroll() {
   if (!body || !hint) return;
   const atBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 4;
   hint.style.opacity = atBottom ? '0' : '1';
+}
+
+// Enabling SSH login needs a password: the Linux account has its own, and the
+// portal cannot reuse the stored bcrypt hash. Say so at the moment the box is
+// ticked rather than failing after Save.
+function onEditSSHLoginChange() {
+  const el   = document.getElementById('eu-ssh-login');
+  const pw   = document.getElementById('eu-password');
+  const hint = document.getElementById('eu-ssh-hint');
+  const turningOn = el.checked && !el.dataset.wasOn;
+  hint.classList.toggle('hidden', !(turningOn && !pw.value.trim()));
 }
 
 function closeEditUser() {
@@ -16544,6 +16579,7 @@ async function submitEditUser() {
       email:           document.getElementById('eu-email').value.trim(),
       role,
       smb_home_folder: document.getElementById('eu-smb-home').checked,
+      ssh_login:       document.getElementById('eu-ssh-login').checked,
     };
     if (pw && role !== 'smb-only') body.password = pw;
     if (role === 'standard') {
@@ -16578,8 +16614,15 @@ async function submitEditUser() {
     alertEl.classList.remove('hidden');
     return;
   }
-  okEl.textContent = 'Changes saved.';
-  okEl.classList.remove('hidden');
+  // A partly-applied save (e.g. SSH could not be enabled because no password
+  // was given) must not read as a clean success.
+  if (data.warning) {
+    alertEl.textContent = 'Saved, but ' + data.warning;
+    alertEl.classList.remove('hidden');
+  } else {
+    okEl.textContent = 'Changes saved.';
+    okEl.classList.remove('hidden');
+  }
   loadUsers();
 }
 
@@ -30413,7 +30456,11 @@ function _optFeatMenu(e, feature) {
   const uninstallCall = feature === 'lxd'
     ? `_closeOptFeatMenus();openLXDUninstallModal()`
     : `_closeOptFeatMenus();uninstallFeature('${pkg}')`;
-  const itemHtml = redetectBtn + `<button class="uninstall-ui" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
+  // UPS also gets the widget-visibility toggle. This burger is reachable from
+  // Requisites whether or not the topbar widget is showing, so it stays the
+  // way back once the widget is hidden.
+  const upsHideBtn = feature === 'ups' ? _upsHideIfNoneMenuItem() : '';
+  const itemHtml = upsHideBtn + redetectBtn + `<button class="uninstall-ui" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
   dd.innerHTML = itemHtml;
   document.body.appendChild(dd);
   const rect = btn.getBoundingClientRect();
@@ -30718,6 +30765,42 @@ async function redetectUPS() {
   }
 }
 
+// ── UPS widget visibility preference ─────────────────────────────────────────
+
+// "Hide if no UPS Detected" — opt-in, remembered per browser alongside the
+// other view toggles (theme, service view). Off by default: a host with NUT
+// installed but nothing plugged in keeps showing the widget until the user
+// asks for it to go away, and can always turn it back on from the same menu.
+let _upsHideIfNone = (() => { try { return localStorage.getItem('znas_ups_hide_if_none') === '1'; } catch { return false; } })();
+
+// A UPS counts as detected when the host actually reports one: a live status
+// reading, or a configured UPS that is currently erroring. The error case stays
+// visible deliberately — a UPS that was set up and has stopped answering is a
+// fault worth seeing, not an absence worth hiding.
+function _upsDetected(d) { return !!(d && (d.status || d.error)); }
+
+// The toggle lives in two menus (the Requisites feature burger and the UPS
+// panel dropdown), so the markup is built once here. The Requisites burger is
+// the one that still works once the widget is hidden — that is the way back.
+function _upsHideIfNoneMenuItem() {
+  const mark = _upsHideIfNone
+    ? `<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><polyline points="20 6 9 17 4 12"/></svg>`
+    : `<span style="display:inline-block;width:1em;"></span>`;
+  return `<button onclick="upsToggleHideIfNone()" title="Hide the top-right UPS widget while no UPS is detected.&#10;&#10;A UPS that is configured but currently erroring still shows, so a failing unit is never hidden from you.&#10;&#10;Untick here at any time to bring the widget back." style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--text-1);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${mark} Hide if no UPS Detected</button>`;
+}
+
+function upsToggleHideIfNone() {
+  _upsHideIfNone = !_upsHideIfNone;
+  try { localStorage.setItem('znas_ups_hide_if_none', _upsHideIfNone ? '1' : '0'); } catch (_) {}
+  _closeOptFeatMenus();
+  const dd = document.getElementById('ups-svc-dropdown');
+  if (dd) dd.classList.add('hidden');
+  pollUPSTopbar(); // apply now rather than waiting out the 15 s poll
+  showToast(_upsHideIfNone
+    ? 'UPS widget hidden while no UPS is detected. Untick it in the UPS burger menu on Requisites to bring it back.'
+    : 'UPS widget will always be shown.', 'success');
+}
+
 // ── UPS Top-Bar Poller ────────────────────────────────────────────────────────
 
 async function pollUPSTopbar() {
@@ -30730,6 +30813,12 @@ async function pollUPSTopbar() {
     if (!r.ok) return;
     const d = await r.json();
     if (!d.installed && !d.battery_source) {
+      if (widget) widget.style.display = 'none';
+      return;
+    }
+    // Opt-in: with nothing actually detected, keep the widget out of the topbar
+    // instead of parking a permanent "CFG" placeholder there.
+    if (_upsHideIfNone && !_upsDetected(d)) {
       if (widget) widget.style.display = 'none';
       return;
     }
@@ -31351,7 +31440,11 @@ async function upsTestNUTClient() {
 
 function upsServiceMenu() {
   const dd = document.getElementById('ups-svc-dropdown');
-  if (dd) dd.classList.toggle('hidden');
+  if (!dd) return;
+  // Rebuild the toggle each time so its tick matches the stored preference.
+  const slot = document.getElementById('ups-hide-if-none-slot');
+  if (slot) slot.innerHTML = _upsHideIfNoneMenuItem();
+  dd.classList.toggle('hidden');
 }
 
 function upsEditNominalPower() {
@@ -62018,13 +62111,13 @@ let _deleteBridgePendingName = '';
 async function loadLXDNetworks() {
   const tbodyBridges = document.getElementById('lxd-networks-tbody-bridges');
   if (!tbodyBridges) return;
-  tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">Loading…</td></tr>';
+  tbodyBridges.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:24px;">Loading…</td></tr>';
   try {
     const res = await fetch('/api/incus/network-bridges');
     if (res.status === 404) {
       const al = document.getElementById('lxd-networks-alert');
       if (al) { al.textContent = 'No VM Networking detected'; al.classList.remove('hidden'); }
-      tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">No Bridge Network</td></tr>';
+      tbodyBridges.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:24px;">No Bridge Network</td></tr>';
       return;
     }
     if (!res.ok) throw new Error(await res.text());
@@ -62036,7 +62129,7 @@ async function loadLXDNetworks() {
     const msg = e.message && e.message.includes('not found') ? null : e.message;
     const al = document.getElementById('lxd-networks-alert');
     if (al) { al.textContent = msg || 'No VM Networking detected'; al.classList.remove('hidden'); }
-    tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">'+(msg ? esc(msg) : 'No Bridge Network')+'</td></tr>';
+    tbodyBridges.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:24px;">'+(msg ? esc(msg) : 'No Bridge Network')+'</td></tr>';
   }
 }
 
@@ -62051,8 +62144,8 @@ function renderLXDNetworksTable(nets) {
   const tbodyOther = document.getElementById('lxd-other-networks-tbody');
   if (!tbodyBridges || !tbodyOther) return;
   if (!nets || nets.length === 0) {
-    tbodyBridges.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
-    tbodyOther.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>';
+    tbodyBridges.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
+    tbodyOther.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>';
     return;
   }
   // ports_label backs the sortable "Physical NIC" column.
@@ -62065,10 +62158,10 @@ function renderLXDNetworksTable(nets) {
   _sortArr(_bridgesCache, _bridgesSortKey, _bridgesSortDir);
   _sortArr(_othersCache, _othersSortKey, _othersSortDir);
   tbodyBridges.innerHTML = _bridgesCache.length === 0
-    ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
+    ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
     : _bridgesCache.map(n => _renderNetworkRow(n)).join('');
   tbodyOther.innerHTML = _othersCache.length === 0
-    ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
+    ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
     : _othersCache.map(n => _renderNetworkRow(n)).join('');
 }
 
@@ -62117,6 +62210,14 @@ function _renderNetworkRow(n) {
   } else {
     portsEl = `<span style="font-size:12px;color:var(--text-3);">—</span>`;
   }
+  // Link speed negotiated by the NIC(s) named in the Physical NIC cell. The
+  // backend leaves speed_label empty when there is nothing to negotiate, which
+  // is two different situations worth telling apart in the tooltip: a network
+  // with no physical port at all, versus a real port sitting there with no
+  // cable in it.
+  const speedEl = n.speed_label
+    ? `<span style="font-family:monospace;font-size:12px;color:var(--text-1);">${esc(n.speed_label)}</span>`
+    : `<span style="font-size:12px;color:var(--text-3);" title="${n.ports_label ? 'No link — this port has no carrier' : 'No physical port on this network'}">—</span>`;
   let actionsEl = '';
   if (n.managed || n.type === 'vlan') {
     actionsEl = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
@@ -62135,6 +62236,7 @@ function _renderNetworkRow(n) {
     <td style="font-family:monospace;font-weight:600;">${esc(n.name)}</td>
     <td>${typeBadge}</td>
     <td>${portsEl}</td>
+    <td>${speedEl}</td>
     <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.ipv4 || '—')}</td>
     <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.ipv6 || '—')}</td>
     <td style="text-align:center;">${vmPill}</td>
@@ -62152,14 +62254,14 @@ function sortNetworksTable(table, key) {
     else { _bridgesSortKey = key; _bridgesSortDir = 'asc'; }
     _sortArr(_bridgesCache, _bridgesSortKey, _bridgesSortDir);
     tbody.innerHTML = _bridgesCache.length === 0
-      ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
+      ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
       : _bridgesCache.map(n => _renderNetworkRow(n)).join('');
   } else {
     if (_othersSortKey === key) _othersSortDir = _othersSortDir === 'asc' ? 'desc' : 'asc';
     else { _othersSortKey = key; _othersSortDir = 'asc'; }
     _sortArr(_othersCache, _othersSortKey, _othersSortDir);
     tbody.innerHTML = _othersCache.length === 0
-      ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
+      ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
       : _othersCache.map(n => _renderNetworkRow(n)).join('');
   }
   // Update sort arrows: clear all headers for this table, then mark the active one.

@@ -187,6 +187,39 @@ type LXDNetwork struct {
 	// route. The UI says different things about the two.
 	UplinkPinned bool `json:"uplink_pinned"`
 	NAT          bool `json:"nat"`
+	// SpeedLabel is the link speed currently negotiated by the physical NIC(s)
+	// shown in the table's "Physical NIC" column, e.g. "1 Gb/s". It is empty
+	// when the network has no physical port at all (an isolated bridge) or the
+	// port has no carrier — an unplugged NIC has negotiated nothing. SpeedMbps
+	// carries the same figure in Mbit/s so the column can sort numerically
+	// instead of lexically, where "10 Gb/s" would sort before "1 Gb/s".
+	SpeedLabel string `json:"speed_label"`
+	SpeedMbps  int    `json:"speed_mbps"`
+}
+
+// physicalNICs returns the real ports behind this network: the interfaces
+// enslaved to the bridge, or — for a NAT network, which has none of its own —
+// the uplink it masquerades onto. Mirrors exactly what the networks table
+// prints in its "Physical NIC" column, so the speed shown always describes the
+// interface named next to it.
+func (n LXDNetwork) physicalNICs() []string {
+	// A "physical" (or VLAN) network IS an interface — Incus lists the host's
+	// own NICs that way, so the row's name is the NIC to report on. Those rows
+	// have no ports and no uplink, and would otherwise be the one place in
+	// these tables showing a real NIC with no speed beside it.
+	if n.Type == "physical" || n.Type == "vlan" {
+		return []string{n.Name}
+	}
+	var out []string
+	for _, p := range n.Ports {
+		if !isVirtualBridgePort(p) {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 && n.NAT && n.Uplink != "" {
+		out = append(out, n.Uplink)
+	}
+	return out
 }
 
 // LXDNetworkCreateRequest holds parameters for creating a new LXD bridge network.
@@ -264,6 +297,7 @@ func ListLXDNetworks() ([]LXDNetwork, error) {
 				n.UplinkPinned = r.Config[HostNatUplinkKey] != ""
 			}
 		}
+		n.SpeedLabel, n.SpeedMbps = NICSpeedsLabel(n.physicalNICs())
 		nets = append(nets, n)
 	}
 	return nets, nil

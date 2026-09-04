@@ -152,6 +152,15 @@ func HandleSetup(w http.ResponseWriter, r *http.Request) {
 			msg += " (SSH login could not be enabled: " + err.Error() + ")"
 		} else {
 			msg += "; SSH login enabled"
+			// This account is an admin by definition, and on the appliance it
+			// is the only way into a shell — so give it the sudo group and a
+			// working `sudo -s` (prompting for its own password). Best-effort
+			// like the rest of this block: never fail a completed setup.
+			if err := system.EnsureSudoAccess(req.Username); err != nil {
+				msg += " (sudo access could not be granted: " + err.Error() + ")"
+			} else {
+				msg += " with sudo access"
+			}
 		}
 	}
 	jsonOK(w, map[string]string{"message": msg})
