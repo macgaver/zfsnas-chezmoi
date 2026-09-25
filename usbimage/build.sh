@@ -72,6 +72,12 @@ umount_chroot() { for m in dev/pts dev sys proc; do umount -l "$ROOTFS/$m" 2>/de
 
 stage_chroot() {
     log "stage: chroot customization"
+    # A checkout missing overlay files (e.g. hidden by an ignore rule) would
+    # otherwise build an image without its launcher and network scripts.
+    for f in overlay/usr/lib/zfsnas/run-zfsnas.sh overlay/usr/lib/zfsnas/gen-net-config.sh \
+             overlay/etc/systemd/system/zfsnas.service overlay/usr/local/sbin/zfsnas-upgrade-image; do
+        [ -f "$f" ] || { echo "overlay incomplete: $f is missing from this checkout (ignored by git?)"; exit 1; }
+    done
     # overlay files, manifest, hooks — BEFORE chroot-setup so
     # update-initramfs picks the persist hook up
     cp -a overlay/. "$ROOTFS/"
