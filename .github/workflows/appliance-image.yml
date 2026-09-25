@@ -16,12 +16,13 @@
 #                             ship a new image on the same Ubuntu release;
 #                             reset it to 1 when the Ubuntu version changes.
 #
-# Result: znas-usb-appliance-v26-04-1-1.iso (+ .sha256 + cosign .sig) on
-# release v26.04.1-1 — what the portal's USB Appliance Upgrades card reads.
+# Result: znas-usb-appliance-v26-04-1-3.iso (+ .sha256 + cosign .sig) on
+# release v26.04.1-3 — what the portal's USB Appliance Upgrades card reads.
 #
 # Needs:
-#   - a self-hosted runner labelled `usbbuild` in the znas-usbbuild VM
-#     (root or passwordless sudo, gh, cosign, ~30 GB free in /srv/usbbuild);
+#   - a self-hosted runner labelled `usbbuild` in the build VM (root or
+#     passwordless sudo, git, gh, cosign, KVM, ~30 GB free in /srv/usbbuild,
+#     and the last MinIO binaries in /srv/usbbuild/minio-cache);
 #   - secrets CODE_SIGN_PRIVATE_KEY + COSIGN_PASSWORD (already used by the
 #     binary release) and APPLIANCE_PUBLISH_TOKEN: a fine-grained PAT limited
 #     to macgaver/znas-usb-appliance with Contents: read and write — this
@@ -30,7 +31,7 @@ name: Appliance image
 
 env:
   APPLIANCE_UBUNTU_VERSION: "26.04.1"
-  APPLIANCE_BUILD: "1"
+  APPLIANCE_BUILD: "3"
   APPLIANCE_REPO: macgaver/znas-usb-appliance
 
 on:
@@ -70,6 +71,8 @@ jobs:
             || { echo "::error::APPLIANCE_UBUNTU_VERSION must be x.y.z (26.04 is 26.04.0)"; exit 1; }
           [[ "$APPLIANCE_BUILD" =~ ^[1-9][0-9]*$ ]] \
             || { echo "::error::APPLIANCE_BUILD must be a positive integer"; exit 1; }
+          [ -n "${GH_TOKEN:-}" ] \
+            || { echo "::error::secret APPLIANCE_PUBLISH_TOKEN is not set in this repository"; exit 1; }
           if [ ! -f usbimage/conf.sh ]; then
             echo "::notice::usbimage/ is not in the repo yet — nothing to build"
             echo "build=false" >> "$GITHUB_OUTPUT"; exit 0
@@ -90,25 +93,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch and verify the portal binary (latest signed release)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The portal is built from THIS commit, so the image carries exactly the
+      # code it was built from — not whatever release happens to be latest
+      # (which can lag far behind main). It needs no signature of its own: the
+      # whole image is signed below.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build the portal
         run: |
           set -euo pipefail
-          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
-          echo "Baking portal $tag"
+          version=$(sed -n 's/^var Version = "\(.*\)"/\1/p' internal/version/version.go)
           mkdir -p "$RUNNER_TEMP/bin"
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
-            --dir "$RUNNER_TEMP/bin" -p zfsnas-chezmoi -p zfsnas-chezmoi.sig
-          # The same public key the portal embeds.
-          # (strip the Go raw-string wrapper around the PEM block)
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X zfsnas/internal/version.Version=$version" \
+            -o "$RUNNER_TEMP/bin/zfsnas" .
+          "$RUNNER_TEMP/bin/zfsnas" --version
+          echo "IMAGE_VERSION=$version" >> "$GITHUB_ENV"
+          # The same public key the portal embeds (strip the Go raw-string
+          # wrapper around the PEM block) — used to check the signature below.
           sed -n '/BEGIN PUBLIC KEY/,/END PUBLIC KEY/p' internal/updater/pubkey.go \
             | sed -e 's/`$//' -e 's/^.*`//' > "$RUNNER_TEMP/cosign.pub"
-          cosign verify-blob --key "$RUNNER_TEMP/cosign.pub" \
-            --signature "$RUNNER_TEMP/bin/zfsnas-chezmoi.sig" \
-            --insecure-ignore-tlog=true "$RUNNER_TEMP/bin/zfsnas-chezmoi"
-          chmod +x "$RUNNER_TEMP/bin/zfsnas-chezmoi"
-          echo "IMAGE_VERSION=${tag#v}" >> "$GITHUB_ENV"
 
       - name: Build and boot-test the image
         run: |
@@ -116,9 +122,11 @@ jobs:
           cd usbimage
           # UBUNTU_VERSION makes build.sh fail if the mirror delivered another
           # point release than the one declared above.
-          sudo -E WORK=/srv/usbbuild/work \
+          # ZNAS_MINIO_CACHE: MinIO no longer publishes its binaries; a fresh
+          # rootfs gets the last ones from this folder on the runner.
+          sudo -E WORK=/srv/usbbuild/work ZNAS_MINIO_CACHE=/srv/usbbuild/minio-cache \
             UBUNTU_VERSION="$APPLIANCE_UBUNTU_VERSION" APPLIANCE_BUILD="$APPLIANCE_BUILD" \
-            ./build.sh --binary "$RUNNER_TEMP/bin/zfsnas-chezmoi" --test
+            ./build.sh --binary "$RUNNER_TEMP/bin/zfsnas" --test
           sudo chown "$(id -u):$(id -g)" znas-usb-appliance-v*.iso*
           ls -lh znas-usb-appliance-v*.iso*
 

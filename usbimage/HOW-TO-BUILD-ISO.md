@@ -132,6 +132,7 @@ Everything is kept in `./work/`, so you can resume from any stage:
 | `UBUNTU_VERSION` | unset | If set (e.g. `26.04.1`), the build fails unless the rootfs really is that Ubuntu point release. Official builds set it. |
 | `IMAGE_VERSION` | see `conf.sh` | The portal version you are baking in; only used for labels and a mismatch warning. |
 | `WORK` | `./work` | Where the rootfs and intermediate files live. |
+| `ZNAS_MINIO_CACHE` | unset | A folder holding `minio` and `mc` to seed a fresh rootfs with (MinIO no longer publishes them). |
 | `ZNAS_ALLOW_NO_MINIO` | `0` | `1` = build without MinIO when it cannot be downloaded (the image then has no S3 feature). |
 
 **Where the version comes from**: the Ubuntu part is read from the built

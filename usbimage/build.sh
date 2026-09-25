@@ -112,6 +112,17 @@ stage_chroot() {
     else
         printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' > "$ROOTFS/etc/resolv.conf"
     fi
+    # MinIO stopped publishing its binaries (dl.min.io answers 410), so a
+    # fresh rootfs can be seeded from a folder holding the last minio + mc;
+    # chroot-setup.sh then keeps them when the download fails.
+    if [ -n "${ZNAS_MINIO_CACHE:-}" ]; then
+        for b in minio mc; do
+            if [ -s "$ZNAS_MINIO_CACHE/$b" ] && [ ! -s "$ROOTFS/usr/local/bin/$b" ]; then
+                install -D -m 0755 -o root -g root "$ZNAS_MINIO_CACHE/$b" "$ROOTFS/usr/local/bin/$b"
+                echo "seeded $b from $ZNAS_MINIO_CACHE"
+            fi
+        done
+    fi
     mount_chroot
     trap umount_chroot EXIT
     chroot "$ROOTFS" /chroot-setup.sh "$UBUNTU_CODENAME" "$MIRROR"

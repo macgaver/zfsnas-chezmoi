@@ -24,6 +24,14 @@ BUILD_DIR="/root/usbimage"
 # Where the portal binary is copied on the build machine before baking it in.
 BUILD_BINARY="/root/zfsnas"
 
+# Work folder on the build machine (rootfs, squashfs — ~7 GB). Share it with
+# the CI workflow's so one machine never holds two copies.
+BUILD_WORK="/srv/usbbuild/work"
+
+# Folder on the build machine with the last minio + mc binaries, used to seed
+# a fresh rootfs (MinIO no longer publishes them).
+ZNAS_MINIO_CACHE="/srv/usbbuild/minio-cache"
+
 # ---- what gets built ------------------------------------------------------
 # Ubuntu point release the image must be built from (build fails otherwise).
 # Leave empty to accept whatever the Ubuntu archive currently serves.

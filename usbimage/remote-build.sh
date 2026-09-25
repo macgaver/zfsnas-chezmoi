@@ -5,7 +5,8 @@
 #
 # Steps: build the portal binary from this checkout (Go) → push this usbimage/
 # tree and the binary to the build machine → run build.sh there → check the
-# ISO's checksum there → copy .iso + .sha256 back → check it again here.
+# ISO's checksum there → copy .iso + .sha256 back → check it again here →
+# delete it on the build machine.
 #
 # Usage:
 #   ./remote-build.sh --build N [--from STAGE] [--binary FILE] [--test]
@@ -106,6 +107,7 @@ LOG="build-remote-$(date +%Y%m%d-%H%M%S).log"
 note "building (from stage '$FROM', appliance build $BUILD_NO) — log: $BUILD_DIR/$LOG"
 if ! remote "cd '$BUILD_DIR' && UBUNTU_VERSION='${UBUNTU_VERSION:-}' APPLIANCE_BUILD='$BUILD_NO' \
         IMAGE_VERSION='$PORTAL_VERSION' ZNAS_ALLOW_NO_MINIO='${ZNAS_ALLOW_NO_MINIO:-0}' \
+        ${BUILD_WORK:+WORK='$BUILD_WORK'} ${ZNAS_MINIO_CACHE:+ZNAS_MINIO_CACHE='$ZNAS_MINIO_CACHE'} \
         ./build.sh --binary '$BUILD_BINARY' --from '$FROM' $TEST > '$LOG' 2>&1"; then
     echo; echo "BUILD FAILED — last lines of $LOG:"
     remote "tail -n 30 '$BUILD_DIR/$LOG'"
@@ -124,5 +126,7 @@ rm -f "$LOCAL_ISO_DIR/$ISO.sig"          # a signature of an older build is now 
 pull "$BUILD_DIR/$ISO.sha256" "$LOCAL_ISO_DIR/$ISO.sha256"
 pull "$BUILD_DIR/$ISO" "$LOCAL_ISO_DIR/$ISO"
 (cd "$LOCAL_ISO_DIR" && sha256sum -c "$ISO.sha256")
+# The copy here is verified: don't let images pile up on the build machine.
+remote "rm -f '$BUILD_DIR/$ISO' '$BUILD_DIR/$ISO.sha256'"
 
 note "done: $LOCAL_ISO_DIR/$ISO (portal $PORTAL_VERSION)"
