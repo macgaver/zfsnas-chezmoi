@@ -873,7 +873,8 @@ func EnsureSambaUser(username, password string, uid, gid *int) error {
 			}
 		}
 
-		args := []string{"-M", "-s", "/usr/sbin/nologin"}
+		// Marked as a portal account (see accountManaged in shelluser.go).
+		args := []string{"-M", "-s", "/usr/sbin/nologin", "-c", portalAccountComment}
 		if uid != nil {
 			args = append(args, "--uid", fmt.Sprintf("%d", *uid))
 		}
@@ -931,6 +932,14 @@ func DeleteSambaUser(username string) error {
 
 	// Remove supplementary group memberships first so userdel has no blockers.
 	_ = exec.Command("sudo", "gpasswd", "-d", username, "sambashare").Run()
+
+	// Only delete Linux accounts the portal created. A web user may have been
+	// approved onto an account the server owner already had (their own
+	// login): deleting the web user must not delete that account.
+	if ok, _ := accountManaged(username); !ok {
+		log.Printf("smb: %s is not a portal-created account — kept it, only removed its Samba access", username)
+		return SyncAuthToPersistStore()
+	}
 
 	// Delete the Linux system account. -f forces removal even if the user is
 	// currently logged in. We do NOT use -r because home directories under

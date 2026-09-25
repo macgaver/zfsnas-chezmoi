@@ -35,6 +35,14 @@ func HandleSetupPage(staticContent func(name string) ([]byte, error)) http.Handl
 			http.Error(w, "setup page not found", http.StatusInternalServerError)
 			return
 		}
+		// SSH for the first admin is on by default only on the appliance,
+		// where SSH is otherwise locked; on a regular server the owner
+		// already has shell access and opts in.
+		sshDefault := ""
+		if system.ApplianceMode() {
+			sshDefault = "checked"
+		}
+		data = bytes.ReplaceAll(data, []byte("{{SSH_LOGIN_DEFAULT}}"), []byte(sshDefault))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(data)

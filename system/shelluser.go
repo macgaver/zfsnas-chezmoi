@@ -4,14 +4,106 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 // validUnixName is deliberately stricter than useradd's own rules: portal
 // usernames become real system accounts here, so anything that could be
 // mistaken for a flag, a path, or a second field is rejected outright.
 var validUnixName = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+
+// portalAccountComment goes in the GECOS field of every Linux account the
+// portal creates, so it can tell its own accounts from the server owner's.
+const portalAccountComment = "ZNAS portal user"
+
+// passwdPath is a var so tests can point it at a fixture.
+var passwdPath = "/etc/passwd"
+
+type passwdEntry struct {
+	UID   int
+	GECOS string
+	Shell string
+}
+
+// lookupPasswd finds a user in an /etc/passwd-format file.
+func lookupPasswd(path, name string) (passwdEntry, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return passwdEntry{}, false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		f := strings.Split(line, ":")
+		if len(f) < 7 || f[0] != name {
+			continue
+		}
+		uid, err := strconv.Atoi(f[2])
+		if err != nil {
+			uid = -1
+		}
+		return passwdEntry{UID: uid, GECOS: f[4], Shell: strings.TrimSpace(f[6])}, true
+	}
+	return passwdEntry{}, false
+}
+
+func noLoginShell(shell string) bool {
+	switch shell {
+	case "", "/usr/sbin/nologin", "/sbin/nologin", "/bin/false", "/usr/bin/false":
+		return true
+	}
+	return false
+}
+
+var (
+	serviceUserOnce sync.Once
+	serviceUser     string
+)
+
+// portalServiceUser is the account the portal itself runs as (e.g. "zfsnas"
+// from the quick installer; root on the appliance).
+func portalServiceUser() string {
+	serviceUserOnce.Do(func() {
+		if u, err := user.Current(); err == nil {
+			serviceUser = u.Username
+		}
+	})
+	return serviceUser
+}
+
+// accountManaged reports whether the portal may change this Linux account's
+// password, shell or sudo membership. A web user's name can match an account
+// the server owner already has (their own login, a system account); those
+// must never be touched — resetting their password or taking away their sudo
+// would lock the owner out. Managed means: the account does not exist yet
+// (the portal will create it), or the portal created it (comment marker), or
+// it is a no-login account with a regular uid (the SMB-only accounts earlier
+// versions created without the marker).
+func accountManaged(username string) (bool, string) {
+	if username == "root" || username == portalServiceUser() {
+		return false, "it is the system's own " + username + " account"
+	}
+	e, ok := lookupPasswd(passwdPath, username)
+	if !ok {
+		return true, ""
+	}
+	switch {
+	case e.UID < 1000:
+		return false, "it is a system account"
+	case strings.Contains(e.GECOS, portalAccountComment):
+		return true, ""
+	case noLoginShell(e.Shell):
+		return true, ""
+	}
+	return false, "it is an existing login account that ZNAS did not create"
+}
+
+// errUnmanagedAccount explains why an account was left alone.
+func errUnmanagedAccount(username, reason string) error {
+	return fmt.Errorf("a Linux account named %q already exists and %s, so ZNAS left its password, shell and sudo rights untouched; choose another user name to give this portal user SSH access", username, reason)
+}
 
 // EnsureShellUser creates (or updates) a Linux account that can log in over
 // SSH, and sets its password.
@@ -32,15 +124,19 @@ func EnsureShellUser(username, password string) error {
 		return fmt.Errorf("password may not contain newlines or ':'")
 	}
 
+	if ok, reason := accountManaged(username); !ok {
+		return errUnmanagedAccount(username, reason)
+	}
 	if err := exec.Command("id", username).Run(); err != nil {
-		out, err2 := exec.Command("sudo", "useradd", "-m", "-s", "/bin/bash", username).CombinedOutput()
+		out, err2 := exec.Command("sudo", "useradd", "-m", "-s", "/bin/bash", "-c", portalAccountComment, username).CombinedOutput()
 		if err2 != nil {
 			return fmt.Errorf("useradd %s: %s", username, strings.TrimSpace(string(out)))
 		}
 	} else {
-		// Existing account (e.g. one created earlier for SMB, which has no
-		// shell): give it one, otherwise SSH would authenticate and hang up.
-		if out, err := exec.Command("sudo", "usermod", "-s", "/bin/bash", username).CombinedOutput(); err != nil {
+		// Existing portal account (e.g. one created earlier for SMB, which has
+		// no shell): give it one, otherwise SSH would authenticate and hang
+		// up — and mark it, so it is still recognised once it has a shell.
+		if out, err := exec.Command("sudo", "usermod", "-s", "/bin/bash", "-c", portalAccountComment, username).CombinedOutput(); err != nil {
 			return fmt.Errorf("usermod %s: %s", username, strings.TrimSpace(string(out)))
 		}
 	}
@@ -121,6 +217,9 @@ func EnsureSudoAccess(username string) error {
 	if exec.Command("id", username).Run() != nil {
 		return fmt.Errorf("no system account exists for %q", username)
 	}
+	if ok, _ := accountManaged(username); !ok {
+		return nil // not the portal's account: never touch it
+	}
 	if InSudoGroup(username) {
 		return nil // already a member; nothing to write or persist
 	}
@@ -140,6 +239,9 @@ func RemoveSudoAccess(username string) error {
 	}
 	if exec.Command("id", username).Run() != nil {
 		return nil // no account: nothing to take away
+	}
+	if ok, _ := accountManaged(username); !ok {
+		return nil // not the portal's account: never touch it
 	}
 	if !InSudoGroup(username) {
 		return nil
@@ -171,23 +273,8 @@ func ShellLoginEnabled(username string) bool {
 	if !validUnixName.MatchString(username) {
 		return false
 	}
-	data, err := os.ReadFile("/etc/passwd")
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		f := strings.Split(line, ":")
-		if len(f) < 7 || f[0] != username {
-			continue
-		}
-		switch shell := strings.TrimSpace(f[6]); shell {
-		case "", "/usr/sbin/nologin", "/sbin/nologin", "/bin/false", "/usr/bin/false":
-			return false
-		default:
-			return true
-		}
-	}
-	return false
+	e, ok := lookupPasswd(passwdPath, username)
+	return ok && !noLoginShell(e.Shell)
 }
 
 // DisableShellLogin takes SSH access away again without deleting the account
@@ -199,6 +286,9 @@ func DisableShellLogin(username string) error {
 	}
 	if err := exec.Command("id", username).Run(); err != nil {
 		return nil // no such account: nothing to disable
+	}
+	if ok, _ := accountManaged(username); !ok {
+		return nil // not the portal's account: never touch it
 	}
 	if out, err := exec.Command("sudo", "usermod", "-s", "/usr/sbin/nologin", "-L", username).CombinedOutput(); err != nil {
 		return fmt.Errorf("usermod %s: %s", username, strings.TrimSpace(string(out)))

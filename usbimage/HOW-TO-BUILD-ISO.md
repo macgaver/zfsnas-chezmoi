@@ -80,7 +80,7 @@ Put a portal binary there, either way:
 **Build it from source** (Go 1.22+, any machine; copy the result to the
 repository root on the build machine):
 ```bash
-VERSION=6.9.24                     # what the portal will report
+VERSION=6.9.25                     # what the portal will report
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
   -ldflags "-s -w -X zfsnas/internal/version.Version=${VERSION}" -o zfsnas .
 ./zfsnas --version
