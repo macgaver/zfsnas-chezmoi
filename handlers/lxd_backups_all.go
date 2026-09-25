@@ -31,12 +31,31 @@ import (
 	"zfsnas/system"
 )
 
+// instanceDisplayNames maps instance name → human-readable description for
+// every instance living on THIS host. The Backups page shows it beside the
+// VM-ID; backups whose source instance is gone (or lives on another host)
+// simply have no entry and fall back to the VM-ID alone.
+func instanceDisplayNames() map[string]string {
+	names := map[string]string{}
+	instances, err := system.ListLXDInstances()
+	if err != nil {
+		return names
+	}
+	for _, inst := range instances {
+		if inst.Description != "" && inst.Description != inst.Name {
+			names[inst.Name] = inst.Description
+		}
+	}
+	return names
+}
+
 // HandleListAllBackups returns every backup known to this host AND every
 // linked InterLink peer. Used by the Datastores → Backups page.
 // GET /api/incus/backups
 func HandleListAllBackups(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		out := []map[string]interface{}{}
+		vmNames := instanceDisplayNames()
 		// Local workload backups (v6.5.19+ canonical layout).
 		if workload, err := system.ListWorkloadBackupInstances(); err == nil {
 			for _, w := range workload {
@@ -53,6 +72,7 @@ func HandleListAllBackups(appCfg *config.AppConfig) http.HandlerFunc {
 				}
 				out = append(out, map[string]interface{}{
 					"vm_id":           vmID,
+					"vm_name":         vmNames[vmID],
 					"type":            w.Type,
 					"scope":           "local",
 					"hostname":        "",
@@ -83,6 +103,7 @@ func HandleListAllBackups(appCfg *config.AppConfig) http.HandlerFunc {
 			}
 			out = append(out, map[string]interface{}{
 				"vm_id":           vmID,
+				"vm_name":         vmNames[vmID],
 				"type":            inst.Type,
 				"scope":           "local",
 				"hostname":        "",
@@ -109,8 +130,16 @@ func HandleListAllBackups(appCfg *config.AppConfig) http.HandlerFunc {
 				}
 				for _, rec := range records {
 					mu.Lock()
+					// Prefer this host's own description (the usual case —
+					// we pushed the backup to the peer); fall back to what
+					// the peer knows the instance as.
+					vmName := vmNames[rec.VMID]
+					if vmName == "" {
+						vmName = rec.VMName
+					}
 					out = append(out, map[string]interface{}{
 						"vm_id":           rec.VMID,
+						"vm_name":         vmName,
 						"type":            rec.Type,
 						"scope":           "remote",
 						"hostname":        ls.Hostname,
@@ -867,6 +896,7 @@ func HandleInterlinkListLocalBackups(appCfg *config.AppConfig) http.HandlerFunc 
 			return
 		}
 		records := []system.RemoteBackupRecord{}
+		vmNames := instanceDisplayNames()
 		// Workload-style backups (the v6.5.19+ convention used by every
 		// remote target — peer doesn't need Incus). Scanned via plain
 		// `zfs list` on every imported pool.
@@ -888,6 +918,7 @@ func HandleInterlinkListLocalBackups(appCfg *config.AppConfig) http.HandlerFunc 
 			}
 			records = append(records, system.RemoteBackupRecord{
 				VMID:           vm,
+				VMName:         vmNames[vm],
 				BackupInstance: w.Name,
 				Type:           w.Type,
 				Datastore:      w.ZFSPool, // expose the ZFS pool name as the "datastore"
@@ -916,6 +947,7 @@ func HandleInterlinkListLocalBackups(appCfg *config.AppConfig) http.HandlerFunc 
 			}
 			records = append(records, system.RemoteBackupRecord{
 				VMID:           vm,
+				VMName:         vmNames[vm],
 				BackupInstance: inst.Name,
 				Type:           inst.Type,
 				Datastore:      inst.RootPool,

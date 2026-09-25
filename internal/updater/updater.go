@@ -153,46 +153,74 @@ func VerifyRelease(info ReleaseInfo) (bool, error) {
 // VerifyDownloadedBinary verifies the signature of an already-downloaded binary
 // at path against the .sig at sigURL.
 func VerifyDownloadedBinary(path, sigURL string) error {
+	_, err := VerifyFileSignature(path, sigURL, nil)
+	return err
+}
+
+// VerifyFileSignature checks the cosign signature at sigURL against the file
+// at path, reporting bytes hashed so far to progress (may be nil) — a 1.6 GB
+// appliance image on a slow USB stick takes minutes to read. Returns the
+// file's SHA-256 so the caller can match a published checksum without
+// reading the file a second time.
+func VerifyFileSignature(path, sigURL string, progress func(int64)) ([]byte, error) {
 	if strings.TrimSpace(cosignPublicKey) == "" {
-		return fmt.Errorf("no signing key configured in binary")
+		return nil, fmt.Errorf("no signing key configured in binary")
 	}
 
 	sigB64, err := downloadText(sigURL)
 	if err != nil {
-		return fmt.Errorf("download sig: %w", err)
+		return nil, fmt.Errorf("download sig: %w", err)
 	}
 	sigBytes, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sigB64))
 	if err != nil {
-		return fmt.Errorf("decode sig: %w", err)
+		return nil, fmt.Errorf("decode sig: %w", err)
 	}
 
 	block, _ := pem.Decode([]byte(cosignPublicKey))
 	if block == nil {
-		return fmt.Errorf("invalid public key PEM")
+		return nil, fmt.Errorf("invalid public key PEM")
 	}
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return fmt.Errorf("parse public key: %w", err)
+		return nil, fmt.Errorf("parse public key: %w", err)
 	}
 	ecPub, ok := pub.(*ecdsa.PublicKey)
 	if !ok {
-		return fmt.Errorf("public key is not ECDSA")
+		return nil, fmt.Errorf("public key is not ECDSA")
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return err
+	var r io.Reader = f
+	if progress != nil {
+		r = &progressReader{r: f, fn: progress}
 	}
+	if _, err := io.CopyBuffer(h, r, make([]byte, 1<<20)); err != nil {
+		return nil, err
+	}
+	digest := h.Sum(nil)
 
-	if !ecdsa.VerifyASN1(ecPub, h.Sum(nil), sigBytes) {
-		return fmt.Errorf("signature invalid: binary does not match release key")
+	if !ecdsa.VerifyASN1(ecPub, digest, sigBytes) {
+		return nil, fmt.Errorf("signature invalid: file does not match release key")
 	}
-	return nil
+	return digest, nil
+}
+
+type progressReader struct {
+	r  io.Reader
+	n  int64
+	fn func(int64)
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	p.n += int64(n)
+	p.fn(p.n)
+	return n, err
 }
 
 // Download streams the binary at url into a temporary file inside destDir.

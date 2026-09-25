@@ -396,7 +396,10 @@ func InterlinkRemotePruneRetention(remoteURL, sharedSecret, tlsFP, pool, vm, kin
 
 // RemoteBackupRecord describes one bkup--<vm> instance on a peer.
 type RemoteBackupRecord struct {
-	VMID           string                   `json:"vm_id"`
+	VMID string `json:"vm_id"`
+	// VMName is the instance's human-readable description as known to the
+	// peer, when the source instance still lives there. Empty otherwise.
+	VMName         string                   `json:"vm_name,omitempty"`
 	BackupInstance string                   `json:"backup_instance"`
 	Type           string                   `json:"type"` // "virtual-machine" | "container"
 	Datastore      string                   `json:"datastore"`

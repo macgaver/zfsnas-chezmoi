@@ -78,6 +78,12 @@ func InstallMinIO() error {
 		args := append([]string{s.args[0]}, s.args[1:]...)
 		cmd := exec.Command("sudo", args...)
 		if out, err := cmd.CombinedOutput(); err != nil {
+			if s.args[0] == "wget" {
+				// Since 2026 dl.min.io answers 410 Gone: MinIO archived the
+				// open-source server and client. The UI no longer offers the
+				// install; this keeps a direct API call from failing cryptically.
+				return fmt.Errorf("%s failed: MinIO no longer publishes its open-source binaries (dl.min.io), so the S3 server cannot be installed: %w", s.desc, err)
+			}
 			return fmt.Errorf("%s: %w: %s", s.desc, err, strings.TrimSpace(string(out)))
 		}
 	}

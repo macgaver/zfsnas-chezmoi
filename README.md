@@ -2,200 +2,227 @@
   <img src="static/logo.svg" alt="ZNAS Logo" width="700"/>
 </p>
 <p align="center">
-  <strong>A ZFS NAS management portal that gets out of your way.</strong><br/>
-  Single binary. Secure. No database. No bloat.
+  <strong>Your ZFS storage, file shares, VMs and containers in one fast, beautiful portal.</strong><br/>
+  Single binary. No database. No containers to babysit. Or boot it straight from a USB stick.
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go" alt="Go 1.22+"/>
-  <img src="https://img.shields.io/badge/Platform-Ubuntu%2022.04%2B-E95420?style=flat-square&logo=ubuntu" alt="Ubuntu 22.04+"/>
+  <a href="https://github.com/macgaver/zfsnas-chezmoi/releases/latest"><img src="https://img.shields.io/github/v/release/macgaver/zfsnas-chezmoi?style=flat-square&label=portal&color=00eaff" alt="Latest portal release"/></a>
+  <a href="https://github.com/macgaver/znas-usb-appliance/releases/latest"><img src="https://img.shields.io/github/v/release/macgaver/znas-usb-appliance?style=flat-square&label=USB%20appliance&color=8a2cff" alt="Latest USB appliance image"/></a>
+  <img src="https://img.shields.io/badge/Debian-13%2B-A81D33?style=flat-square&logo=debian" alt="Debian 13+"/>
+  <img src="https://img.shields.io/badge/Ubuntu-26.04%2B-E95420?style=flat-square&logo=ubuntu" alt="Ubuntu 26.04+"/>
   <img src="https://img.shields.io/badge/License-GPLv3-8a2cff?style=flat-square" alt="GPLv3 License"/>
-  <img src="https://img.shields.io/badge/Version-6.4.4-00eaff?style=flat-square" alt="Version 6.4.4"/>
 </p>
 
-## Why ZNAS Chezmoi?
-
-### Always Current, Zero Disruption
-
-ZNAS is built like a modern browser — updates are continuous, silent, and non-disruptive. Like Chrome, you never have to think about versions: a single click applies the latest release in seconds while the portal keeps running. No package manager, no downtime, no breaking changes forced on you. Each update is a single self-contained binary that replaces itself atomically; if something ever goes wrong, the previous version is still there. ZNAS evolves constantly in the background so your NAS management stays ahead of the curve without ever interrupting your work.
-
----
-
-Most NAS management software are slow to install, slow to load, and buried under layers of configuration. ZNAS Chezmoi is different:
-
-- **One binary, zero dependencies** — compile once, copy anywhere, run. No Docker. No Node. No Python runtime.
-- **Instant startup** — the portal is live in under a second. All static assets are embedded directly in the binary.
-- **Advanced Features** 
-  - Interlink mode to instantly switch between multiple ZNAS instance, simple push/pull between them
-  - UPS Management with one click. Auto install and auto configure local UPS and let you decide actions on battery status
-  - SMB Share but also NFS, iSCSI and S3 Storage
-  - Advanced capacity monitoring builtin with zero maintenance. See folder tree structure, capacity trend by pool or dataset over time, topology, ...
-- **Guided setup wizard** — first-run installs missing system packages, registers a systemd service, detects existing ZFS pools, and creates your admin account. Start to finish in under five minutes.
-
-Version 5.0.0 Full End-To-End DEMO on Youtube: [Version 5.0.0 DEMO](https://youtu.be/usFcZ15AyOs?si=U-neyJLCjkAfNHMc) \
-Version 6.3.26 DEMO of Interlink and other new features! [Version 6.3.26 DEMO](https://youtu.be/UjaSBK0vWkk)
+<p align="center">
+  <a href="https://youtu.be/usFcZ15AyOs?si=U-neyJLCjkAfNHMc">▶ Full end-to-end demo (v5)</a> &nbsp;·&nbsp;
+  <a href="https://youtu.be/UjaSBK0vWkk">▶ Interlink &amp; new features (v6.3)</a>
+</p>
 
 ![Demo](assets/zfsnas-v6-3-26-demo.gif)
 
 ---
 
-## Features
+## Why ZNAS?
 
-### Storage Management
-- **Multi-Pool Support** — manage any number of ZFS pools side by side; switch between pools with a dropdown in the top bar and the Pool tab; last selection remembered per user across sessions
-- **ZFS Pools** — create (Stripe / Mirror / RAIDZ1 / RAIDZ2) with configurable ashift, compression, and dedup; import existing pools; expand with new devices; upgrade pool feature flags; destroy
-- **Pool Cache Devices** — add and remove ZFS L2ARC / ZIL devices per pool; separate ARC Level 1 (memory) tuning reads live `/proc/spl/kstat/zfs/arcstats` and writes `/etc/modprobe.d/zfs.conf` for persistence
-- **Pool Fixer Wizard** — guided recovery for degraded, faulted, or suspended pools; automatically clears error state and brings offline disks back online in two steps
-- **Disk Online / Offline** — manually take individual pool member disks offline or bring them back online without leaving the portal
-- **Datasets** — full nested hierarchy with quota, refquota, reservation, record size, compression, sync, dedup, case sensitivity, and a free-text comment stored as a ZFS user property (`zfsnas:comment`)
-- **ZVols** — create and manage ZFS block volumes (ZVols) with size, sync, compression, dedup, block size, and optional encryption; listed inline in the dataset table; used as iSCSI backing devices
-- **Snapshots** — create, restore, clone, and delete; visual tree per dataset; snapshot list spans all pools
-- **Scheduled Snapshots** — automated policies (hourly / daily / weekly / monthly) with configurable retention counts
-- **ZFS Scrub** — trigger, monitor progress, stop, and schedule auto-scrubs (weekly / bi-weekly / monthly / every 2 or 4 months) at a configurable hour
-- **ZFS Native Encryption** — create AES-256-GCM encrypted pools and datasets; keys are loaded automatically at startup so encrypted volumes mount without manual intervention
-- **Encryption Key Management** — generate, import, export, and delete encryption keys from the Settings tab; export format is compatible with TrueNAS key exports, making migration between platforms straightforward; lock icons throughout the UI identify which pools and datasets are encrypted
+Most NAS software is slow to install, slow to load, and buried under layers of
+configuration. ZNAS is the opposite.
 
-### File Sharing
-- **SMB Shares** — create and manage Samba shares with per-user read/write or read-only access; global SMB configuration (workgroup, server string, `[homes]` section); per-user home folder provisioning
-- **NFS Shares** — Linux/macOS NFS exports with per-client CIDR and options (ro/rw, sync/async)
-- **S3 Object Storage** — optional MinIO-backed S3 server; install with one click from Prerequisites; manage buckets (versioning, object lock, quota, anonymous access) and IAM users from the portal; TLS toggle included
-- **iSCSI Sharing** — optional targetcli-fb backend; create iSCSI shares backed by ZVols; manage initiator host registry; enable from Prerequisites with one click
-- **File Browser** — browse any dataset, SMB share, or NFS share path directly in the portal; admin can change ownership (`chown`) and permissions (`chmod`), optionally recursive; safe path traversal prevention
-
-### Monitoring & Alerts
-- **Physical Disks** — list all non-system disks with vendor, model, serial number, type, temperature, and SMART wearout (ATA + NVMe), color-coded by health
-- **Pool Member Status** — per-disk health state (ONLINE / FAULTED / OFFLINE / etc.) shown inline in the pool view; presence detection for disks that have been physically removed
-- **Pool Capacity Bar** — persistent capacity visualization at the top of every page with a pool selector when multiple pools are configured; per-dataset segments with hover tooltips
-- **System Dashboard** — 24-hour RRD charts for CPU, memory (app + cache stacked), network (per interface), and disk I/O; live sparklines updated every few seconds
-- **Capacity Trend** — dedicated page with stacked area charts; select any pool or dataset combination; dashed red usable-capacity ceiling line; time ranges from "since data" up to 5 years; backed by a 3-tier RRD (5-min/1-week, 30-min/1-month, daily/5-years)
-- **UPS Management** — optional NUT install from Prerequisites; compact battery widget in top bar; UPS settings panel with visual battery gauge, metrics grid, and configurable shutdown policy (e.g. shut down at N% after M minutes on battery)
-- **Hardware Info** — CPU core count and total RAM exposed via `/api/sysinfo/hardware`
-- **Multi-Target Notifications** — six independent alert channels: Email (SMTP), ntfy, Gotify, Pushover, Syslog, and in-app WebSocket toasts; each channel has its own enable toggle and per-event subscriptions; all channels can be active simultaneously
-- **Audit Health Events** — pool problem / recovery and disk problem / recovery transitions are written to the audit log automatically by the background health poller
-
-### Administration
-- **User Management** — four roles: `admin`, `standard`, `read-only`, `smb-only`; the `standard` role has 11 granular permission flags (terminal, file browser, pool/dataset management, SMB, NFS, iSCSI, snapshots, protection, settings, interlink, and sudo review); active session listing and remote kill; per-user UI preferences persisted across sessions
-- **Certificate Management** — import and manage TLS certificates from the Settings tab; activate any cert and restart the portal in-place; self-signed cert auto-generated on first run
-- **Audit Log** — append-only activity log with live sidebar widget and full log page (filterable by user, action, date); covers storage, sharing, auth, OS, and health events
-- **Web Terminal** — browser-based PTY terminal (admin only), powered by xterm.js over WebSocket
-- **OS Updates** — check for and stream-apply `apt` security updates from the portal
-- **Binary Self-Update** — check for a newer release and apply it in-place over WebSocket with live progress output
-- **Timezone Management** — set system timezone from the portal; falls back to `/usr/share/zoneinfo/` on minimal installs without `timedatectl`
-- **Settings** — configure port, storage units (GB / GiB), SMTP, alert subscriptions, and read-only API key
+- **Up and running in minutes.** Flash a USB stick and boot, or run one command on
+  Debian or Ubuntu, then create your admin account in the browser.
+- **One binary, nothing else.** No Docker, no Node, no Python runtime, no database.
+  The whole portal, UI included, is a single file that starts in under a second.
+- **Storage, sharing and virtualization together.** ZFS pools, SMB/NFS/iSCSI shares,
+  VMs, containers and Compose stacks, all managed from the same place.
+- **Always current, never disruptive.** Updates are signed, applied in one click and take
+  effect in seconds, like a modern browser. The previous version stays as a fallback.
+- **Secure by design.** HTTPS only, roles with fine-grained permissions, two-factor
+  login, an audit trail of every action, and optional sudo hardening.
+- **Built for real homelabs.** Manage several servers from one window, back VMs up to
+  another box, watch your UPS, and get alerts wherever you want them.
 
 ---
 
-## Requirements
+## Two ways to run it
 
-| Requirement | Version |
-|---|---|
-| Debian | **13 (Bookworm) or later** |
-| Ubuntu | **26.04 LTS or later** |
-| Go (if you build from source) | 1.22 or later |
-| `sudo` access without password | Required for ZFS, Samba/NFS management, and SMART commands (or [sudo hardening](SECURITY.md)) |
+### 🔌 The USB appliance: the easiest and most secure
 
-A few system packages are required. If any are missing, the **Prerequisites** tab will detect them and offer a guided installation
+**[⬇ Download the latest appliance image](https://github.com/macgaver/znas-usb-appliance/releases/latest)**
+
+Flash it to a USB stick, boot your NAS from it, and open the address shown on the
+screen. That's it.
+
+- **Immutable OS.** Ubuntu 26.04 LTS runs read-only, loaded into RAM, so the system
+  cannot drift or be tampered with.
+- **Your settings live apart from the OS.** They sit on their own partition of the
+  stick and survive every upgrade.
+- **One-click platform upgrades.** New images are signed, then downloaded and verified
+  by the portal itself. Stage the upgrade for later, or upgrade and reboot now.
+- **Everything included.** Every feature (virtualization, iSCSI, UPS, disk power,
+  MergerFS and more) is built in and ready. Nothing to install.
+- **No OS disk needed.** All your drives stay free for your pools.
+
+### 🐧 On your own Debian or Ubuntu server
+
+Prefer a regular install? One command on Debian 13+ or Ubuntu 26.04+ sets up ZFS, a
+service account, the portal and its systemd service. See [Installation](#installation).
+
+---
+
+## Features
+
+### 🗄️ ZFS storage
+- **Pools**: create Stripe, Mirror, RAIDZ1 or RAIDZ2 pools, import existing ones, expand them and upgrade their feature flags. Manage as many pools as you like side by side.
+- **Datasets and ZVols**: a full nested hierarchy with quotas, reservations, record size, compression, sync, dedup and comments, plus block volumes for iSCSI and VMs.
+- **Snapshots**: create, restore, clone and browse them per dataset, with scheduled hourly, daily, weekly or monthly policies and retention.
+- **Native encryption**: AES-256-GCM pools and datasets, keys loaded automatically at boot, and key export compatible with TrueNAS.
+- **Health and repair**: scheduled scrubs, cache devices (L2ARC/ZIL), ARC tuning, disk online/offline, and a **Pool Fixer** wizard that walks you through degraded or faulted pools.
+- **MergerFS**: pool several datasets into one mountpoint, perfect for a media library spread across disks.
+
+### 📁 File sharing
+- **SMB**: Samba shares with per-user read/write or read-only access, home folders and global settings.
+- **NFS**: exports with per-client networks and options.
+- **iSCSI**: block shares backed by ZVols, with an initiator registry.
+- **File browser**: browse any dataset or share in the portal and fix ownership and permissions, recursively if needed.
+
+### 🖥️ Virtualization
+- **VMs and LXC containers**, powered by Incus: create, start, stop, clone and snapshot them, with tags and groups to keep large setups tidy.
+- **Consoles in the browser**: a terminal for every instance and a graphical console for VMs.
+- **Compose stacks**: deploy Docker Compose applications to a container or VM in a few clicks, with scheduled auto-updates.
+- **Hardware passthrough**: give a VM a GPU, HBA or any other PCI or USB device.
+- **Networking**: bridges, managed networks and port forwarding for your instances.
+- **Proxmox import**: bring your existing Proxmox VMs over, UEFI guests included.
+- **Services**: publish the web apps you host and open them from the ZNAS menu, even embedded in the portal.
+- **Memory compression** (zram) and swappiness tuning for denser hosts.
+
+### 🛡️ Protection and backups
+- **VM and container backups**: ZFS-native, incremental and fast, to a local pool or another ZNAS, with retention and one-click restore.
+- **ZFS replication**: send datasets to another server on a schedule.
+- **Filesystem sync**: copy data to or from external NFS, SMB and other shares with rsync.
+- **UPS protection**: plug in a UPS and ZNAS detects and configures it, shows its battery in the top bar and shuts the server down safely according to your policy.
+
+### 🌐 Many servers, one window
+- **Interlink**: link your ZNAS servers and switch between them instantly from the same browser tab, with every page and terminal following along.
+- **Push and pull** VMs, containers and data between linked servers.
+
+### 📊 Monitoring and alerts
+- **Live dashboard**: CPU, memory, network and disk I/O with 24-hour history.
+- **Storage Map and Networking Layer**: interactive maps of your disks, pools, datasets, bridges and instances.
+- **Capacity trends**: usage per pool or dataset over time, up to five years, with the usable-capacity limit drawn in.
+- **Disk health**: SMART data, temperature and SSD wear-out for every drive, plus disk power management (spindown, APM, write cache).
+- **Alerts everywhere**: Email, ntfy, Gotify, Pushover, Syslog and in-app notifications, each with its own choice of events. Pool and disk problems, scrub errors, unreachable servers and security updates are all covered.
+
+### 🔐 Security and administration
+- **HTTPS only**, with a certificate generated on first run, or import your own.
+- **Users and roles**: admin, standard (with 11 granular permissions), read-only and SMB-only, plus control over active sessions.
+- **Two-factor authentication** (TOTP) for any account.
+- **Audit log** of every storage, sharing, login and system action.
+- **Sudo hardening**: restrict the portal to exactly the commands it needs. See [SECURITY.md](SECURITY.md).
+- **From the browser**: a web terminal, OS updates (one click or interactive), hostname, timezone and power management.
+- **Looks great anywhere**: light and dark themes (including *Tron Legacy* and *Matrix Reload*), and a layout made for phones and tablets too.
 
 ---
 
 ## Installation
 
-### Choose your installation type
-
-| Installation type | Description | Guide |
+| Install type | Best for | How |
 |---|---|---|
-| **Quick installer (script)** | One-command automated setup on any supported Debian/Ubuntu host | [Option A below](#option-a--quick-installer-recommended) |
-| **Proxmox VM** | Run ZNAS inside a Debian VM on a Proxmox host; ZFS disks passed through via PCIe/HBA or virtio | [Wiki — Proxmox VM](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation-Proxmox-VM) |
-| **Physical / Bare-metal** | Install directly on dedicated NAS hardware | [Wiki — Hardware](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation-Hardware) |
-| **Build from source** | Clone the repo and compile; useful for development or custom builds | [Option B below](#option-b--build-from-source) |
-| **Download binary** | Grab the latest release binary and run it directly | [Option C below](#option-c--download-a-release-binary) |
+| **USB appliance** | A dedicated NAS: the simplest and most secure option | [Option A](#option-a--usb-appliance-recommended-for-a-dedicated-nas) |
+| **Quick installer** | An existing Debian 13+ or Ubuntu 26.04+ server | [Option B](#option-b--quick-installer-on-debian-or-ubuntu) |
+| **Proxmox VM** | Running ZNAS inside Proxmox, with disks passed through | [Wiki: Proxmox VM](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation-Proxmox-VM) |
+| **Bare metal** | Installing Debian or Ubuntu yourself on NAS hardware | [Wiki: Hardware](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation-Hardware) |
+| **Binary or source** | Development and custom builds | [Option C](#option-c--release-binary-or-build-from-source) |
 
----
+### Option A — USB appliance (recommended for a dedicated NAS)
 
-### Option A — Quick installer (recommended)
+1. **Download** the latest `znas-usb-appliance-v….iso` from
+   **[the appliance releases](https://github.com/macgaver/znas-usb-appliance/releases/latest)**.
+   Each release also includes a `.sha256` checksum and a `.sig` signature.
+2. **Flash** it to a USB stick of 8 GB or more with [balenaEtcher](https://etcher.balena.io/),
+   Rufus (in *dd mode*) or `dd`:
+   ```bash
+   sudo dd if=znas-usb-appliance-vX-Y-Z-N.iso of=/dev/sdX bs=4M conv=fsync status=progress
+   ```
+3. **Boot** the NAS from the stick and let the default *load OS to RAM* entry start.
+   Keep the stick plugged in, because it holds your settings. The machine needs 4 GB of
+   RAM or more (more is better with ZFS). UEFI with Secure Boot and legacy BIOS both work.
+4. **Open** the address shown on the screen, `https://<nas-ip>:8443/setup`, and create
+   your admin account.
 
-One command installs ZFS (if needed), creates a dedicated service account, downloads the latest binary, and registers a systemd service:
+Upgrades then appear in **Platform → USB Appliance Upgrades**. Want to build the image
+yourself? See [usbimage/HOW-TO-BUILD-ISO.md](usbimage/HOW-TO-BUILD-ISO.md).
+
+### Option B — Quick installer on Debian or Ubuntu
+
+One command installs ZFS if needed, creates a dedicated service account, downloads the
+latest release and registers a systemd service:
 
 ```bash
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/macgaver/zfsnas-chezmoi/main/zfsnas-quickinstall-for-debian.sh)"
 ```
 
-> Already root? Drop `sudo`. Supports Debian 13+ and Ubuntu 26.04+. (Avoid `sudo bash <(curl …)` — process substitution opens a file descriptor in your shell that sudo's child can't read, producing `/dev/fd/63: No such file or directory`.)
+> Already root? Drop `sudo`. Avoid `sudo bash <(curl …)`: process substitution
+> produces `/dev/fd/63: No such file or directory` under sudo.
 
-Once the installer completes, open your browser at the URL it prints (e.g. `https://<your-server-ip>:8443/setup`) and follow the setup wizard.
+Then open the URL it prints (`https://<server-ip>:8443/setup`) and create your admin account.
 
----
-
-### Option B — Build from source
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/macgaver/zfsnas-chezmoi.git
-cd zfsnas-chezmoi
-
-# 2. Build the binary (all static assets are embedded at compile time)
-go build -o zfsnas .
-
-# 3. Run
-./zfsnas
-```
-
-### Option C — Download a release binary
+### Option C — Release binary or build from source
 
 ```bash
-# Download the latest release for Linux amd64
+# Latest release (Linux amd64)
 curl -Lo zfsnas https://github.com/macgaver/zfsnas-chezmoi/releases/latest/download/zfsnas-chezmoi
-chmod +x zfsnas
-./zfsnas
+chmod +x zfsnas && ./zfsnas
+
+# …or build it (Go 1.22+; the UI is embedded at compile time)
+git clone https://github.com/macgaver/zfsnas-chezmoi.git
+cd zfsnas-chezmoi && go build -o zfsnas . && ./zfsnas
 ```
 
-### First-run setup (Options B and C)
+Run it from a folder owned by a user with passwordless sudo (which you can restrict, see
+[SECURITY.md](SECURITY.md)), then open `https://<server-ip>:8443/setup`.
 
-Place the binary in a folder owned by a user with passwordless sudo access (you can restrict sudo to specific commands — see [SECURITY.md](SECURITY.md)). Then launch and open your browser at:
+### First steps in the portal
 
-```
-https://<your-server-ip>:8443/setup
-```
+The first visit to `/setup` creates your administrator account. After you sign in,
+the portal shows you anything still missing (system packages on a regular install, the
+systemd service) and lets you import your existing ZFS pools or create new ones.
 
-> Accept the self-signed certificate warning — the cert is generated locally on your server and is used only to encrypt traffic between your browser and the portal.
-
-The setup wizard will guide you through:
-
-1. **Prerequisites** — detect and install missing system packages
-2. **Systemd service** — optionally register `zfsnas.service` so the portal starts on boot
-3. **ZFS pool** — detect and import existing pools, or create a new one
-4. **Admin account** — create your first administrator
-
-After setup, the portal is available at:
-
-```
-https://<your-server-ip>:8443
-```
+> Your browser will warn about the self-signed certificate on the first visit. It is
+> generated on your server and only encrypts traffic between you and your NAS; you can
+> import your own certificate later in Settings.
 
 ---
 
-## Architecture
+## Requirements
 
-ZNAS Chezmoi is built to stay fast and simple as it grows:
+| | |
+|---|---|
+| **USB appliance** | An x86-64 machine with 4 GB of RAM or more, and a USB stick of 8 GB or more |
+| **Operating system** (other installs) | Debian 13 (Trixie) or later, or Ubuntu 26.04 LTS or later |
+| **Privileges** | Passwordless `sudo` for the portal's service account (restrictable, see [SECURITY.md](SECURITY.md)) |
+| **Building from source** | Go 1.22 or later |
+| **Browser** | Any current browser, desktop or mobile |
 
-- **Go (latest)** — single statically-linked binary, cold start in milliseconds
-- **Embedded frontend** — HTML, CSS, and JS compiled into the binary via `go:embed`; zero CDN calls in production
-- **Alpine.js** — lightweight reactive UI with no build step, no npm, no bundler
-- **gorilla/mux** — minimal HTTP routing
-- **JSON file storage** — no database process to manage or back up
-- **WebSocket streaming** — real-time terminal, package installation output, and system metrics without polling hacks
-- **Background goroutines** — SMART refresh, health alerts, snapshot scheduling, and session cleanup run as lightweight goroutines inside the single process
+---
+
+## Under the hood
+
+- **Go**: one statically linked binary with a millisecond cold start.
+- **Embedded UI**: plain HTML, CSS and JavaScript compiled into the binary with `go:embed`. No npm, no bundler, no CDN calls.
+- **JSON files instead of a database**: configuration that is easy to read, back up and move.
+- **WebSockets**: live terminals, consoles, progress streams and metrics without polling.
+- **Signed updates**: the portal verifies its own updates and appliance images against a key built into it before installing them.
 
 ---
 
 ## Security
 
-For the full security model, sudo hardening guide, TLS configuration, and authentication details see **[SECURITY.md](SECURITY.md)**.
+The security model, sudo hardening, TLS and authentication are documented in
+**[SECURITY.md](SECURITY.md)**.
 
----
-## Important Contributors
-  - Memeticsoup
-  - Exultantliving0
+## Important contributors
+- Memeticsoup
+- Exultantliving0
 
 ## License
 
-GNU General Public License v3.0 — see [LICENSE](LICENSE) for details.
+GNU General Public License v3.0. See [LICENSE](LICENSE) for details.

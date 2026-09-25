@@ -1,0 +1,406 @@
+#!/bin/sh
+# casper-bottom/60zfsnas_persist — ZFS NAS Portal selective persistence.
+# Runs after casper assembled the overlay root at ${rootmnt}, before pivot.
+# Spec: PLANS/spec-6.8.28-usb-appliance.md §5. Never fails the boot: every
+# error path degrades to "no persistence" + a status the portal displays.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+
+PERSIST_LABEL="ZFSNAS-PERSIST"
+STORE_DIRNAME=".zfsnas-persist"
+MANIFEST="/etc/zfsnas-persist-manifest"
+GIB=1073741824
+HEADROOM=536870912          # 512 MiB past ISO end before the store starts
+MIN_STORE=268435456         # refuse to create a store under 256 MiB
+FRESH_STORE_OFFSET=8589934592  # 8 GiB — where a NEW store starts (see below)
+
+# "<4>" = KERN_WARNING: the boot uses `quiet`, which hides info-level kmsg.
+# Persistence status is exactly what an admin needs to see on a headless
+# console, so it is logged at warning level.
+zp_log() { echo "<4>zfsnas-persist: $*" > /dev/kmsg 2>/dev/null || \
+           echo "zfsnas-persist: $*"; }
+
+zp_set_status() {
+    mkdir -p "$ZP_ROOT/var/lib/zfsnas"
+    echo "$1" > "$ZP_ROOT/var/lib/zfsnas/persist-status"
+}
+
+# --- device discovery -------------------------------------------------------
+# The live medium is the iso9660 mount casper made; its parent disk is where
+# the persist partition lives.
+zp_find_disk() {
+    # NOTE: an absent iso9660 mount is NOT a failure — it is the normal toram
+    # case. This used to `return 1` right here when the awk found nothing,
+    # which made the toram fallback below unreachable: booting "load OS to RAM"
+    # logged "no live medium found" and the appliance came up with NO
+    # persistence at all, sending the user back through /setup on every boot.
+    # Leave ZP_DISK empty instead and let the label lookup have its turn.
+    ZP_MEDIUM=$(awk '$3=="iso9660" {print $1; exit}' /proc/mounts)
+    ZP_DISK=""
+    if [ -n "$ZP_MEDIUM" ]; then
+        part=$(basename "$ZP_MEDIUM")
+        parent=$(basename "$(readlink -f "/sys/class/block/$part/..")")
+        if [ "$parent" = "block" ] || [ -z "$parent" ]; then
+            ZP_DISK="/dev/$part"           # whole-disk ISO write (rare)
+        else
+            ZP_DISK="/dev/$parent"
+        fi
+        case "$(basename "$ZP_DISK")" in
+            loop*|ram*) ZP_DISK="" ;;
+        esac
+    fi
+    if [ -z "$ZP_DISK" ] || [ ! -b "$ZP_DISK" ]; then
+        # toram: casper copies the image into RAM and then UNMOUNTS the stick,
+        # so usually there is no iso9660 line in /proc/mounts at all; when one
+        # does survive it can resolve to a loop/ram device. Either way the
+        # physical stick has to be found by its ISO volume label instead
+        # (ISO_LABEL="ZFSNAS-USB" — see usbimage/conf.sh, the source of
+        # truth); fall back to an already-registered persist partition.
+        dev=$(blkid -o device -t LABEL=ZFSNAS-USB 2>/dev/null | head -n1)
+        if [ -n "$dev" ]; then
+            ZP_MEDIUM="$dev"
+        else
+            dev=$(blkid -o device -t "LABEL=$PERSIST_LABEL" 2>/dev/null | head -n1)
+            [ -n "$dev" ] || return 1
+            # persist-label hit: leave ZP_MEDIUM as-is — the caller's own
+            # LABEL=$PERSIST_LABEL lookup will short-circuit zp_iso_end.
+        fi
+        part=$(basename "$dev")
+        parent=$(basename "$(readlink -f "/sys/class/block/$part/..")")
+        if [ "$parent" = "block" ] || [ -z "$parent" ]; then
+            ZP_DISK="/dev/$part"
+        else
+            ZP_DISK="/dev/$parent"
+        fi
+    fi
+    [ -b "$ZP_DISK" ]
+}
+
+# End of the ISO's on-disk extent in bytes (start+size of the medium's
+# partition; == ISO size when written to the whole disk).
+zp_iso_end() {
+    part=$(basename "$ZP_MEDIUM")
+    if [ -f "/sys/class/block/$part/start" ]; then
+        s=$(cat "/sys/class/block/$part/start")
+        z=$(cat "/sys/class/block/$part/size")
+        echo $(( (s + z) * 512 ))
+    else
+        blockdev --getsize64 "$ZP_MEDIUM"
+    fi
+}
+
+# --- reflash scan (spec §5.3) ----------------------------------------------
+# dd of a new ISO wiped the partition table but not the distant blocks.
+# ext4 superblock: +1024 into the fs; magic 0xEF53 at sb+56; label at sb+120.
+zp_scan_for_store() {   # echoes byte offset or nothing
+    disk_bytes=$(blockdev --getsize64 "$ZP_DISK")
+    off=$GIB
+    while [ "$off" -lt "$disk_bytes" ]; do
+        # Seek in 1 MiB blocks, never with bs=1: the initramfs's busybox dd
+        # walks a bs=1 skip byte-by-byte, so `skip=$((off+1080))` over a
+        # multi-GiB stick never returns (it wedged the boot before this).
+        # Pull the 1 MiB chunk at the candidate offset, then step the few
+        # hundred bytes to the superblock fields inside that chunk.
+        magic=$(dd if="$ZP_DISK" bs=1048576 skip=$((off / 1048576)) count=1 \
+                2>/dev/null | dd bs=1 skip=1080 count=2 2>/dev/null \
+                | od -An -tx1 | tr -d ' \n')
+        if [ "$magic" = "53ef" ]; then
+            label=$(dd if="$ZP_DISK" bs=1048576 skip=$((off / 1048576)) count=1 \
+                    2>/dev/null | dd bs=1 skip=1144 count=16 2>/dev/null \
+                    | tr -d '\0')
+            if [ "$label" = "$PERSIST_LABEL" ]; then
+                echo "$off"
+                return 0
+            fi
+        fi
+        off=$((off + GIB))
+    done
+    return 1
+}
+
+
+# Finds an existing partition of $ZP_DISK whose sysfs "start" sector equals
+# $1. Single pass, no retries — callers that need to wait for udev/partx to
+# settle retry around this. Matching sysfs "start" (not `blkid -t LABEL=`)
+# is unambiguous and doesn't depend on udev/blkid cache having settled.
+# Echoes the device path and returns 0 on a hit; returns 1 (no output)
+# otherwise.
+zp_part_at_sector() {   # $1 = start sector
+    disk_name=$(basename "$ZP_DISK")
+    for startf in /sys/class/block/"$disk_name"*/start; do
+        [ -f "$startf" ] || continue
+        if [ "$(cat "$startf" 2>/dev/null)" = "$1" ]; then
+            part="/dev/$(basename "$(dirname "$startf")")"
+            [ -b "$part" ] && { echo "$part"; return 0; }
+        fi
+    done
+    return 1
+}
+
+# --- kernel guard: writing a partition table while a partition of the same
+# disk is mounted is refused by Linux >= 6.5 unless bdev_allow_write_mounted
+# is set (casper has the ISO9660 partition mounted while we run, so sgdisk -n
+# returns 4 without this). We own the whole stick, and nothing is mounted from
+# the region we are creating, so lifting it for the partitioning call is safe.
+BDEV_KNOB=""
+BDEV_PREV=""
+zp_allow_bdev_write() {
+    for k in /proc/sys/fs/bdev_allow_write_mounted \
+             /sys/module/block/parameters/bdev_allow_write_mounted \
+             /sys/module/bdev/parameters/bdev_allow_write_mounted \
+             /sys/module/core/parameters/bdev_allow_write_mounted \
+             /proc/sys/fs/bdev-allow-write-mounted; do
+        if [ -f "$k" ]; then
+            BDEV_KNOB="$k"
+            BDEV_PREV=$(cat "$k" 2>/dev/null)
+            if echo 1 > "$k" 2>/dev/null; then
+                zp_log "bdev write guard lifted via $k (was $BDEV_PREV)"
+            else
+                zp_log "WARNING could not write $k — partitioning may fail"
+            fi
+            return 0
+        fi
+    done
+    # Not an error: kernels without the knob simply allow the write (verified
+    # on 7.0, where sgdisk succeeds with the ISO partition still mounted).
+    :
+}
+zp_restore_bdev_write() {
+    [ -n "$BDEV_KNOB" ] && [ -n "$BDEV_PREV" ] && \
+        echo "$BDEV_PREV" > "$BDEV_KNOB" 2>/dev/null
+    return 0
+}
+
+zp_register_partition() {   # $1 = byte offset; creates GPT entry to disk end
+                             # returns: 0 registered+resolved, 1 sgdisk -n
+                             # failed (nothing written), 2 registered but
+                             # could not resolve the device node
+    zp_allow_bdev_write
+    # ONE sgdisk invocation, not two: -e (relocate the backup GPT to the end of
+    # the stick, which the ISO's table does not cover) must be applied to the
+    # same in-memory table as -n. Run separately on a live device whose
+    # partition is mounted, the -e write does not survive for the next
+    # invocation — the kernel cannot re-read the table, the page cache is
+    # invalidated, and the second sgdisk re-reads the OLD table, rejects our
+    # (now out-of-range) start and silently appends at first-free instead,
+    # unaligned. Applying both in one pass writes once and keeps our offset.
+    out=$(sgdisk -e -n "0:$(( $1 / 512 )):0" -t 0:8300 -c "0:$PERSIST_LABEL" \
+        "$ZP_DISK" 2>&1)
+    rc=$?
+    zp_log "register: sgdisk -e -n rc=$rc (start=$(( $1 / 512 ))): $(echo "$out" | tr '\n' '|' | cut -c1-220)"
+    [ "$rc" -eq 0 ] || { zp_restore_bdev_write; return 1; }
+    # partprobe fails while the ISO9660 partition is mounted; partx adds
+    # just the new entry.
+    partx -a "$ZP_DISK" >/dev/null 2>&1 || partx -u "$ZP_DISK" >/dev/null 2>&1
+    # Resolve the new partition by START SECTOR, not by LABEL: a
+    # `blkid -t LABEL=` lookup can race (stale udev cache) and resolve to
+    # an OLD data-bearing partition instead of the one we just created —
+    # the caller's fresh-create path would then mke2fs over real data.
+    zp_restore_bdev_write
+    want=$(( $1 / 512 ))
+    i=0
+    while [ "$i" -lt 5 ]; do
+        if ZP_PART=$(zp_part_at_sector "$want"); then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 1
+    done
+    return 2
+}
+
+# --- seed + bind (spec §2) --------------------------------------------------
+zp_seed_and_bind() {        # $1 = mounted store dir, $2 = rootmnt
+    store="$1"; root="$2"
+    mkdir -p "$store" 2>/dev/null
+    : > "$store/seed.log" 2>/dev/null
+    while read -r typ rel target; do
+        case "$typ" in dir|file|copy) ;; *) continue ;; esac
+        echo "entry $typ $target" >> "$store/seed.log" 2>/dev/null
+        src="$store/$rel"
+        dst="$root$target"
+        if [ ! -e "$src" ]; then                    # ---- seed (copy seeds like file)
+            mkdir -p "$(dirname "$src")"
+            if [ "$typ" = "dir" ]; then
+                mkdir -p "$src"
+                [ -d "$dst" ] && cp -a "$dst/." "$src/" 2>/dev/null
+            else
+                # Some targets ship as symlinks with an ABSOLUTE target
+                # (/etc/localtime -> /usr/share/zoneinfo/...). Inside the
+                # initramfs that resolves against the initramfs root, not the
+                # appliance root, so reading it naively yields an empty seed —
+                # resolve it through $root instead.
+                srcfile="$dst"
+                if [ -L "$dst" ]; then
+                    lt=$(readlink "$dst")
+                    case "$lt" in
+                        /*) srcfile="$root$lt" ;;
+                        *)  srcfile="$(dirname "$dst")/$lt" ;;
+                    esac
+                fi
+                if [ -f "$srcfile" ]; then
+                    cat "$srcfile" > "$src" 2>/dev/null || touch "$src"
+                    m=$(stat -c %a "$srcfile" 2>/dev/null) && chmod "$m" "$src"
+                else
+                    touch "$src" 2>/dev/null
+                fi
+                # hostid: ZFS needs a stable random 4 bytes, and the
+                # squashfs deliberately ships none.
+                if [ "$target" = "/etc/hostid" ] && [ ! -s "$src" ]; then
+                    dd if=/dev/urandom of="$src" bs=4 count=1 2>/dev/null
+                fi
+                # machine-id stays EMPTY when unseeded: systemd generates
+                # one on first boot and writes THROUGH the bind -> persisted.
+            fi
+        fi
+        if [ "$typ" = "dir" ]; then                 # ---- bind (dir)
+            mkdir -p "$dst"
+            mount -o bind "$src" "$dst" || zp_log "bind FAILED: $target"
+        elif [ "$typ" = "copy" ]; then               # ---- copy-in, no bind:
+            # shadow-utils (chpasswd, useradd, ...) update these files via
+            # write-new + rename, which EBUSYs on a bind mount. The portal
+            # copies changes back out via SyncAuthToPersistStore.
+            mkdir -p "$(dirname "$dst")"
+            [ -L "$dst" ] && rm -f "$dst"
+            if cat "$src" > "$dst" 2>/dev/null; then
+                m=$(stat -c %a "$src" 2>/dev/null) && chmod "$m" "$dst"
+            else
+                zp_log "copy FAILED: $target"
+            fi
+        else                                         # ---- bind (file)
+            # A symlink here must become a real file first: binding onto it
+            # would land on its target inside the read-only squashfs, not on
+            # the path the OS actually reads. NEVER use `: > "$dst"` — `:` is
+            # a POSIX special builtin, so a redirection failure (dangling
+            # symlink) aborts the whole hook and every later entry is lost.
+            [ -L "$dst" ] && rm -f "$dst"
+            if [ ! -e "$dst" ]; then
+                mkdir -p "$(dirname "$dst")"
+                touch "$dst" 2>/dev/null || { zp_log "cannot create $target"; continue; }
+            fi
+            mount -o bind "$src" "$dst" || zp_log "bind FAILED: $target"
+        fi
+    done < "$MANIFEST"
+    echo "loop finished" >> "$store/seed.log" 2>/dev/null
+    mkdir -p "$store/bin"
+    if [ ! -f "$store/persist.json" ]; then
+        iv=$(sed -n 's/^version=//p' "$root/etc/zfsnas-release" 2>/dev/null)
+        printf '{"schema_version":1,"created_by_image":"%s"}\n' "$iv" \
+            > "$store/persist.json"
+    fi
+    # The store is mounted commit=60 to spare the stick; without this the whole
+    # seed can still be in the journal if the machine loses power (or is reset)
+    # in the first minute of its very first boot, and the appliance would come
+    # back up with a half-seeded store. One sync per boot costs nothing.
+    sync
+}
+
+# --- main -------------------------------------------------------------------
+zp_main() {
+    ZP_ROOT="${rootmnt:-/root}"
+    status="ok"
+    zp_log "start (root=$ZP_ROOT)"
+
+    zp_find_disk || { zp_log "no live medium found"; zp_set_status degraded; return 0; }
+    zp_log "medium=$ZP_MEDIUM disk=$ZP_DISK"
+    ZP_PART=$(blkid -o device -t "LABEL=$PERSIST_LABEL" 2>/dev/null | head -n1)
+
+    if [ -z "$ZP_PART" ]; then
+        iso_end=$(zp_iso_end)
+        zp_log "no labelled store; iso_end=$iso_end — scanning"
+        found=$(zp_scan_for_store) || found=""
+        zp_log "scan done (found='$found')"
+        if [ -n "$found" ]; then
+            if [ "$found" -lt $((iso_end + HEADROOM)) ]; then
+                zp_log "old store at $found overlapped by new ISO (end $iso_end) — data lost"
+                status="overlap-lost"
+                found=""
+            else
+                zp_register_partition "$found"
+                reg_rc=$?
+                if [ "$reg_rc" -eq 0 ]; then
+                    zp_log "re-adopted store at offset $found after reflash"
+                    status="adopted"
+                else
+                    # rc 1 (sgdisk -n failed) or 2 (registered but
+                    # unresolved): sgdisk may already have written a GPT
+                    # entry at $found, so falling through to fresh-create
+                    # could mke2fs over the very store we're trying to
+                    # adopt. Never risk it — degrade for this boot instead.
+                    zp_log "failed to re-register store partition at $found (rc=$reg_rc)"
+                    zp_set_status degraded
+                    return 0
+                fi
+            fi
+        fi
+        if [ -z "$ZP_PART" ] && [ -z "$found" ]; then    # fresh create
+            # Put a NEW store at a fixed 8 GiB offset rather than packing it
+            # right after the image. The supported stick is 32 GB+, so the
+            # space costs nothing, and it buys ~6.5 GiB of room for the image
+            # to grow: without it a future ISO that ends past
+            # (store_offset - 512 MiB) makes a reflash declare the existing
+            # store overlapped and start FRESH — silently dropping the user's
+            # settings, which is the one thing reflashing must never do.
+            # Small media fall back to the old packed layout.
+            off=$FRESH_STORE_OFFSET
+            disk_bytes_probe=$(blockdev --getsize64 "$ZP_DISK")
+            if [ $((off + MIN_STORE)) -ge "$disk_bytes_probe" ]; then
+                off=$(( ((iso_end + HEADROOM + GIB - 1) / GIB) * GIB ))
+                zp_log "small medium — placing store right after the image at $off"
+            fi
+            disk_bytes=$(blockdev --getsize64 "$ZP_DISK")
+            if [ $((off + MIN_STORE)) -ge "$disk_bytes" ]; then
+                zp_log "no room for persist store (disk $disk_bytes, need past $off)"
+                zp_set_status degraded; return 0
+            fi
+            # Self-heal: a prior boot's zp_register_partition can have
+            # written a GPT entry at this same deterministic offset and
+            # then failed to resolve its device node (rc=2) — that boot
+            # degraded rather than mke2fs'ing it, leaving an unformatted
+            # "zombie" entry here. Without this check every later boot
+            # recomputes the identical off, sgdisk -n collides with it
+            # (rc=1), and the appliance is stuck degraded forever.
+            existing=$(zp_part_at_sector $((off / 512))) || existing=""
+            if [ -n "$existing" ]; then
+                magic=$(dd if="$ZP_DISK" bs=1048576 skip=$((off / 1048576)) \
+                        count=1 2>/dev/null | dd bs=1 skip=1080 count=2 \
+                        2>/dev/null | od -An -tx1 | tr -d ' \n')
+                if [ "$magic" = "53ef" ]; then
+                    # A formatted filesystem already lives there — the
+                    # reflash scan somehow didn't attribute it to us.
+                    # Never overwrite real data.
+                    zp_log "unexpected filesystem at fresh-create offset $off — not touching it"
+                    zp_set_status degraded; return 0
+                fi
+                zp_log "re-adopting zombie partition entry at $off"
+                partx -a "$ZP_DISK" >/dev/null 2>&1 || partx -u "$ZP_DISK" >/dev/null 2>&1
+                ZP_PART="$existing"
+            else
+                if ! zp_register_partition "$off"; then
+                    # never silent: a degrade here is the difference between
+                    # a persistent appliance and a RAM-only one.
+                    zp_log "fresh create FAILED at off=$off — no persistence this boot"
+                    zp_set_status degraded; return 0
+                fi
+            fi
+            if ! mke2fs -t ext4 -q -L "$PERSIST_LABEL" "$ZP_PART"; then
+                zp_set_status degraded; return 0
+            fi
+            [ "$status" = "overlap-lost" ] || status="fresh"
+        fi
+    fi
+
+    zp_log "fsck+mount $ZP_PART"
+    e2fsck -p "$ZP_PART" >/dev/null 2>&1
+    mkdir -p "$ZP_ROOT/persist"
+    if ! mount -t ext4 -o noatime,lazytime,commit=60 "$ZP_PART" "$ZP_ROOT/persist"; then
+        zp_log "mount failed"; zp_set_status degraded; return 0
+    fi
+    zp_log "seeding+binding manifest"
+    zp_seed_and_bind "$ZP_ROOT/persist/$STORE_DIRNAME" "$ZP_ROOT"
+    zp_set_status "$status"
+    zp_log "persistence active ($status) on $ZP_PART"
+}
+
+[ -n "$ZFSNAS_HOOK_SOURCED" ] || zp_main

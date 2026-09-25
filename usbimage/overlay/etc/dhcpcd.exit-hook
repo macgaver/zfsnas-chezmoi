@@ -1,0 +1,16 @@
+#!/bin/sh
+# Managed by ZNAS netplan→ifupdown migration.
+# Write a plain /etc/resolv.conf from the DHCP-supplied DNS. NO resolvectl /
+# systemd-resolved (it isn't on D-Bus this early in boot and would hang
+# networking.service ~90s). Single-uplink hosts: last lease wins.
+case "$reason" in
+    BOUND|RENEW|REBIND|REBOOT|INFORM)
+        if [ -n "$new_domain_name_servers" ]; then
+            {
+                for s in $new_domain_name_servers; do echo "nameserver $s"; done
+                [ -n "$new_domain_search" ] && echo "search $new_domain_search"
+                [ -n "$new_domain_name" ] && echo "domain $new_domain_name"
+            } > /etc/resolv.conf 2>/dev/null || true
+        fi
+        ;;
+esac

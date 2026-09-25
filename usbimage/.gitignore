@@ -1,0 +1,10 @@
+# Build output — never commit it. Images are published as GitHub release
+# assets (see publish-iso.sh), not stored in git.
+/work/
+*.iso
+*.iso.sha256
+*.iso.sig
+*.log
+
+# Your own machines (template: local.conf.example)
+/local.conf

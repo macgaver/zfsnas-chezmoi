@@ -321,6 +321,11 @@ func main() {
 	//       updates. Runs in the background — a slow or absent network must
 	//       never delay the portal coming up. No-op off-appliance. =====
 	go handlers.RunApplianceFirstBootUpdate(appCfg)
+	// USB appliance: without this, reboot/shutdown hang on casper's
+	// "remove the installation medium, then press ENTER" console prompt.
+	if err := system.DisableCasperShutdownPrompt(); err != nil {
+		log.Printf("[appliance] could not disable the casper shutdown prompt: %v", err)
+	}
 
 	// ===== Recycle bin nightly cleaner =====
 	system.StartRecycleCleaner(absConfig)

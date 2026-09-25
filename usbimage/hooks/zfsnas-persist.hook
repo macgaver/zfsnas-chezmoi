@@ -1,0 +1,21 @@
+#!/bin/sh
+# initramfs-tools hook: ship the tools + manifest the casper-bottom
+# persist script needs. Installed as
+# /usr/share/initramfs-tools/hooks/zfsnas-persist by build.sh.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+. /usr/share/initramfs-tools/hook-functions
+copy_exec /usr/sbin/sgdisk    || copy_exec /sbin/sgdisk
+copy_exec /usr/sbin/mke2fs    || copy_exec /sbin/mke2fs
+copy_exec /usr/sbin/e2fsck    || copy_exec /sbin/e2fsck
+copy_exec /usr/sbin/blkid     || copy_exec /sbin/blkid
+copy_exec /usr/sbin/blockdev  || copy_exec /sbin/blockdev
+copy_exec /usr/bin/partx || copy_exec /usr/sbin/partx || copy_exec /sbin/partx
+copy_exec /usr/sbin/sfdisk   || copy_exec /sbin/sfdisk
+# od + head are NOT in Ubuntu's initramfs busybox applet set (verified on the
+# real initrd): the ext4-superblock scan needs od, and several lookups use head.
+copy_exec /usr/bin/od       || copy_exec /bin/od
+copy_exec /usr/bin/head     || copy_exec /bin/head
+mkdir -p "${DESTDIR}/etc"
+cp /usr/share/zfsnas/persist-manifest.txt "${DESTDIR}/etc/zfsnas-persist-manifest"

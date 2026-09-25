@@ -105,6 +105,11 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 
 	// --- Pre-auth pages ---
 	r.HandleFunc("/setup", HandleSetupPage(readFile)).Methods("GET")
+	// "/setup/" is what people type (and what some browsers autocomplete);
+	// redirect rather than serve, so relative URLs in setup.html stay valid.
+	r.HandleFunc("/setup/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/setup", http.StatusMovedPermanently)
+	}).Methods("GET")
 	r.HandleFunc("/login", HandleLoginPage(readFile, appCfg)).Methods("GET")
 
 	// --- Root: serve SPA (requires auth, redirects to /login otherwise) ---
@@ -347,6 +352,15 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// --- USB appliance: SSH unlock (admin only, appliance mode only) ---
 	r.Handle("/api/appliance/ssh-access",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceSSHAccess)))).Methods("POST")
+	// --- USB appliance: image upgrades from macgaver/znas-usb-appliance ---
+	r.Handle("/api/appliance/upgrade",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeStatus)))).Methods("GET")
+	r.Handle("/api/appliance/upgrade/check",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeCheck)))).Methods("POST")
+	r.Handle("/api/appliance/upgrade/apply",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeApply)))).Methods("POST")
+	r.Handle("/api/appliance/upgrade/cancel",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeCancel)))).Methods("POST")
 
 	// --- Sudoers Hardening (admin only) ---
 	r.Handle("/api/sudoers/status",

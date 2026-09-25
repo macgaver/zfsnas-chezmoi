@@ -1,0 +1,11 @@
+[Unit]
+Description=ZFS NAS appliance network fallback (restore DHCP if bridging got no lease)
+After=networking.service
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/zfsnas/net-fallback.sh
+
+[Install]
+WantedBy=multi-user.target

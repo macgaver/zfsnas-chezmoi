@@ -3880,3 +3880,35 @@ body.appliance .uninstall-ui { display: none !important; }
 /* Elements that only make sense while running from the USB appliance image
    (e.g. the SSH-unlock card — off-appliance SSH is managed normally). */
 body:not(.appliance) .appliance-only { display: none !important; }
+body.appliance .appliance-hide { display: none !important; }
+/* Optional Features on the appliance: features ship in the image, so rows show
+   a read-only "Enabled" checkbox; install/enable buttons, status text and
+   menus go — except UPS's menu (Re-Detect UPS, widget visibility). */
+body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-status"],
+body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-btn"] { display: none !important; }
+body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"]:not(#prereq-ups-menu-wrap) { visibility: hidden !important; pointer-events: none; }
+.optfeat-appl-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); white-space: nowrap; cursor: default; }
+.optfeat-appl-check input { accent-color: var(--accent-ok, #30d158); margin: 0; }
+/* Optional Features: the ⋮ menu gets its own fixed column at the far right of
+   every row, present (just invisible) when a row has no menu, so statuses,
+   buttons and checkboxes line up whether or not a menu is showing. */
+#ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"],
+#ptab-panel-optfeat .optfeat-menu-slot { flex: 0 0 28px; width: 28px; box-sizing: border-box; text-align: center; padding: 2px 0 !important; }
+#ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"].hidden { display: inline-block !important; visibility: hidden; pointer-events: none; }
+/* Column order in each row: name · action button · status · ⋮ menu. The status
+   has a fixed width so "Installed" / "Not installed" line up as a column. */
+#ptab-panel-optfeat [id^="prereq-"][id$="-btn"] { order: 1; }
+#ptab-panel-optfeat [id^="prereq-"][id$="-status"],
+#ptab-panel-optfeat .optfeat-appl-check { order: 2; flex: 0 0 104px; }
+#ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"],
+#ptab-panel-optfeat .optfeat-menu-slot { order: 3; }
+
+/* USB appliance upgrade bar: moving stripes on a section whose progress
+   cannot be measured (write phase without a byte count). */
+@keyframes applSegStripes { from { background-position: 0 0; } to { background-position: 28px 0; } }
+.appl-seg-indet {
+  background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 7px, transparent 7px 14px) !important;
+  background-size: 28px 100% !important;
+  animation: applSegStripes .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .appl-seg-indet { animation: none; } }

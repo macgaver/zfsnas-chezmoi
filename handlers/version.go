@@ -58,9 +58,14 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// applianceReleaseString formats /etc/zfsnas-release for display,
-// e.g. "6.8.28 (2026-08-28)"; empty off-appliance.
+// applianceReleaseString is the appliance identity shown in the SPA badge:
+// the image's Ubuntu release ("26.04.1 LTS"), falling back to the portal
+// version stamped at build time for images whose os-release is unreadable.
+// Empty off-appliance.
 func applianceReleaseString() string {
+	if img := system.ApplianceImageInfo(); img.Display != "" {
+		return img.Display
+	}
 	v, d := system.ApplianceRelease()
 	if v == "" {
 		return ""

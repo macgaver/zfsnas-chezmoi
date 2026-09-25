@@ -1,0 +1,12 @@
+[Unit]
+Description=ZFS NAS appliance — ensure the host-nat networks exist
+After=incus.service network-online.target
+Wants=incus.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/zfsnas/ensure-host-nat.sh
+
+[Install]
+WantedBy=multi-user.target

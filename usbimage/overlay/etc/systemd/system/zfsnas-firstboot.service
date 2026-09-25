@@ -1,0 +1,11 @@
+[Unit]
+Description=ZFS NAS appliance console banner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/zfsnas/firstboot-banner.sh
+
+[Install]
+WantedBy=multi-user.target

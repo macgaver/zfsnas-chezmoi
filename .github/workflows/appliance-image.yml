@@ -1,0 +1,152 @@
+# USB appliance image: build, sign and publish to macgaver/znas-usb-appliance.
+#
+# ── TO SHIP A NEW APPLIANCE IMAGE, EDIT THE TWO VALUES BELOW AND PUSH. ──
+# A push that changes this file builds an image only when release
+# v<APPLIANCE_UBUNTU_VERSION>-<APPLIANCE_BUILD> does not exist yet on the
+# appliance repo, so any other edit here is a no-op.
+#
+#   APPLIANCE_UBUNTU_VERSION  Ubuntu point release the image is built from.
+#                             Ubuntu's archive only serves the CURRENT point
+#                             release, so this must match what the mirror
+#                             delivers today — build.sh fails the build if
+#                             the rootfs reports anything else.
+#                             A new major (e.g. 28.04) also needs
+#                             UBUNTU_CODENAME updated in usbimage/conf.sh.
+#   APPLIANCE_BUILD           Our build number (the last digit). Bump it to
+#                             ship a new image on the same Ubuntu release;
+#                             reset it to 1 when the Ubuntu version changes.
+#
+# Result: znas-usb-appliance-v26-04-1-1.iso (+ .sha256 + cosign .sig) on
+# release v26.04.1-1 — what the portal's USB Appliance Upgrades card reads.
+#
+# Needs:
+#   - a self-hosted runner labelled `usbbuild` in the znas-usbbuild VM
+#     (root or passwordless sudo, gh, cosign, ~30 GB free in /srv/usbbuild);
+#   - secrets CODE_SIGN_PRIVATE_KEY + COSIGN_PASSWORD (already used by the
+#     binary release) and APPLIANCE_PUBLISH_TOKEN: a fine-grained PAT limited
+#     to macgaver/znas-usb-appliance with Contents: read and write — this
+#     repo's GITHUB_TOKEN cannot create releases on another repo.
+name: Appliance image
+
+env:
+  APPLIANCE_UBUNTU_VERSION: "26.04.1"
+  APPLIANCE_BUILD: "1"
+  APPLIANCE_REPO: macgaver/znas-usb-appliance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/appliance-image.yml
+  workflow_dispatch:   # manual retry of a failed build (same skip rule applies)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appliance-image
+  cancel-in-progress: false
+
+jobs:
+  # Cheap gate on a GitHub-hosted runner, so the build VM only wakes up when
+  # there is a new version to build.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: usbimage/conf.sh
+      - id: decide
+        env:
+          GH_TOKEN: ${{ secrets.APPLIANCE_PUBLISH_TOKEN }}
+        run: |
+          set -euo pipefail
+          v="${APPLIANCE_UBUNTU_VERSION}-${APPLIANCE_BUILD}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          [[ "$APPLIANCE_UBUNTU_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::APPLIANCE_UBUNTU_VERSION must be x.y.z (26.04 is 26.04.0)"; exit 1; }
+          [[ "$APPLIANCE_BUILD" =~ ^[1-9][0-9]*$ ]] \
+            || { echo "::error::APPLIANCE_BUILD must be a positive integer"; exit 1; }
+          if [ ! -f usbimage/conf.sh ]; then
+            echo "::notice::usbimage/ is not in the repo yet — nothing to build"
+            echo "build=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if gh release view "v$v" --repo "$APPLIANCE_REPO" >/dev/null 2>&1; then
+            echo "::notice::release v$v already exists on $APPLIANCE_REPO — nothing to build"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::building appliance image v$v"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: [self-hosted, linux, usbbuild]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch and verify the portal binary (latest signed release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          echo "Baking portal $tag"
+          mkdir -p "$RUNNER_TEMP/bin"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
+            --dir "$RUNNER_TEMP/bin" -p zfsnas-chezmoi -p zfsnas-chezmoi.sig
+          # The same public key the portal embeds.
+          # (strip the Go raw-string wrapper around the PEM block)
+          sed -n '/BEGIN PUBLIC KEY/,/END PUBLIC KEY/p' internal/updater/pubkey.go \
+            | sed -e 's/`$//' -e 's/^.*`//' > "$RUNNER_TEMP/cosign.pub"
+          cosign verify-blob --key "$RUNNER_TEMP/cosign.pub" \
+            --signature "$RUNNER_TEMP/bin/zfsnas-chezmoi.sig" \
+            --insecure-ignore-tlog=true "$RUNNER_TEMP/bin/zfsnas-chezmoi"
+          chmod +x "$RUNNER_TEMP/bin/zfsnas-chezmoi"
+          echo "IMAGE_VERSION=${tag#v}" >> "$GITHUB_ENV"
+
+      - name: Build and boot-test the image
+        run: |
+          set -euo pipefail
+          cd usbimage
+          # UBUNTU_VERSION makes build.sh fail if the mirror delivered another
+          # point release than the one declared above.
+          sudo -E WORK=/srv/usbbuild/work \
+            UBUNTU_VERSION="$APPLIANCE_UBUNTU_VERSION" APPLIANCE_BUILD="$APPLIANCE_BUILD" \
+            ./build.sh --binary "$RUNNER_TEMP/bin/zfsnas-chezmoi" --test
+          sudo chown "$(id -u):$(id -g)" znas-usb-appliance-v*.iso*
+          ls -lh znas-usb-appliance-v*.iso*
+
+      - name: Sign the image
+        env:
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          CODE_SIGN_PRIVATE_KEY: ${{ secrets.CODE_SIGN_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          cd usbimage
+          iso=$(ls -1v znas-usb-appliance-v*.iso | tail -n1)
+          umask 077
+          printf '%s' "$CODE_SIGN_PRIVATE_KEY" > "$RUNNER_TEMP/cosign.key"
+          cosign sign-blob --key "$RUNNER_TEMP/cosign.key" --tlog-upload=false \
+            --output-signature "$iso.sig" "$iso"
+          rm -f "$RUNNER_TEMP/cosign.key"
+          # Prove the portal will accept it before anything is published.
+          cosign verify-blob --key "$RUNNER_TEMP/cosign.pub" --signature "$iso.sig" \
+            --insecure-ignore-tlog=true "$iso"
+
+      - name: Publish to the appliance repo
+        env:
+          GH_TOKEN: ${{ secrets.APPLIANCE_PUBLISH_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd usbimage
+          ./publish-iso.sh --repo "$APPLIANCE_REPO"
+
+      - name: Remove the image from the runner
+        if: always()
+        run: sudo rm -f usbimage/znas-usb-appliance-v*.iso* "$RUNNER_TEMP/cosign.key"

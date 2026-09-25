@@ -1,0 +1,13 @@
+[Unit]
+Description=Watch system account files and mirror them into the persist store
+
+[Path]
+PathChanged=/etc/passwd
+PathChanged=/etc/shadow
+PathChanged=/etc/group
+PathChanged=/etc/gshadow
+PathChanged=/etc/subuid
+PathChanged=/etc/subgid
+
+[Install]
+WantedBy=multi-user.target

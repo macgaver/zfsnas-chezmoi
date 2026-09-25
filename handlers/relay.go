@@ -97,11 +97,12 @@ var relayWSForwardPaths = []string{
 // round-trip). Relayed requests to these get a long deadline so the proxy never
 // aborts a healthy-but-slow response.
 var relaySlowPrefixes = []string{
-	"/api/updates/",       // apt-get update + simulate upgrade (the reported case)
-	"/api/os-updates",     // package upgrade listing
-	"/api/binary-update/", // GitHub release lookup
-	"/api/prereqs",        // dpkg / package-presence probing
-	"/api/sudoers/",       // sudo/visudo validation
+	"/api/updates/",          // apt-get update + simulate upgrade (the reported case)
+	"/api/os-updates",        // package upgrade listing
+	"/api/binary-update/",    // GitHub release lookup
+	"/api/appliance/upgrade", // GitHub release lookup (appliance image repo)
+	"/api/prereqs",           // dpkg / package-presence probing
+	"/api/sudoers/",          // sudo/visudo validation
 }
 
 // relayProxyTimeout returns the per-request deadline for a relayed path: a

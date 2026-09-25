@@ -1,0 +1,15 @@
+[Unit]
+Description=ZFS NAS appliance first-boot network configuration
+DefaultDependencies=no
+After=local-fs.target
+Before=networking.service network-pre.target
+Wants=network-pre.target
+ConditionPathExists=!/etc/network/.zfsnas-generated
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/zfsnas/gen-net-config.sh
+
+[Install]
+WantedBy=sysinit.target

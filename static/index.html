@@ -1549,6 +1549,7 @@
         <div id="ptab-panel-optfeat">
           <div class="card" style="max-width:960px;">
             <p style="font-size:13px;color:var(--text-3);margin-bottom:14px;">These packages are not required for core ZFS NAS functionality but enable additional features.</p>
+            <p class="appliance-only" style="font-size:13px;color:var(--text-2);margin:-6px 0 14px;">On the USB appliance every feature is built into the read-only OS image, so features cannot be added or removed here. They are updated together with the image from <strong>Platform → USB Appliance Upgrades</strong>.</p>
             <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
                 <span style="color:var(--text-1);font-size:14px;font-weight:500;">iSCSI block storage sharing</span>
@@ -1556,16 +1557,21 @@
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Packages: targetcli-fb</div>
               </div>
               <span id="prereq-iscsi-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-iscsi-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-iscsi-btn" class="btn btn-ghost btn-sm" onclick="enableISCSIFeature()" style="font-size:12px;white-space:nowrap;">Enable iSCSI Feature</button>
               <span id="prereq-iscsi-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'iscsi')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
-            <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+            <!-- S3 (MinIO): hidden unless already installed. MinIO archived its open-source
+                 server in 2026 and dl.min.io no longer serves the binaries, so it
+                 cannot be installed any more; existing installs keep working. -->
+            <div id="optfeat-minio-row" style="display:none;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
                 <span style="color:var(--text-1);font-size:14px;font-weight:500;">S3-compatible object storage server</span>
                 <i class="info-tip" data-tip="Required for the S3 Object Server feature. Installs the MinIO server binary and the mc management client.&#10;Both binaries are downloaded directly from dl.min.io.&#10;MinIO runs as a dedicated system user (minio-user) via a systemd service."></i>
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Packages: minio, mc</div>
               </div>
               <span id="prereq-minio-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-minio-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-minio-btn" class="btn btn-ghost btn-sm" onclick="enableMinIOFeature()" style="font-size:12px;white-space:nowrap;">Enable S3 Object Server</button>
               <span id="prereq-minio-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'minio')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
@@ -1576,6 +1582,7 @@
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Packages: nut, nut-client</div>
               </div>
               <span id="prereq-ups-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-ups-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-ups-btn" class="btn btn-ghost btn-sm" onclick="enableUPSFeature()" style="font-size:12px;white-space:nowrap;">Enable UPS Feature</button>
               <span id="prereq-ups-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'ups')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
@@ -1586,6 +1593,7 @@
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Package: hdparm</div>
               </div>
               <span id="prereq-diskpower-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-diskpower-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-diskpower-btn" class="btn btn-ghost btn-sm" onclick="enableDiskPowerFeature()" style="font-size:12px;white-space:nowrap;">Enable Disk Power</button>
               <span id="prereq-diskpower-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'diskpower')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
@@ -1597,7 +1605,9 @@
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Package: sanoid (provides /usr/sbin/syncoid)</div>
               </div>
               <span id="prereq-syncoid-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-syncoid-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-syncoid-btn" class="btn btn-ghost btn-sm" onclick="installSyncoid()" style="font-size:12px;white-space:nowrap;">Install syncoid</button>
+              <span class="optfeat-menu-slot" aria-hidden="true"></span>
             </div>
             <!-- v6.7.13: MergerFS Support -->
             <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
@@ -1607,7 +1617,9 @@
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Package: mergerfs (from github.com/trapexit/mergerfs)</div>
               </div>
               <span id="prereq-mergerfs-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-mergerfs-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-mergerfs-btn" class="btn btn-ghost btn-sm" onclick="installMergerFS()" style="font-size:12px;white-space:nowrap;">Install MergerFS</button>
+              <span class="optfeat-menu-slot" aria-hidden="true"></span>
             </div>
             <div id="optfeat-lxd-enable-row" style="display:none;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
@@ -1616,7 +1628,7 @@
                 <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Packages: lxd, lxd-client, lxd-agent, qemu-system-x86, qemu-kvm, bridge-utils, dnsmasq-base</div>
               </div>
               <span id="prereq-lxd-enable-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
-              <span style="background:rgba(240,180,41,0.18);color:#f0b429;border:1px solid rgba(240,180,41,0.35);border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700;white-space:nowrap;letter-spacing:0.03em;">BETA</span>
+              <label class="appliance-only optfeat-appl-check" data-status="prereq-lxd-enable-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-lxd-enable-btn" class="btn btn-ghost btn-sm" onclick="openLXDEnableModal()" style="font-size:12px;white-space:nowrap;">Enable Feature</button>
               <span id="prereq-lxd-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'lxd')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
@@ -2143,8 +2155,9 @@
 
         </div>
 
-        <!-- OS Packages card -->
-        <div class="card">
+        <!-- OS Packages card (hidden on the USB appliance: its OS is the read-only
+             image, upgraded as a whole by the USB Appliance Upgrades card below) -->
+        <div class="card appliance-hide">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
             <div style="min-width:0;">
               <h3 style="margin-bottom:2px;">OS Packages</h3>
@@ -2190,8 +2203,62 @@
           </div>
         </div>
 
+        <!-- USB Appliance Upgrades card (appliance-only; replaces OS Packages there).
+             Images come from github.com/macgaver/znas-usb-appliance. -->
+        <div class="card appliance-only" id="appliance-upgrade-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+            <div style="min-width:0;">
+              <h3 style="margin-bottom:2px;">USB Appliance Upgrades</h3>
+              <div id="appl-info-line" style="font-size:13px;color:var(--text-3);">Loading…</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" onclick="checkApplianceUpgrade()" id="btn-appl-check"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M3 12a9 9 0 0 0 9 9c2.52 0 4.93-1 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg> Check for Updates</button>
+              <div style="position:relative;display:inline-block;">
+                <button class="btn btn-primary btn-sm hidden" onclick="toggleApplianceUpgradeMenu(event)" id="btn-appl-upgrade"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg> Upgrade Appliance&nbsp;<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m6 9 6 6 6-6"/></svg></button>
+                <div id="appl-upgrade-menu" class="hidden" style="position:absolute;right:0;top:calc(100% + 6px);z-index:200;min-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.45);overflow:hidden;">
+                  <button type="button" onclick="closeApplianceUpgradeMenu();openApplianceUpgradeModal('stage');" style="display:block;width:100%;text-align:left;padding:11px 14px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text-1);cursor:pointer;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+                    <div style="font-size:13px;font-weight:600;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg> Stage the Upgrade</div>
+                    <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Download, verify and write it now — it takes effect at the next reboot, whenever suits you.</div>
+                  </button>
+                  <button type="button" onclick="closeApplianceUpgradeMenu();openApplianceUpgradeModal('reboot');" style="display:block;width:100%;text-align:left;padding:11px 14px;background:none;border:none;color:var(--text-1);cursor:pointer;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+                    <div style="font-size:13px;font-weight:600;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Upgrade Now &amp; Reboot</div>
+                    <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Reboots into the new image as soon as it is written — shares, VMs and containers restart.</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:16px;padding:14px 16px;border-radius:var(--radius-sm);background:linear-gradient(135deg,rgba(191,90,242,0.10),rgba(10,132,255,0.10));border:1px solid rgba(10,132,255,0.30);">
+            <span style="font-size:26px;line-height:1;color:var(--accent-2);flex-shrink:0;margin-top:1px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <div style="min-width:0;">
+              <div style="font-size:14px;font-weight:700;color:var(--text-1);margin-bottom:3px;">Congratulations — you are running the ZNAS USB Appliance</div>
+              <div style="font-size:13px;color:var(--text-2);line-height:1.55;">The most secure ZNAS platform: an <strong>immutable, read-only OS</strong> that cannot drift or be tampered with, and <strong>one-click platform upgrades</strong> that swap in a new signed image while keeping every setting.</div>
+            </div>
+          </div>
+          <div id="appl-status" style="color:var(--text-3);font-size:14px;line-height:1.5;"></div>
+          <div id="appl-job" style="display:none;margin-top:14px;">
+            <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:6px;">
+              <span id="appl-job-phase" style="color:var(--text-1);font-weight:600;"></span>
+              <span id="appl-job-pct" style="color:var(--text-3);font-variant-numeric:tabular-nums;"></span>
+            </div>
+            <!-- One bar, three sections: download → verify → write to the stick. -->
+            <div style="display:flex;gap:4px;">
+              <div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;"><div id="appl-seg-1" style="height:100%;width:0;background:var(--accent-2);transition:width .4s;"></div></div>
+              <div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;"><div id="appl-seg-2" style="height:100%;width:0;background:var(--accent-1);transition:width .4s;"></div></div>
+              <div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;"><div id="appl-seg-3" style="height:100%;width:0;background:#ff453a;transition:width .4s;"></div></div>
+            </div>
+            <div style="display:flex;gap:4px;margin-top:6px;font-size:11px;color:var(--text-3);">
+              <span id="appl-seg-label-1" style="flex:1;display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent-2);flex-shrink:0;"></span>Download</span>
+              <span id="appl-seg-label-2" style="flex:1;display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent-1);flex-shrink:0;"></span>Verify signature</span>
+              <span id="appl-seg-label-3" style="flex:1;display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:#ff453a;flex-shrink:0;"></span>Write to USB stick</span>
+            </div>
+            <div id="appl-job-actions" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"></div>
+            <div id="appl-job-log" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-family:'SF Mono',monospace;font-size:12px;line-height:1.6;max-height:260px;overflow-y:auto;white-space:pre-wrap;color:var(--accent-3);"></div>
+          </div>
+        </div>
+
         <!-- OS update live output log -->
-        <div id="updates-log-wrap" class="card" style="display:none;">
+        <div id="updates-log-wrap" class="card appliance-hide" style="display:none;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
             <div style="font-size:13px;font-weight:600;color:var(--text-2);">Active/Recent OS Upgrade Output</div>
             <span onclick="document.getElementById('updates-log-wrap').style.display='none'" title="Dismiss" style="cursor:pointer;color:var(--text-3);font-size:16px;line-height:1;padding:2px 4px;border-radius:4px;transition:color .15s;" onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-3)'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
@@ -4787,6 +4854,7 @@
               <tr>
                 <th style="width:34px;"></th>
                 <th style="text-align:left;cursor:pointer;user-select:none;" onclick="_sortBackups('vm_id')">VM-ID<span id="bksort-vm_id"></span></th>
+                <th style="text-align:left;cursor:pointer;user-select:none;" onclick="_sortBackups('vm_name')">VM Name<span id="bksort-vm_name"></span></th>
                 <th style="width:70px;text-align:left;cursor:pointer;user-select:none;" onclick="_sortBackups('type')">Type<span id="bksort-type"></span></th>
                 <th style="width:130px;text-align:left;cursor:pointer;user-select:none;" onclick="_sortBackups('host')">BKP Host<span id="bksort-host"></span></th>
                 <th style="text-align:left;cursor:pointer;user-select:none;" onclick="_sortBackups('datastore')">Datastore<span id="bksort-datastore"></span></th>
@@ -4797,7 +4865,7 @@
               </tr>
             </thead>
             <tbody id="lxd-backups-tbody">
-              <tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+              <tr><td colspan="10" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -8081,6 +8149,39 @@ Select the Console tab to load.</pre>
 </div>
 
 <!-- Automatic OS updates — info popup -->
+<!-- USB appliance: confirm an in-place image upgrade -->
+<div class="modal-backdrop hidden" id="modal-appliance-upgrade" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;line-height:1;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="10" cy="7" r="1"/><circle cx="4" cy="20" r="1"/><path d="M4.7 19.3 19 5"/><path d="m21 3-3 1 2 2Z"/><path d="M9.26 7.68 5 12l2 5"/><path d="m10 14 5 2 3.5-3.5"/><path d="m18 12 1-1 1 1-1 1Z"/></svg></span>
+        <h3 style="margin:0;">Upgrade the USB Appliance</h3>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('modal-appliance-upgrade').classList.add('hidden')"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="modal-body" style="padding-top:4px;">
+      <div id="appl-modal-summary" style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px;"></div>
+      <div style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px;">
+        The new image is downloaded to the stick's settings partition, its signature is checked,
+        then it replaces the OS image at the front of the stick. <strong>Your settings, users, shares
+        and pools are kept</strong> — they live on a separate partition that is not written to.
+        <span id="appl-modal-when">Nothing changes until you reboot.</span>
+      </div>
+      <div style="background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.28);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:6px;">
+        <div style="font-size:13px;color:var(--text-2);line-height:1.6;">
+          <strong style="color:#f5a623;">Do not unplug the stick or power off</strong> while the image is being
+          written (a few minutes). Rebooting from the portal is blocked until it finishes.
+        </div>
+      </div>
+      <div id="appl-modal-alert" class="alert alert-error hidden" style="margin-top:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('modal-appliance-upgrade').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-primary" id="btn-appl-confirm" onclick="startApplianceUpgrade()">Stage the Upgrade</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="modal-autoupdate-info" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal" style="max-width:540px;">
     <div class="modal-header">
@@ -12771,11 +12872,33 @@ function _serverRestartRefresh() {
 // v6.8.28: appliance-mode boot globals. Called wherever /api/version JSON
 // lands, including _softRelayRefresh (relay rule: every boot global must be
 // re-applied after an InterLink switch).
+// Appliance: the Optional Features rows show a read-only "Enabled" checkbox
+// instead of install/uninstall controls. Each row's status text is still
+// rendered by its own loader; this mirrors it into the checkbox.
+function _syncApplianceOptFeat() {
+  document.querySelectorAll('.optfeat-appl-check').forEach(lbl => {
+    const st = document.getElementById(lbl.dataset.status);
+    const cb = lbl.querySelector('input');
+    if (!st || !cb) return;
+    const t = (st.textContent || '').trim();
+    cb.checked = t !== '' && !/not installed|not enabled|missing|unavailable|checking|…/i.test(t);
+  });
+}
+let _applOptFeatObserver = null;
+function _watchApplianceOptFeat() {
+  const panel = document.getElementById('ptab-panel-optfeat');
+  if (!panel || _applOptFeatObserver) return;
+  _applOptFeatObserver = new MutationObserver(_syncApplianceOptFeat);
+  _applOptFeatObserver.observe(panel, { subtree: true, childList: true, characterData: true });
+  _syncApplianceOptFeat();
+}
+
 function _setApplianceGlobals(d) {
   window._appliance        = !!d.appliance;
   window._applianceRelease = d.appliance_release || '';
   window._persistStatus    = d.persist_status || '';
   document.body.classList.toggle('appliance', window._appliance);
+  if (window._appliance) _watchApplianceOptFeat();
   _renderPersistBanner();
 }
 
@@ -30395,6 +30518,10 @@ async function _updateMinIOPrereqStatus() {
     const r = await fetch('/api/minio/status');
     if (!r.ok) return;
     const s = await r.json();
+    // Only an existing install is listed (to manage/uninstall it): MinIO can no
+    // longer be downloaded, so offering "Enable" would always fail.
+    const row = document.getElementById('optfeat-minio-row');
+    if (row) row.style.display = s.prereqs_installed ? 'flex' : 'none';
     if (s.prereqs_installed) {
       statusEl.innerHTML   = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> Installed';
       statusEl.style.color   = '#30d158';
@@ -30473,7 +30600,7 @@ function _optFeatMenu(e, feature) {
 let _uninstallPkg = '';
 const _uninstallDesc = {
   'targetcli-fb': 'The iSCSI service will be stopped and targetcli-fb will be removed from the system.',
-  'minio':        'The MinIO service will be stopped and the minio and mc binaries will be removed from the system.',
+  'minio':        'The MinIO service will be stopped and the minio and mc binaries will be removed from the system. This cannot be undone: MinIO no longer publishes its open-source binaries, so the S3 server cannot be installed again.',
   'nut':          'The NUT service will be stopped and nut / nut-client will be removed from the system.',
   'hdparm':       'hdparm will be removed from the system. Disk power management settings will no longer apply on next boot.',
 };
@@ -32104,6 +32231,9 @@ function initUpdatesPage() {
   // Load the automatic-OS-update (unattended-upgrades) service status line.
   _loadAutoUpdateStatus();
 
+  // USB appliance: the image-upgrade card replaces OS Packages there.
+  if (window._appliance) loadApplianceUpgrade(false);
+
   // Check if an upgrade is already running in the background (user may have
   // navigated away and come back).
   fetch('/api/updates/upgrade-status').then(r => r.ok ? r.json() : null).then(st => {
@@ -32531,6 +32661,247 @@ function _interlinkSidForHostname(hn, list) {
 function openInteractiveUpdate() {
   if (window._appliance) { return; } // hidden anyway; guard direct calls
   openTermWindow('updater:' + (window._serverHostname || 'host'));
+}
+
+// ===== USB appliance image upgrades =====
+// Images are published on github.com/macgaver/znas-usb-appliance as
+// znas-usb-appliance-v<ubuntu x-y-z>-<build>.iso; the server picks the newest,
+// downloads + verifies it, and runs zfsnas-upgrade-image in its own unit.
+let _applUpgrade = null;
+let _applPollTimer = null;
+
+function loadApplianceUpgrade(force) {
+  const btn = document.getElementById('btn-appl-check');
+  if (force && btn) btn.disabled = true;
+  const req = force
+    ? fetch('/api/appliance/upgrade/check', { method: 'POST' })
+    : fetch('/api/appliance/upgrade');
+  return req.then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || ('HTTP ' + r.status))))
+    .then(d => { _applUpgrade = d; _renderApplianceUpgrade(d); })
+    .catch(err => {
+      const st = document.getElementById('appl-status');
+      if (st) st.innerHTML = `<span style="color:#ff453a;">Could not load appliance upgrade status: ${esc(String(err))}</span>`;
+    })
+    .finally(() => { if (btn) btn.disabled = false; });
+}
+function checkApplianceUpgrade() { loadApplianceUpgrade(true); }
+
+// "26.04.2-1" -> "26.04.2"
+function _applPoint(v) { return String(v || '').split('-')[0]; }
+
+function _renderApplianceUpgrade(d) {
+  if (!d || !d.appliance) return;
+  const info = document.getElementById('appl-info-line');
+  if (info) {
+    info.innerHTML = 'ZNAS Appliance version ' + esc(d.display_version || _applPoint(d.image_version) || 'unknown')
+      + (d.image_version ? ` <span style="opacity:.75;">(release ${esc(d.image_version)})</span>` : '')
+      + (d.kernel ? ' · Kernel ' + esc(d.kernel) : '');
+  }
+
+  const job = d.job || {};
+  const busy = job.phase === 'downloading' || job.phase === 'verifying' || job.phase === 'writing';
+  const done = job.phase === 'done';
+  const latest = d.latest;
+  const upBtn = document.getElementById('btn-appl-upgrade');
+  const chkBtn = document.getElementById('btn-appl-check');
+  if (chkBtn) chkBtn.disabled = busy;
+
+  // ---- status line ----
+  const st = document.getElementById('appl-status');
+  let html = '';
+  if (d.check_error) {
+    html = `<span style="color:#ff453a;">Could not check for appliance updates: ${esc(d.check_error)}</span>`;
+  } else if (!latest) {
+    html = 'No appliance images have been published yet.';
+  } else if (d.newer) {
+    const pub = latest.published_at ? new Date(latest.published_at).toLocaleDateString() : '';
+    html = `<div style="color:var(--text-1);">New appliance image available: <strong>ZNAS Appliance ${esc(_applPoint(latest.version))}</strong>`
+      + ` <span style="color:var(--text-3);">(release ${esc(latest.version)}${pub ? ' · ' + esc(pub) : ''}${latest.iso_size ? ' · ' + fmtBytes(latest.iso_size) : ''})</span></div>`;
+    if (latest.body && latest.body.trim()) {
+      html += `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:13px;color:var(--text-2);">Release notes</summary>`
+        + `<div style="margin-top:6px;font-size:12px;white-space:pre-wrap;color:var(--text-2);max-height:220px;overflow-y:auto;">${esc(latest.body)}</div></details>`;
+    }
+    if (!latest.sig_url || !latest.sha256_url) {
+      html += `<div style="margin-top:8px;color:#ff453a;font-size:13px;">This image has no signature or checksum published, so it cannot be installed.</div>`;
+    } else if (!d.toram) {
+      html += `<div style="margin-top:8px;color:#f5a623;font-size:13px;">This boot used "run from stick", so the image on the stick is in use and cannot be replaced. `
+        + `Reboot and let the default <strong>load OS to RAM</strong> entry start, then upgrade from here.</div>`;
+    }
+  } else {
+    html = '<span style="color:var(--accent-ok,#30d158);">Your appliance is running the latest image.</span>';
+  }
+  if (d.checked_at && !d.check_error) {
+    html += `<div style="margin-top:4px;font-size:12px;color:var(--text-3);">Last checked: ${esc(new Date(d.checked_at).toLocaleString())}</div>`;
+  }
+  // While an upgrade runs (or waits for its reboot) the job panel says it all.
+  if (busy || done) html = '';
+  if (st) st.innerHTML = html;
+
+  const installable = d.newer && latest && latest.sig_url && latest.sha256_url;
+  if (upBtn) {
+    upBtn.classList.toggle('hidden', !installable || busy || done);
+    upBtn.disabled = !d.toram;
+    upBtn.title = d.toram ? '' : 'Reboot with "load OS to RAM" (the default entry) to upgrade in place';
+  }
+
+  _renderApplianceJob(job);
+
+  clearTimeout(_applPollTimer);
+  if (busy) {
+    _applPollTimer = setTimeout(() => {
+      const page = document.getElementById('page-updates');
+      if (page && !page.classList.contains('hidden')) loadApplianceUpgrade(false);
+    }, 2000);
+  }
+}
+
+// Three sections on one bar — download, verify, write to the stick — each
+// filling in its own colour; the current one's label is highlighted.
+function _renderApplianceJob(job) {
+  const wrap = document.getElementById('appl-job');
+  if (!wrap) return;
+  if (!job || !job.phase) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const phaseEl = document.getElementById('appl-job-phase');
+  const pctEl   = document.getElementById('appl-job-pct');
+  const actions = document.getElementById('appl-job-actions');
+  const logEl   = document.getElementById('appl-job-log');
+  const ver = esc(job.version || '');
+  const reboot = job.mode === 'reboot';
+  const pct = job.total > 0 ? Math.min(100, Math.round(job.bytes * 100 / job.total)) : 0;
+  const sized = job.total > 0 ? `${fmtBytes(job.bytes)} / ${fmtBytes(job.total)} · ${pct}%` : '';
+  const logLines = job.log || [];
+  // fills[i] = % of section i; active = section being worked on (1-based)
+  let fills = [0, 0, 0], active = 0, label = '', pctText = '', act = '';
+  switch (job.phase) {
+    case 'downloading':
+      fills = [pct, 0, 0]; active = 1; pctText = sized || fmtBytes(job.bytes);
+      label = `Downloading image ${ver}${job.staged_on ? ' to ' + esc(job.staged_on) : ''}…`;
+      act = `<button class="btn btn-ghost btn-sm" onclick="cancelApplianceUpgrade()">Cancel</button>`;
+      break;
+    case 'verifying':
+      fills = [100, pct, 0]; active = 2; pctText = sized;
+      label = `Verifying the signature of image ${ver}…`;
+      act = `<button class="btn btn-ghost btn-sm" onclick="cancelApplianceUpgrade()">Cancel</button>`;
+      break;
+    case 'writing':
+      // No byte count available (stick not identified): show motion, not a frozen 0%.
+      fills = [100, 100, job.indeterminate ? 100 : pct]; active = 3;
+      pctText = job.indeterminate ? 'in progress…' : sized;
+      label = `Writing image ${ver} to the USB stick — do not unplug or power off`;
+      break;
+    case 'done':
+      fills = [100, 100, 100];
+      if (reboot) {
+        label = `Image ${ver} is on the stick — rebooting into it now. Your settings are kept.`;
+        if (!window._applRebootWaitStarted) {
+          window._applRebootWaitStarted = true;
+          setTimeout(() => { if (typeof _startRebootWait === 'function') _startRebootWait(); }, 1500);
+        }
+      } else {
+        label = `Image ${ver} is staged on the stick. It becomes active at the next reboot — your settings are kept.`;
+        act = `<button class="btn btn-primary btn-sm" onclick="openPowerModal('reboot')">Reboot Now</button>`;
+      }
+      break;
+    case 'failed':
+      // A write-phase failure has the script's log; earlier ones do not.
+      fills = logLines.length ? [100, 100, pct] : [0, 0, 0];
+      label = `Upgrade failed: ${esc(job.error || 'unknown error')}`;
+      break;
+  }
+  phaseEl.innerHTML = label;
+  phaseEl.style.color = job.phase === 'failed' ? '#ff453a'
+    : job.phase === 'done' ? 'var(--accent-ok,#30d158)' : 'var(--text-1)';
+  pctEl.textContent = pctText;
+  for (let i = 1; i <= 3; i++) {
+    const seg = document.getElementById('appl-seg-' + i);
+    const lab = document.getElementById('appl-seg-label-' + i);
+    if (seg) {
+      seg.style.width = fills[i - 1] + '%';
+      seg.classList.toggle('appl-seg-indet', i === 3 && job.phase === 'writing' && !!job.indeterminate);
+    }
+    if (lab) {
+      lab.style.color = i === active ? 'var(--text-1)' : 'var(--text-3)';
+      lab.style.fontWeight = i === active ? '600' : '400';
+    }
+  }
+  actions.innerHTML = act;
+  actions.style.display = act ? 'flex' : 'none';
+  logEl.style.display = logLines.length ? '' : 'none';
+  if (logLines.length) {
+    const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 20;
+    logEl.textContent = logLines.join('\n');
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+function toggleApplianceUpgradeMenu(e) {
+  if (e) e.stopPropagation();
+  const btn = document.getElementById('btn-appl-upgrade');
+  const m = document.getElementById('appl-upgrade-menu');
+  if (!m || (btn && btn.disabled)) return;
+  const willOpen = m.classList.contains('hidden');
+  m.classList.toggle('hidden');
+  if (willOpen) {
+    const close = (ev) => {
+      if (!m.contains(ev.target) && !(btn && btn.contains(ev.target))) {
+        closeApplianceUpgradeMenu();
+        document.removeEventListener('click', close, true);
+      }
+    };
+    document.addEventListener('click', close, true);
+  }
+}
+function closeApplianceUpgradeMenu() {
+  const m = document.getElementById('appl-upgrade-menu');
+  if (m) m.classList.add('hidden');
+}
+
+let _applMode = 'stage';
+function openApplianceUpgradeModal(mode) {
+  const d = _applUpgrade;
+  if (!d || !d.latest) return;
+  _applMode = mode === 'reboot' ? 'reboot' : 'stage';
+  document.getElementById('appl-modal-alert').classList.add('hidden');
+  const btn = document.getElementById('btn-appl-confirm');
+  btn.disabled = false;
+  btn.textContent = _applMode === 'reboot' ? 'Upgrade Now & Reboot' : 'Stage the Upgrade';
+  btn.style.background = _applMode === 'reboot' ? '#ff453a' : '';
+  btn.style.borderColor = _applMode === 'reboot' ? '#ff453a' : '';
+  document.getElementById('appl-modal-when').innerHTML = _applMode === 'reboot'
+    ? '<strong>The appliance reboots on its own as soon as the image is written</strong> — shares, VMs and containers are shut down and come back with it.'
+    : 'Nothing changes until you reboot — do it whenever it suits you.';
+  document.getElementById('appl-modal-summary').innerHTML =
+    `Upgrade from <strong>${esc(d.display_version || d.image_version)}</strong> (release ${esc(d.image_version || '?')}) `
+    + `to <strong>ZNAS Appliance ${esc(_applPoint(d.latest.version))}</strong> (release ${esc(d.latest.version)})`
+    + (d.latest.iso_size ? ` — a ${fmtBytes(d.latest.iso_size)} download.` : '.');
+  document.getElementById('modal-appliance-upgrade').classList.remove('hidden');
+}
+
+function startApplianceUpgrade() {
+  const btn = document.getElementById('btn-appl-confirm');
+  const alertEl = document.getElementById('appl-modal-alert');
+  btn.disabled = true;
+  window._applRebootWaitStarted = false;
+  fetch('/api/appliance/upgrade/apply', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: _applMode }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || ('HTTP ' + r.status))))
+    .then(() => {
+      document.getElementById('modal-appliance-upgrade').classList.add('hidden');
+      loadApplianceUpgrade(false);
+    })
+    .catch(err => {
+      alertEl.textContent = String(err);
+      alertEl.classList.remove('hidden');
+      btn.disabled = false;
+    });
+}
+
+function cancelApplianceUpgrade() {
+  fetch('/api/appliance/upgrade/cancel', { method: 'POST' })
+    .finally(() => setTimeout(() => loadApplianceUpgrade(false), 500));
 }
 
 function applyUpdates() {
@@ -47242,7 +47613,7 @@ async function loadAllBackups() {
   const tbody = document.getElementById('lxd-backups-tbody');
   const al = document.getElementById('lxd-backups-alert');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">' +
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-3);padding:32px;">' +
     '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;">' +
     '<span class="spinner" style="width:26px;height:26px;border-width:3px;"></span>' +
     '<span>Scanning all local and remote ZFS pools for backups…</span></div>' +
@@ -47255,7 +47626,7 @@ async function loadAllBackups() {
     _renderAllBackups();
   } catch(e) {
     al.textContent = String(e); al.classList.remove('hidden');
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--danger);padding:32px;">' + esc(String(e)) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--danger);padding:32px;">' + esc(String(e)) + '</td></tr>';
   }
 }
 function _backupRowKey(b) { return (b.scope || 'local') + '::' + (b.server_id || '') + '::' + (b.datastore || '') + '::' + (b.vm_id || ''); }
@@ -47271,6 +47642,7 @@ let _backupSort = { key: 'vm_id', dir: 1 };
 // Numbers for the numeric columns, lowercased strings for the rest.
 function _backupSortVal(b, key) {
   switch (key) {
+    case 'vm_name':   return (b.vm_name || b.vm_id || '').toLowerCase();
     case 'type':      return (b.type || '');
     case 'host':      return (b.scope === 'local') ? '' : (b.hostname || '').toLowerCase();
     case 'datastore': return (b.datastore || '').toLowerCase();
@@ -47295,7 +47667,7 @@ function _sortBackups(key) {
 }
 
 function _updateBackupSortIndicators() {
-  for (const k of ['vm_id', 'type', 'host', 'datastore', 'last', 'incr', 'size']) {
+  for (const k of ['vm_id', 'vm_name', 'type', 'host', 'datastore', 'last', 'incr', 'size']) {
     const el = document.getElementById('bksort-' + k);
     if (el) el.innerHTML = (_backupSort.key === k) ? (_backupSort.dir === 1 ? ' <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m18 15-6-6-6 6"/></svg>' : ' <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m6 9 6 6 6-6"/></svg>') : '';
   }
@@ -47305,7 +47677,7 @@ function _renderAllBackups() {
   const tbody = document.getElementById('lxd-backups-tbody');
   _updateBackupSortIndicators();
   if (!_allBackupsCache.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No backups exist yet. Configure a Backup Schedule on a VM or Container, or click Backup Now.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-3);padding:32px;">No backups exist yet. Configure a Backup Schedule on a VM or Container, or click Backup Now.</td></tr>';
     return;
   }
   // Sort by the active column, with VM-ID as a stable tiebreaker.
@@ -47357,6 +47729,7 @@ function _renderAllBackups() {
     rows.push(`<tr style="cursor:pointer;" onclick='_toggleBackupRow(${JSON.stringify(key)})'>
       <td style="text-align:center;color:var(--text-3);">${chev}</td>
       <td style="font-weight:600;font-family:monospace;">${esc(b.vm_id)}${lock}</td>
+      <td style="color:var(--text-2);">${b.vm_name ? esc(b.vm_name) : '<span style="color:var(--text-3);">—</span>'}</td>
       <td>${typeBadge}</td>
       <td>${host}</td>
       <td style="font-family:monospace;color:var(--text-2);font-size:12px;">${esc(b.datastore || '—')}</td>
@@ -47372,9 +47745,9 @@ function _renderAllBackups() {
     if (expanded) {
       const snaps = (b.snapshots || []);
       if (!snaps.length) {
-        rows.push('<tr><td></td><td colspan="8" style="color:var(--text-3);font-style:italic;padding:6px 0 14px;font-size:12px;">No snapshots in this backup yet.</td></tr>');
+        rows.push('<tr><td></td><td colspan="9" style="color:var(--text-3);font-style:italic;padding:6px 0 14px;font-size:12px;">No snapshots in this backup yet.</td></tr>');
       } else {
-        rows.push('<tr><td></td><td colspan="8" style="padding:0 0 12px;">' +
+        rows.push('<tr><td></td><td colspan="9" style="padding:0 0 12px;">' +
           '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
           '<thead><tr style="color:var(--text-3);">' +
             '<th style="text-align:left;padding:4px 8px;">Snapshot</th>' +

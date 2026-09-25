@@ -1,0 +1,15 @@
+[Unit]
+Description=ZFS NAS Portal (USB appliance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/zfsnas
+ExecStart=/usr/lib/zfsnas/run-zfsnas.sh --config /opt/zfsnas/config
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

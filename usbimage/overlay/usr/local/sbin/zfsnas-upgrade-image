@@ -1,0 +1,119 @@
+#!/bin/bash
+# Upgrade the appliance's OS image in place, keeping every setting.
+#
+# The stick holds two independent things: the read-only OS image at the front,
+# and the settings partition (ZFSNAS-PERSIST) further in. This writes ONLY the
+# image, so the settings partition is untouched and is re-adopted on the next
+# boot — the same path a reflash from another machine takes.
+#
+# It refuses to run unless the appliance was booted with "load OS to RAM"
+# (the toram GRUB entry). Overwriting the image while the running system is
+# reading its squashfs from that very region corrupts the live OS; booted to
+# RAM, the stick is not in use and the write is safe.
+#
+# Usage:
+#   zfsnas-upgrade-image /path/to/zfsnas-usb-<version>.iso
+#   zfsnas-upgrade-image --url https://…/zfsnas-usb-<version>.iso
+#   zfsnas-upgrade-image --url … --no-verify      (skip the checksum check)
+set -euo pipefail
+
+PERSIST_LABEL=ZFSNAS-PERSIST
+ISO_LABEL=ZFSNAS-USB
+STAGE_DIR=/persist/.zfsnas-persist/upgrade
+VERIFY=1
+SRC=""
+URL=""
+
+die()  { echo "error: $*" >&2; exit 1; }
+note() { echo "==> $*"; }
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --url)        URL="$2"; shift 2 ;;
+        --no-verify)  VERIFY=0; shift ;;
+        -h|--help)    sed -n '2,20p' "$0"; exit 0 ;;
+        *)            SRC="$1"; shift ;;
+    esac
+done
+
+[ "$(id -u)" -eq 0 ] || die "must run as root"
+
+# --- refuse unless booted to RAM -------------------------------------------
+if ! grep -qw toram /proc/cmdline; then
+    cat >&2 <<'MSG'
+error: the appliance must be booted with "load OS to RAM" to upgrade in place.
+
+  Reboot and pick the "load OS to RAM" GRUB entry -- it is the first one and
+  the default, so simply letting the menu time out is enough. Then run this
+  again.
+  Without it the running system is reading its OS from the very area being
+  overwritten, which would corrupt it mid-upgrade.
+
+  Alternatively, write the new image to the stick from another machine — your
+  settings survive that too.
+MSG
+    exit 1
+fi
+
+# --- locate the stick -------------------------------------------------------
+part=$(blkid -o device -t LABEL="$ISO_LABEL" 2>/dev/null | head -n1)
+[ -n "$part" ] || die "could not find the appliance medium (label $ISO_LABEL)"
+name=$(basename "$part")
+disk="/dev/$(basename "$(readlink -f "/sys/class/block/$name/..")")"
+[ -b "$disk" ] || die "could not resolve the stick's disk device from $part"
+note "stick: $disk (image partition $part)"
+
+store=$(blkid -o device -t LABEL="$PERSIST_LABEL" 2>/dev/null | head -n1)
+if [ -n "$store" ]; then
+    sname=$(basename "$store")
+    store_start_bytes=$(( $(cat "/sys/class/block/$sname/start") * 512 ))
+    note "settings partition: $store starts at $((store_start_bytes / 1024 / 1024)) MiB — it will NOT be touched"
+else
+    store_start_bytes=0
+    note "no settings partition found (nothing to preserve)"
+fi
+
+# --- fetch / stage the image ------------------------------------------------
+if [ -n "$URL" ]; then
+    mkdir -p "$STAGE_DIR"
+    SRC="$STAGE_DIR/$(basename "$URL")"
+    note "downloading $(basename "$URL") to the settings partition (plenty of room there)…"
+    curl -fL --progress-bar -o "$SRC" "$URL"
+    if [ "$VERIFY" -eq 1 ]; then
+        note "downloading checksum…"
+        curl -fsSL -o "$SRC.sha256" "$URL.sha256" || die "no .sha256 alongside the image — re-run with --no-verify to skip"
+    fi
+fi
+[ -n "$SRC" ] || die "give an ISO path or --url"
+[ -f "$SRC" ] || die "no such file: $SRC"
+
+if [ "$VERIFY" -eq 1 ]; then
+    [ -f "$SRC.sha256" ] || die "missing $SRC.sha256 — re-run with --no-verify to skip"
+    note "verifying checksum…"
+    ( cd "$(dirname "$SRC")" && sha256sum -c "$(basename "$SRC").sha256" ) \
+        || die "checksum mismatch — refusing to write a corrupt image"
+fi
+
+# --- would the new image reach the settings partition? ----------------------
+iso_bytes=$(stat -c %s "$SRC")
+note "new image: $((iso_bytes / 1024 / 1024)) MiB"
+if [ "$store_start_bytes" -gt 0 ] && [ "$iso_bytes" -ge "$store_start_bytes" ]; then
+    die "the new image ($((iso_bytes / 1024 / 1024)) MiB) would run into the settings partition at $((store_start_bytes / 1024 / 1024)) MiB.
+Write it from another machine instead and restore your settings from a backup."
+fi
+
+# --- write -------------------------------------------------------------------
+note "writing the image (settings partition is past the end of it and stays put)…"
+dd if="$SRC" of="$disk" bs=4M conv=notrunc,fsync status=progress
+sync
+[ -n "$URL" ] && rm -f "$SRC" "$SRC.sha256"
+
+cat <<'MSG'
+
+==> Done. Reboot to start the new image.
+
+    The partition table now comes from the new image, so the settings
+    partition is not listed — that is expected: the appliance finds it by
+    scanning the stick on the next boot and re-adopts it automatically
+    (the console will log "re-adopted store … after reflash").
+MSG

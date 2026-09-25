@@ -1,0 +1,56 @@
+# usbimage/persist-manifest.txt
+# WHAT PERSISTS ACROSS REBOOTS on the USB appliance.
+# Format: <type> <store-relative-path> <absolute-target-path>
+#   type = dir | file | copy
+# Consumed by: the casper-bottom initramfs hook (seed + bind-mount, or
+# seed + copy-in for type=copy), build.sh (validation),
+# system/appliance_manifest_test.go (regression guard).
+# A feature that writes a NEW system path at runtime MUST add it here,
+# or the setting silently vanishes on reboot.
+
+dir  config                             /opt/zfsnas/config
+
+# identity — without these: ZFS refuses import (hostid), the DHCP client-ID
+# and thus the IP changes each boot (machine-id), SSH clients scream MITM
+file system/etc-identity/hostid         /etc/hostid
+file system/etc-identity/machine-id     /etc/machine-id
+file system/etc-identity/hostname       /etc/hostname
+# /etc/hosts travels with the hostname: renaming the server rewrites the
+# 127.0.1.1 line, and without this the image's original name comes back at the
+# next boot while /etc/hostname says otherwise — every call that resolves the
+# machine's own name (sudo, Samba) then warns.
+file system/etc-identity/hosts          /etc/hosts
+file system/etc-identity/localtime      /etc/localtime
+file system/etc-identity/timezone      /etc/timezone
+
+# auth — root password set from the portal, groups incus may add.
+# copy = boot-time copy-in, no bind — shadow-utils update these via
+# write-new + rename, which EBUSYs on a bind mount; the portal syncs them
+# back to the store via system.SyncAuthToPersistStore whenever it changes
+# one (currently: SetRootSSHAccess after chpasswd).
+copy system/etc-auth/passwd             /etc/passwd
+copy system/etc-auth/shadow             /etc/shadow
+copy system/etc-auth/group              /etc/group
+copy system/etc-auth/gshadow            /etc/gshadow
+copy system/etc-auth/subuid             /etc/subuid
+copy system/etc-auth/subgid             /etc/subgid
+
+dir  system/ssh                         /etc/ssh
+dir  system/root-ssh                    /root/.ssh
+# /etc/netplan is intentionally NOT persisted: the appliance ships ifupdown
+# (see chroot-setup.sh) and netplan is purged from the image.
+dir  system/network                     /etc/network
+file system/fstab                       /etc/fstab
+dir  system/zfs                         /etc/zfs
+dir  system/samba                       /etc/samba
+dir  system/samba-state                 /var/lib/samba
+dir  system/nut                         /etc/nut
+file system/exports                     /etc/exports
+dir  system/iscsi                       /etc/tgt
+dir  system/minio                       /etc/minio
+file system/minio-default               /etc/default/minio
+dir  system/incus                       /var/lib/incus
+# dhcpcd's DUID and leases: without these the appliance presents a new client
+# identity on every boot and the DHCP server hands it a DIFFERENT address —
+# the portal then "disappears" from the URL the user had bookmarked.
+dir  system/dhcpcd                      /var/lib/dhcpcd

@@ -1,0 +1,44 @@
+# usbimage/local.conf.example — copy to local.conf and fill in for YOUR setup.
+#
+#   cp local.conf.example local.conf
+#
+# local.conf is git-ignored: it describes your own machines, so it never goes
+# into the repository. It is read by remote-build.sh, which builds the ISO on a
+# separate build machine and copies the result back here. Building directly
+# on the build machine (./build.sh, see HOW-TO-BUILD-ISO.md) needs none of this.
+# shellcheck shell=bash disable=SC2034
+
+# ---- where the build runs -----------------------------------------------
+# SSH destination of the machine that runs the build, or of the Incus/LXD
+# host that runs the build VM. Your SSH user needs passwordless sudo there.
+BUILD_SSH="builder@192.0.2.10"
+
+# Name of the Incus VM that does the build, when BUILD_SSH is its host.
+# Leave empty when BUILD_SSH is the build machine itself.
+BUILD_INCUS_VM="znas-build"
+
+# Folder on the build machine that receives this usbimage/ tree
+# (its work/ dir holds the rootfs between builds — keep it on a big disk).
+BUILD_DIR="/root/usbimage"
+
+# Where the portal binary is copied on the build machine before baking it in.
+BUILD_BINARY="/root/zfsnas"
+
+# ---- what gets built ------------------------------------------------------
+# Ubuntu point release the image must be built from (build fails otherwise).
+# Leave empty to accept whatever the Ubuntu archive currently serves.
+UBUNTU_VERSION="26.04.1"
+
+# Set to 1 to build without MinIO/S3 when dl.min.io cannot provide it and the
+# build machine's rootfs has no copy yet (see HOW-TO-BUILD-ISO.md).
+ZNAS_ALLOW_NO_MINIO=0
+
+# ---- after the build ------------------------------------------------------
+# Where finished ISOs are copied (default: this usbimage/ folder).
+LOCAL_ISO_DIR=""
+
+# Signing key and GitHub token, used by the maintainer publishing steps.
+# Paths only — never put the key or token themselves in this file.
+COSIGN_KEY="$HOME/.config/znas/cosign.key"
+PUBLISH_TOKEN_FILE="$HOME/.config/znas/appliance-publish-token"
+PUBLISH_REPO="macgaver/znas-usb-appliance"

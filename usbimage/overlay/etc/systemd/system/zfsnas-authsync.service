@@ -1,0 +1,6 @@
+[Unit]
+Description=Mirror system account files into the persist store
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/zfsnas/sync-auth.sh
