@@ -137,7 +137,8 @@ service account, the portal and its systemd service. See [Installation](#install
 1. **Download** the latest `znas-usb-appliance-v….iso` from
    **[the appliance releases](https://github.com/macgaver/znas-usb-appliance/releases/latest)**.
    Each release also includes a `.sha256` checksum and a `.sig` signature.
-2. **Flash** it to a USB stick of 8 GB or more with [balenaEtcher](https://etcher.balena.io/),
+2. **Flash** it to a USB stick (8 GB minimum; 32 GB or more on USB 3 or faster recommended)
+   with [balenaEtcher](https://etcher.balena.io/),
    Rufus (in *dd mode*) or `dd`:
    ```bash
    sudo dd if=znas-usb-appliance-vX-Y-Z-N.iso of=/dev/sdX bs=4M conv=fsync status=progress
@@ -196,7 +197,7 @@ systemd service) and lets you import your existing ZFS pools or create new ones.
 
 | | |
 |---|---|
-| **USB appliance** | An x86-64 machine with 4 GB of RAM or more, and a USB stick of 8 GB or more |
+| **USB appliance** | An x86-64 machine with 4 GB of RAM or more, and a USB stick of 8 GB minimum (32 GB or more on USB 3 or faster recommended) |
 | **Operating system** (other installs) | Debian 13 (Trixie) or later, or Ubuntu 26.04 LTS or later |
 | **Privileges** | Passwordless `sudo` for the portal's service account (restrictable, see [SECURITY.md](SECURITY.md)) |
 | **Building from source** | Go 1.22 or later |

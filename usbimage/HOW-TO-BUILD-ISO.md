@@ -19,7 +19,7 @@ build machine, about 30 minutes, and internet access.
 | Network | `archive.ubuntu.com`, `dl.min.io` | Ubuntu packages, plus MinIO for the S3 feature (see *Troubleshooting* — MinIO stopped publishing binaries in 2026). |
 | KVM (`/dev/kvm`) | only for the boot tests | In a VM this means **nested virtualization** must be on. Building works without it. |
 | Go 1.22+ | only to build the portal from source | Any machine; the binary is copied over. |
-| A USB stick | 8 GB+ | Plus 4 GB RAM on the target machine (more with ZFS). |
+| A USB stick | 8 GB minimum | 32 GB or more on USB 3 (or faster) recommended. Plus 4 GB RAM on the target machine (more with ZFS). |
 
 The build does **not** create its build machine for you. Set one up once
 (step 2); after that every build is a single command.

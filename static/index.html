@@ -32686,6 +32686,12 @@ function loadApplianceUpgrade(force) {
 }
 function checkApplianceUpgrade() { loadApplianceUpgrade(true); }
 
+// Release notes are GitHub Markdown; the card shows plain text, so drop the
+// bold and code marks rather than displaying literal ** and backticks.
+function _applPlainNotes(md) {
+  return String(md || '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').trim();
+}
+
 // "26.04.2-1" -> "26.04.2"
 function _applPoint(v) { return String(v || '').split('-')[0]; }
 
@@ -32719,7 +32725,7 @@ function _renderApplianceUpgrade(d) {
       + ` <span style="color:var(--text-3);">(release ${esc(latest.version)}${pub ? ' · ' + esc(pub) : ''}${latest.iso_size ? ' · ' + fmtBytes(latest.iso_size) : ''})</span></div>`;
     if (latest.body && latest.body.trim()) {
       html += `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:13px;color:var(--text-2);">Release notes</summary>`
-        + `<div style="margin-top:6px;font-size:12px;white-space:pre-wrap;color:var(--text-2);max-height:220px;overflow-y:auto;">${esc(latest.body)}</div></details>`;
+        + `<div style="margin-top:6px;font-size:12px;white-space:pre-wrap;color:var(--text-2);max-height:220px;overflow-y:auto;">${esc(_applPlainNotes(latest.body))}</div></details>`;
     }
     if (!latest.sig_url || !latest.sha256_url) {
       html += `<div style="margin-top:8px;color:#ff453a;font-size:13px;">This image has no signature or checksum published, so it cannot be installed.</div>`;

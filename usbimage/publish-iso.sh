@@ -61,14 +61,28 @@ if [ "$size" -gt $((2 * 1024 * 1024 * 1024)) ]; then
     exit 1
 fi
 
+default_notes() {
+    cat <<NOTES
+ZNAS USB appliance image **${VERSION}**: Ubuntu ${UBUNTU} LTS with the ZNAS portal ${IMAGE_VERSION}.
+
+**Upgrading an appliance:** Platform → USB Appliance Upgrades. Your settings are kept.
+
+**New stick:** flash \`${base}\` with balenaEtcher, Rufus (dd mode) or \`dd\`, then boot it and open the address shown on screen.
+- USB stick: **8 GB minimum**, **32 GB or more on USB 3 (or faster) recommended**.
+- Target machine: x86-64, 4 GB RAM or more (more with ZFS). UEFI with Secure Boot, or legacy BIOS.
+
+Verify the download with the \`.sha256\`; the portal also checks the \`.sig\` signature before installing an upgrade.
+NOTES
+}
+
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
     echo "Uploading to existing release $TAG (replacing any previous image)…"
     gh release upload "$TAG" "$ISO" "$ISO.sha256" "$ISO.sig" --repo "$REPO" --clobber
 else
     echo "Creating release $TAG…"
     gh release create "$TAG" "$ISO" "$ISO.sha256" "$ISO.sig" --repo "$REPO" "${PRERELEASE[@]}" \
-        --title "ZNAS Appliance ${UBUNTU} (release ${VERSION})" \
-        --notes "${NOTES:-ZNAS USB appliance image ${VERSION} (Ubuntu ${UBUNTU} LTS, portal ${IMAGE_VERSION}). Existing appliances upgrade from Platform → USB Appliance Upgrades. New sticks: flash with Etcher, Rufus (dd mode) or dd (8 GB+).}"
+        --title "ZNAS Appliance ${VERSION}" \
+        --notes "${NOTES:-$(default_notes)}"
 fi
 
 echo

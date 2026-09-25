@@ -40,7 +40,7 @@ Work dir: `./work/` (safe to delete; `--from` needs earlier stages present).
 
 `znas-usb-appliance-v26-04-1-1.iso` + `.sha256` in `usbimage/`. Flash with dd /
 Etcher / Rufus (dd mode). Secure Boot: supported (Canonical shim chain).
-Minimums: 8 GB stick, 4 GB RAM (more for toram + ZFS).
+Minimums: 8 GB stick (32 GB+ on USB 3 or faster recommended), 4 GB RAM (more for toram + ZFS).
 
 ## Versioning
 
