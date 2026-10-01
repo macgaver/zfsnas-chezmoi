@@ -4917,7 +4917,7 @@
               <select id="add-ds-zfs-pool" class="input" onchange="_onAddDsPoolChange()">
                 <option value="">Loading…</option>
               </select>
-              <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Only ZFS pools not already configured as a datastore are shown. One datastore per ZFS pool.</div>
+              <div style="font-size:11px;color:var(--text-3);margin-top:4px;">One datastore per ZFS pool. Pools that can't host a new one are greyed out, with the reason.</div>
             </div>
             <div class="form-group" style="margin-bottom:14px;">
               <label class="form-label">Root Dataset <span style="color:var(--danger);">*</span></label>
@@ -8959,7 +8959,7 @@ Select the Console tab to load.</pre>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:16px;">
         <input type="checkbox" id="new-ssh-login" style="width:15px;height:15px;accent-color:var(--accent-2);">
         Allow SSH login
-        <i class="info-tip tip-down" data-tip="Creates a matching Linux account with a shell and this password so the user can log in over SSH.&#10;&#10;Off by default: an SMB-only user gets a no-login account and should stay that way."></i>
+        <i class="info-tip tip-down" data-tip="Creates a matching Linux account with a shell and this password so the user can log in over SSH.&#10;&#10;Off by default: an SMB-only user gets a no-login account and should stay that way.&#10;&#10;An admin with SSH also gets sudo (it asks for their own password). A Linux account with this name that ZNAS did not create is never changed."></i>
       </label>
       <!-- Advanced Settings collapsible -->
       <div style="margin-bottom:16px;">
@@ -9321,7 +9321,7 @@ Select the Console tab to load.</pre>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-top:16px;">
         <input type="checkbox" id="eu-ssh-login" style="width:15px;height:15px;accent-color:var(--accent-2);" onchange="onEditSSHLoginChange()">
         Allow SSH login
-        <i class="info-tip tip-down" data-tip="Gives this user a Linux account with a shell so they can log in over SSH.&#10;&#10;Turning it ON needs a password: set one in the field above at the same time, since the Linux account has its own password.&#10;&#10;Turning it OFF locks the account and takes the shell away — the SMB access and the portal login are untouched.&#10;&#10;Reflects the account's real state on this server, not a stored flag."></i>
+        <i class="info-tip tip-down" data-tip="Gives this user a Linux account with a shell so they can log in over SSH.&#10;&#10;Turning it ON needs a password: set one in the field above at the same time, since the Linux account has its own password.&#10;&#10;Turning it OFF locks the account and takes the shell away — the SMB access and the portal login are untouched.&#10;&#10;Reflects the account's real state on this server, not a stored flag.&#10;&#10;An admin with SSH also gets sudo (it asks for their own password). A Linux account with this name that ZNAS did not create is never changed."></i>
       </label>
       <div id="eu-ssh-hint" class="hidden" style="font-size:12px;color:var(--warning,var(--text-3));margin-top:6px;">
         Set a new password above as well — the Linux account needs one to allow SSH login.
@@ -17630,6 +17630,9 @@ function _journalStopLive() {
     // there at first wrap. Keep them as native <select> so they reflect
     // their underlying value live.
     'ci-logs-level-filter': true, 'ci-logs-file': true,
+    // Add Datastore ZFS pool picker: rich options (free space, or a greyed
+    // reason), initialised explicitly by openAddDatastoreModal().
+    'add-ds-zfs-pool': true,
     // The top-bar pool selector is rendered with inline blue styling
     // (chevron, border, color) and rebuilt by loadOverviewBar() on
     // pool/data changes. Every nav-triggered initAllCustomSelects()
@@ -58889,6 +58892,9 @@ async function _softRelayRefresh() {
     if (typeof _lxdNetworks       !== 'undefined') _lxdNetworks       = [];
     if (typeof _lxdPools          !== 'undefined') _lxdPools          = [];
     if (typeof _lxdNetworksCache  !== 'undefined') _lxdNetworksCache  = [];
+    // Datastores (sidebar list + Datastores page): per-server too — without
+    // this the sidebar kept listing the previously viewed server's datastores.
+    if (typeof _lxdStorageCacheDS !== 'undefined') _lxdStorageCacheDS = [];
     // External storage (Filesystem rsync) — the storage list AND the
     // helper-package prereqs are per-server; a stale _extPrereqs made the
     // add-storage modal report the previous server's packages (v6.7.7 fix).
@@ -64199,33 +64205,72 @@ async function submitEditDatastore() {
   } catch(e) { alertEl.textContent = String(e); alertEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Save'; }
 }
 
+// Increments on every open: a slow response from an earlier open (or from
+// before an InterLink server switch) must never overwrite a newer list.
+let _addDsReq = 0;
+const _ADD_DS_BAD_HEALTH = new Set(['FAULTED', 'UNAVAIL', 'SUSPENDED', 'OFFLINE', 'REMOVED']);
+
 async function openAddDatastoreModal() {
   const sel = document.getElementById('add-ds-zfs-pool');
   const nameEl = document.getElementById('add-ds-name');
   const rootEl = document.getElementById('add-ds-root');
   const rootPrefix = document.getElementById('add-ds-root-prefix');
   const al = document.getElementById('add-datastore-alert');
+  // The styled dropdown only redraws its label when told to (csRefresh):
+  // without it the trigger kept showing "Loading…" or the pools of the
+  // server viewed before, until someone opened the list.
+  initCustomSelect('add-ds-zfs-pool', { richOpts: true });
+  const setOptions = html => { sel.innerHTML = html; csRefresh('add-ds-zfs-pool'); };
+  const reqId = ++_addDsReq;
   al.classList.add('hidden');
   nameEl.value = '';
   rootEl.value = '';
   rootPrefix.textContent = 'pool/';
-  sel.innerHTML = '<option value="">Loading…</option>';
+  setOptions('<option value="">Loading…</option>');
   document.getElementById('modal-add-datastore').classList.remove('hidden');
   try {
     const [poolsRes, existingRes] = await Promise.all([
-      fetch('/api/pools').then(r => r.ok ? r.json() : []),
-      fetch('/api/incus/storage-pools-detail').then(r => r.ok ? r.json() : [])
+      fetch('/api/pools', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject(new Error('pools: HTTP ' + r.status))),
+      fetch('/api/incus/storage-pools-detail', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject(new Error('datastores: HTTP ' + r.status)))
     ]);
-    const existingSources = new Set((existingRes || []).map(p => (p.source || '').split('/')[0]).filter(Boolean));
-    const available = (poolsRes || []).filter(p => !existingSources.has(p.name));
-    if (!available.length) {
-      sel.innerHTML = '<option value="">No available ZFS pools</option>';
-    } else {
-      sel.innerHTML = '<option value="">— Select ZFS pool —</option>' +
-        available.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+    if (reqId !== _addDsReq) return; // a newer open owns the dialog now
+    // ZFS pool -> datastore already built on it (source is "<pool>/<dataset>").
+    const usedBy = {};
+    (existingRes || []).forEach(d => {
+      const root = (d.source || '').split('/')[0];
+      if (root && !usedBy[root]) usedBy[root] = d.name;
+    });
+    const pools = (poolsRes || []).map(p => {
+      let reason = '';
+      if (usedBy[p.name]) reason = `already datastore “${usedBy[p.name]}”`;
+      else if (_ADD_DS_BAD_HEALTH.has(String(p.health || '').toUpperCase())) reason = `pool is ${p.health}`;
+      return { name: p.name, reason, free: p.usable_avail || p.free || 0, health: p.health };
+    }).sort((a, b) => (!!a.reason - !!b.reason) || a.name.localeCompare(b.name));
+    const eligible = pools.filter(p => !p.reason);
+    if (!pools.length) {
+      setOptions('<option value="">No ZFS pools on this server</option>');
+      return;
     }
-  } catch(e) {
-    sel.innerHTML = '<option value="">Error loading pools</option>';
+    const optHtml = p => {
+      const right = p.reason
+        ? `<span style="color:var(--text-3);font-size:12px;">${esc(p.reason)}</span>`
+        : `<span style="color:var(--text-3);font-size:12px;">${esc(fmtBytes(p.free))} free${p.health === 'DEGRADED' ? ' · <span style="color:#f5a623;">DEGRADED</span>' : ''}</span>`;
+      const html = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;">`
+        + `<span style="font-weight:600;">${esc(p.name)}</span>${right}</div>`;
+      return `<option value="${esc(p.name)}" data-html="${esc(html)}"${p.reason ? ' disabled' : ''}>`
+        + `${esc(p.name)}${p.reason ? ' — ' + esc(p.reason) : ''}</option>`;
+    };
+    setOptions(
+      `<option value="">${eligible.length ? '— Select ZFS pool —' : 'No ZFS pool can host a new datastore'}</option>`
+      + pools.map(optHtml).join(''));
+    if (eligible.length === 1) {          // only one choice: take it
+      sel.value = eligible[0].name;
+      csRefresh('add-ds-zfs-pool');
+      _onAddDsPoolChange();
+    }
+  } catch (e) {
+    if (reqId !== _addDsReq) return;
+    setOptions(`<option value="">Could not load pools (${esc(e.message || String(e))})</option>`);
   }
 }
 
