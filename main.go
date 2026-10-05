@@ -117,6 +117,20 @@ func main() {
 	}
 	appCfg.ConfigDir = absConfig
 
+	// The USB appliance ships MergerFS in its image, so the Install click that
+	// enables the feature on a host never happens there: enable it once, as
+	// that click would ("Datasets & FS" menu + "+ Other" action).
+	if system.ApplianceMode() && !appCfg.MergerFS.ApplianceAdopted && system.MergerFSInstalled() {
+		appCfg.MergerFS.Enabled = true
+		appCfg.MergerFS.HideNav = false
+		appCfg.MergerFS.ApplianceAdopted = true
+		if err := config.SaveAppConfig(appCfg); err != nil {
+			log.Printf("[mergerfs] appliance: could not enable the built-in feature: %v", err)
+		} else {
+			log.Printf("[mergerfs] appliance: built-in MergerFS enabled")
+		}
+	}
+
 	// ===== Persistent session store =====
 	// Rehydrate any sessions persisted from a previous run so users
 	// stay logged in across `systemctl restart zfsnas`. Failures are

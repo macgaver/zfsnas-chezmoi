@@ -502,6 +502,10 @@ type MergerFSConfig struct {
 	Enabled bool           `json:"enabled"`
 	HideNav bool           `json:"hide_nav"`
 	Pools   []MergerFSPool `json:"pools,omitempty"`
+	// ApplianceAdopted records that the USB appliance switched the feature on
+	// once because it ships in the image (no Install click ever happens).
+	// Later changes by the admin are then left alone.
+	ApplianceAdopted bool `json:"appliance_adopted,omitempty"`
 }
 
 // MergerFSSnapshotPolicy schedules coordinated ZFS snapshots across all member
