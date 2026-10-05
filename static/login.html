@@ -262,6 +262,9 @@
         }
 
         btn.innerHTML = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> Success — loading portal…';
+        // One-shot hand-off: the portal opens the Guide after a real login
+        // (not on reloads or new tabs) unless the user opted out.
+        try { sessionStorage.setItem('znas-guide-after-login', '1'); } catch {}
         window.location.href = '/';
 
       } catch (err) {
@@ -305,6 +308,9 @@
         }
 
         btn.innerHTML = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> Success — loading portal…';
+        // One-shot hand-off: the portal opens the Guide after a real login
+        // (not on reloads or new tabs) unless the user opted out.
+        try { sessionStorage.setItem('znas-guide-after-login', '1'); } catch {}
         window.location.href = '/';
 
       } catch (err) {

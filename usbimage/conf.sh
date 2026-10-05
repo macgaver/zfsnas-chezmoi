@@ -4,7 +4,7 @@
 UBUNTU_CODENAME="resolute"          # Ubuntu 26.04 LTS. Stage 1 verifies this
                                     # exists on the mirror and aborts if not.
 MIRROR="http://archive.ubuntu.com/ubuntu"
-IMAGE_VERSION="${IMAGE_VERSION:-6.9.25}"  # portal binary baked into the image
+IMAGE_VERSION="${IMAGE_VERSION:-6.10.5}"  # portal binary baked into the image
 # Appliance image version = <Ubuntu point release>-<APPLIANCE_BUILD>, e.g.
 # 26.04.1-1. The Ubuntu part is read from the built rootfs (base-files bumps
 # /etc/os-release at each point release); APPLIANCE_BUILD is ours: bump it to

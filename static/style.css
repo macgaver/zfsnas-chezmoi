@@ -3912,3 +3912,85 @@ body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"]:not(#prereq
   animation: applSegStripes .8s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) { .appl-seg-indet { animation: none; } }
+
+/* ── v6.10.4: in-app Guide ─────────────────────────────────────────────────── */
+.guide-modal { max-width: 1120px; width: 96vw; height: min(86vh, 860px); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.guide-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.guide-brand { display: flex; align-items: center; gap: 12px; }
+.guide-brand-ic { width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg, #bf5af2, #0a84ff); box-shadow: 0 4px 14px rgba(10,132,255,.28); flex-shrink: 0; }
+.guide-sub { font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
+.guide-body { display: flex; flex: 1; min-height: 0; }
+.guide-nav { width: 272px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 12px 10px; overflow-y: auto; background: var(--surface2); }
+.guide-topic { display: flex; gap: 11px; align-items: flex-start; width: 100%; text-align: left; padding: 10px 11px; margin-bottom: 3px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--text-1); cursor: pointer; transition: background .12s, border-color .12s; }
+.guide-topic:hover { background: var(--surface); }
+.guide-topic.active { background: var(--surface); border-color: var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.guide-topic-ic { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+.guide-topic-t { font-size: 13.5px; font-weight: 600; line-height: 1.25; }
+.guide-topic-d { font-size: 11.5px; color: var(--text-3); line-height: 1.35; margin-top: 2px; }
+.guide-topic-n { font-size: 10.5px; font-weight: 700; color: var(--text-3); letter-spacing: .04em; }
+.guide-content { flex: 1; overflow-y: auto; padding: 22px 30px 28px; outline: none; }
+.guide-content h2 { font-size: 22px; margin: 0 0 6px; }
+.guide-content h4 { font-size: 14px; margin: 22px 0 8px; }
+.guide-lead { font-size: 14px; color: var(--text-2); line-height: 1.6; margin: 0 0 16px; max-width: 760px; }
+.guide-content p, .guide-content li { font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
+.guide-content ul { padding-left: 20px; margin: 6px 0 10px; }
+.guide-content strong { color: var(--text-1); }
+.guide-shot { display: block; max-width: 100%; max-height: 260px; width: auto; margin: 10px 0 6px; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,.12); background: #fff; }
+.guide-cap { font-size: 11.5px; color: var(--text-3); margin-bottom: 8px; }
+.guide-ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+.guide-idea { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; background: var(--surface2); }
+.guide-idea b { display: block; font-size: 13px; color: var(--text-1); margin-bottom: 3px; }
+.guide-idea span { font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.guide-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.guide-tip { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; padding: 11px 14px; border-radius: 10px; background: rgba(10,132,255,.08); border: 1px solid rgba(10,132,255,.25); font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.guide-tip svg { color: var(--accent-2); flex-shrink: 0; margin-top: 2px; }
+/* Quick Start checklist */
+.guide-progress { display: flex; align-items: center; gap: 12px; margin: 4px 0 18px; }
+.guide-progress-bar { flex: 1; max-width: 360px; height: 8px; border-radius: 4px; background: var(--surface2); overflow: hidden; }
+.guide-progress-bar > div { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #bf5af2, #0a84ff); transition: width .5s; }
+.guide-progress-t { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.guide-step { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--border); }
+.guide-step:first-of-type { border-top: none; }
+.guide-step-n { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--text-2); background: var(--surface2); border: 1px solid var(--border); }
+.guide-step.done .guide-step-n { background: #30d158; border-color: #30d158; color: #fff; }
+.guide-step-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.guide-step-t { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.guide-badge { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; padding: 2px 8px; border-radius: 20px; }
+.guide-badge.ok { color: #1f9d48; background: rgba(48,209,88,.14); }
+.guide-badge.todo { color: #c77c00; background: rgba(245,166,35,.15); }
+.guide-badge.opt { color: var(--text-3); background: var(--surface2); border: 1px solid var(--border); }
+.guide-step-s { font-size: 12.5px; color: var(--text-3); margin-top: 3px; }
+.guide-step p { margin: 6px 0 0; }
+.guide-done-banner { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 12px; margin-bottom: 14px; background: linear-gradient(135deg, rgba(48,209,88,.12), rgba(10,132,255,.10)); border: 1px solid rgba(48,209,88,.35); font-size: 13.5px; color: var(--text-2); }
+.guide-done-banner svg { color: #30d158; flex-shrink: 0; }
+.guide-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-top: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
+.guide-hide { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; user-select: none; }
+.guide-hide input { margin: 0; width: auto; }
+.guide-pager { display: flex; align-items: center; gap: 8px; }
+.guide-pos { font-size: 12px; color: var(--text-3); margin-right: 4px; }
+@media (max-width: 760px) {
+  .guide-modal { width: 100vw; max-width: 100vw; height: 100dvh; border-radius: 0; }
+  .guide-head { padding: 12px 14px; }
+  .guide-sub { display: none; }
+  .guide-body { flex-direction: column; }
+  .guide-nav { width: auto; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; border-right: none; border-bottom: 1px solid var(--border); padding: 8px; }
+  .guide-topic { width: auto; flex-shrink: 0; margin: 0; padding: 7px 10px; align-items: center; }
+  .guide-topic-d, .guide-topic-n { display: none; }
+  .guide-topic-ic { width: 24px; height: 24px; }
+  .guide-content { padding: 16px; }
+  .guide-foot { padding: 10px 14px; flex-wrap: wrap; }
+  .guide-pos { display: none; }
+}
+/* The generic `.modal > div:not(.modal-header)…` rule gives every direct child
+   flex:1 and its own padding, which split the Guide into three equal thirds.
+   Same fix as the file browser (.fbnew-modal): take sizing back. */
+.guide-modal > .guide-head { flex: 0 0 auto !important; padding: 18px 24px 14px !important; min-height: 0 !important; }
+.guide-modal > .guide-body { flex: 1 1 auto !important; padding: 0 !important; min-height: 0 !important; }
+.guide-modal > .guide-foot { flex: 0 0 auto !important; padding: 12px 24px !important; min-height: 0 !important; }
+@media (max-width: 760px) {
+  .guide-modal > .guide-head { padding: 12px 14px !important; }
+  .guide-modal > .guide-foot { padding: 10px 14px !important; }
+}
+body.is-phone .guide-modal > .guide-head { padding: 12px 14px !important; }
+body.is-phone .guide-modal > .guide-body { padding: 0 !important; }
+body.is-phone .guide-modal > .guide-foot { padding: 10px 14px !important; }

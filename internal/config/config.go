@@ -644,6 +644,8 @@ type UserPreferences struct {
 	// dragging. Outer key "<local|relay-host>:<storage|network>", inner key =
 	// node id, value = [x, y] in map canvas coordinates.
 	MapPins map[string]map[string][2]float64 `json:"map_pins,omitempty"`
+	// In-app Guide: true once the user ticked "Don't show this guide at login".
+	GuideHideAtLogin bool `json:"guide_hide_at_login,omitempty"`
 }
 
 // User represents a portal or SMB-only user.

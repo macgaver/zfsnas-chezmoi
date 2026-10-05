@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ZFS NAS">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/znasbak.js"></script>
   <style>
     .setup-step {
       display: flex;
@@ -69,7 +70,7 @@
                  placeholder="Repeat password" autocomplete="new-password" required>
         </div>
 
-        <div class="form-group" style="display:flex;align-items:flex-start;gap:9px;">
+        <div class="form-group" style="display:flex;flex-direction:row;align-items:flex-start;gap:9px;">
           <!-- {{SSH_LOGIN_DEFAULT}} becomes "checked" on the USB appliance only
                (HandleSetupPage); elsewhere the owner opts in. -->
           <input type="checkbox" id="ssh_login" name="ssh_login" {{SSH_LOGIN_DEFAULT}}
@@ -89,6 +90,16 @@
           Create Administrator Account
         </button>
       </form>
+
+      <!-- Migration: rebuild from another ZNAS server's .znasbak instead of
+           starting empty (only possible while no account exists). -->
+      <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);text-align:center;">
+        <div style="font-size:13px;color:var(--text-3);margin-bottom:10px;">Moving from another ZNAS server?</div>
+        <button type="button" class="btn btn-ghost" onclick="ZnasBak.openImport({setup: true})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.2em;margin-right:4px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Restore from a ZNAS backup
+        </button>
+      </div>
     </div>
   </div>
 

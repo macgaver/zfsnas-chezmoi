@@ -18,6 +18,7 @@
   <!-- Self-hosted SVG icon library (replaces emoji across the UI). Loaded
        before the app script so znasIcon() is available to every renderer. -->
   <script src="/static/icons.js"></script>
+  <script src="/static/znasbak.js"></script>
   <!-- Console fonts for the terminal gear → Font type picker. Degrades to
        monospace if the appliance has no internet access. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -662,6 +663,7 @@
   <span id="m-title" class="m-title">Performance</span>
   <!-- Right slot: per-page primary action lands here in a later phase; balances the title. -->
   <span id="m-topbar-right" class="m-topbar-right"></span>
+  <button class="m-iconbtn" id="m-guide-btn" onclick="openGuide()" aria-label="Open the ZNAS guide"><svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button>
 </header>
 <div id="m-backdrop" class="m-backdrop" onclick="closeMobileDrawer()"></div>
 <nav id="m-tabbar" class="m-tabbar" aria-label="Primary">
@@ -722,7 +724,7 @@
       <button class="sidebar-mode-btn" id="mode-btn-compute" onclick="switchSidebarMode('compute')" data-label="Compute" aria-label="Compute">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14A2.5 2.5 0 0 1 11.5 14v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>
       </button>
-      <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Networking" aria-label="Networking">
+      <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Infrastructure" aria-label="Infrastructure">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm9 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM6 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm4-6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/><path fill-rule="evenodd" d="M3 3.5A.5.5 0 0 1 3.5 3h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 3.5zm-1 5A.5.5 0 0 1 2.5 8h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8.5zm1 5A.5.5 0 0 1 3.5 13h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5z"/></svg>
       </button>
     </div>
@@ -926,6 +928,10 @@
             <span id="ups-pct" style="font-size:12px;font-weight:600;min-width:26px;"></span>
             <span id="ups-state-badge" class="ups-state-badge"></span>
           </div>
+          <!-- v6.10.4: the in-app Guide (book). Auto-opens after login until the user opts out. -->
+          <button onclick="openGuide()" id="btn-guide" title="Guide — learn ZNAS" aria-label="Open the ZNAS guide" style="padding:6px 8px;background:none;border:none;cursor:pointer;color:var(--text-2);display:flex;align-items:center;opacity:0.7;transition:opacity .15s;border-radius:var(--radius-sm);" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+          </button>
           <div class="theme-picker-wrap" id="theme-picker-wrap">
             <button class="theme-picker-btn" id="theme-picker-btn" onclick="toggleThemeDropdown(event)" title="Choose theme">
               <svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>
@@ -6360,6 +6366,19 @@ Select the Console tab to load.</pre>
           <button class="btn btn-primary btn-sm" id="hostname-apply-btn" onclick="applyHostname()" style="margin-top:8px;">Apply</button>
         </div>
 
+        <!-- ── Backup & Migration (.znasbak) ── -->
+        <div class="card" id="card-backup-migration">
+          <h3 style="margin-bottom:4px;">Backup &amp; Migration
+            <i class="info-tip tip-down" style="margin-left:6px;" data-tip="Export saves this server's whole configuration in one password-encrypted .znasbak file: settings, portal users and their system/SMB passwords, shares (SMB, NFS, iSCSI), schedules, alerts, encryption keys, the pool list and the VM / container inventory.&#10;&#10;Your data is NOT in the file — it stays on the pools.&#10;&#10;To migrate (for example from an installed server to the USB appliance): export here, move the pool disks, then choose Restore from a ZNAS backup on the new server's first-start page. Pools are imported, users and shares come back, and VMs / containers are recovered."></i>
+          </h3>
+          <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Save the whole configuration in an encrypted file, or restore one — to rebuild this server or move to new hardware or the USB appliance.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="ZnasBak.openExport()">Export…</button>
+            <button class="btn btn-ghost btn-sm" onclick="ZnasBak.openImport()">Import…</button>
+          </div>
+          <div id="zb-rollback-row"></div>
+        </div>
+
         <!-- ── USB appliance: SSH access (appliance-only) ── -->
         <div class="card appliance-only">
           <h3 style="margin-bottom:4px;">SSH access</h3>
@@ -8149,6 +8168,34 @@ Select the Console tab to load.</pre>
 </div>
 
 <!-- Automatic OS updates — info popup -->
+<!-- v6.10.4: in-app Guide — 8 topics on the left, content on the right. -->
+<div class="modal-backdrop hidden" id="modal-guide" onclick="if(event.target===this)closeGuide()">
+  <div class="modal guide-modal" role="dialog" aria-labelledby="guide-title">
+    <div class="guide-head">
+      <div class="guide-brand">
+        <span class="guide-brand-ic"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
+        <div>
+          <h3 id="guide-title" style="margin:0;">ZNAS Guide</h3>
+          <div class="guide-sub">Eight things to learn to get the most out of your NAS</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeGuide()" aria-label="Close"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="guide-body">
+      <nav class="guide-nav" id="guide-nav" aria-label="Guide topics"></nav>
+      <section class="guide-content" id="guide-content" tabindex="-1"></section>
+    </div>
+    <div class="guide-foot">
+      <label class="guide-hide"><input type="checkbox" id="guide-hide-login" onchange="_guideSetHideAtLogin(this.checked)"> Don't show this guide at login</label>
+      <div class="guide-pager">
+        <span id="guide-pos" class="guide-pos"></span>
+        <button class="btn btn-ghost btn-sm" id="guide-prev" onclick="_guideStep(-1)">Previous</button>
+        <button class="btn btn-primary btn-sm" id="guide-next" onclick="_guideStep(1)">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- USB appliance: confirm an in-place image upgrade -->
 <div class="modal-backdrop hidden" id="modal-appliance-upgrade" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal" style="max-width:540px;">
@@ -13260,6 +13307,7 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
   // straight onto the "X jobs running" badge instead of a blank bar.
   _restoreActiveJobs();
   startActivityBarRefresh();
+  _guideAfterLogin();
   _startBgJobDiscovery();   // server-authoritative: always surface in-flight backups/restores
   _pollServerOpStatus();
   _startPushJobsPolling();
@@ -17683,6 +17731,12 @@ async function loadSettings() {
   loadHostname();
   loadTreeMapScheduleSettings();
   loadNTPStatus();
+  { // export/import are admin-only endpoints
+    const zbc = document.getElementById('card-backup-migration');
+    const isAdmin = typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin';
+    if (zbc) zbc.style.display = isAdmin ? '' : 'none';
+    if (isAdmin && window.ZnasBak) ZnasBak.loadStatus();
+  }
   loadWebSessionPolicy();
 }
 
@@ -32664,6 +32718,312 @@ function _interlinkSidForHostname(hn, list) {
 function openInteractiveUpdate() {
   if (window._appliance) { return; } // hidden anyway; guard direct calls
   openTermWindow('updater:' + (window._serverHostname || 'host'));
+}
+
+// ===== v6.10.4: in-app Guide ===================================================
+// Book button (top right) + auto-open after login until "Don't show this guide at
+// login" is ticked (UserPreferences.guide_hide_at_login). Eight topics; the first,
+// Quick Start, is a live checklist built from this server's real state, so it
+// also follows an InterLink relay to whichever server is being viewed.
+let _guideIdx = 0;
+let _guideQSReq = 0;
+
+const _gSvg = (paths, size) => `<svg width="${size || 17}" height="${size || 17}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const _G_IC = {
+  rocket:  '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+  disk:    '<line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/>',
+  folder:  '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M8 10v4"/><path d="M12 10v2"/><path d="M16 10v6"/>',
+  share:   '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/>',
+  shield:  '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  vm:      '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
+  bell:    '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  users:   '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  check:   '<path d="M20 6 9 17l-5-5"/>',
+  arrow:   '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  bulb:    '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  party:   '<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/>',
+};
+
+function _guideIsAdmin() { return !!(currentUser && currentUser.role === 'admin'); }
+
+// Leave the Guide and run a navigation step (a page, then optionally a dialog).
+function _guideGo(fn) {
+  closeGuide();
+  const run = {
+    disks:       () => { _guideStorageMode(); showPage('disks'); },
+    pools:       () => { _guideStorageMode(); showPage('pool'); },
+    poolCreate:  () => { _guideStorageMode(); showPage('pool'); setTimeout(() => { if (typeof openNewPool === 'function') openNewPool(); }, 350); },
+    datasets:    () => { _guideStorageMode(); showPage('datasets'); },
+    dsCreate:    () => { _guideStorageMode(); showPage('datasets'); setTimeout(() => { if (typeof openCreateDataset === 'function') openCreateDataset(); }, 350); },
+    smb:         () => { _guideStorageMode(); showPage('shares'); },
+    smbCreate:   () => { _guideStorageMode(); showPage('shares'); setTimeout(() => { if (typeof openCreateShare === 'function') openCreateShare(); }, 350); },
+    nfs:         () => { _guideStorageMode(); showPage('nfs'); },
+    protect:     () => { _guideStorageMode(); showPage('snapshots'); },
+    schedule:    () => { _guideStorageMode(); showPage('snapshots'); setTimeout(() => { if (typeof openCreateSchedule === 'function') openCreateSchedule(); }, 350); },
+    optfeat:     () => { _guideStorageMode(); showPage('prereqs'); setTimeout(() => { if (typeof switchPrereqTab === 'function') switchPrereqTab('optfeat'); }, 100); },
+    datastore:   () => { if (typeof switchSidebarMode === 'function') switchSidebarMode('networking'); showPage('lxd-datastores'); setTimeout(() => { if (typeof openAddDatastoreModal === 'function') openAddDatastoreModal(); }, 350); },
+    vms:         () => { if (typeof switchSidebarMode === 'function') switchSidebarMode('compute'); showPage('lxd'); },
+    dashboard:   () => { _guideStorageMode(); showPage('dashboard'); },
+    capacity:    () => { _guideStorageMode(); showPage('capacity'); },
+    alerts:      () => { showPage('settings'); setTimeout(() => switchSettingsTab('notifications'), 100); },
+    users:       () => { showPage('settings'); setTimeout(() => switchSettingsTab('users'), 100); },
+    security:    () => { showPage('settings'); setTimeout(() => switchSettingsTab('security'), 100); },
+    platform:    () => { showPage('updates'); },
+  }[fn];
+  if (run) setTimeout(run, 60);
+}
+function _guideStorageMode() {
+  if (typeof _sidebarMode !== 'undefined' && _sidebarMode !== 'storage' && typeof switchSidebarMode === 'function') switchSidebarMode('storage');
+}
+// Buttons that lead somewhere only an admin can act; others get a hint instead.
+function _gBtn(label, fn, primary, adminOnly) {
+  if (adminOnly !== false && !_guideIsAdmin()) return '';
+  return `<button class="btn ${primary ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="_guideGo('${fn}')">${esc(label)} ${_gSvg(_G_IC.arrow, 13)}</button>`;
+}
+const _gShot = (name, cap) => `<img class="guide-shot" src="/static/guide/${name}.png" alt="${esc(cap)}" loading="lazy"><div class="guide-cap">${esc(cap)}</div>`;
+const _gTip = html => `<div class="guide-tip">${_gSvg(_G_IC.bulb, 17)}<div>${html}</div></div>`;
+const _gIdeas = items => `<div class="guide-ideas">${items.map(([t, d]) => `<div class="guide-idea"><b>${t}</b><span>${d}</span></div>`).join('')}</div>`;
+
+const _GUIDE_TOPICS = [
+  { id: 'quick', title: 'Quick Start', blurb: 'Your first steps after installing ZNAS', ic: 'rocket', c1: '#bf5af2', c2: '#0a84ff', render: _guideRenderQuickStart },
+  { id: 'storage', title: 'Disks & ZFS pools', blurb: 'Turn your drives into safe, fast storage', ic: 'disk', c1: '#0a84ff', c2: '#32ade6', render: () => `
+      <h2>Disks & ZFS pools</h2>
+      <p class="guide-lead">A <strong>ZFS pool</strong> groups your drives into one big, self-healing storage space. Choose its <strong>layout</strong> once, at creation: it decides how many drives can fail without losing data.</p>
+      ${_gShot('pools', 'ZFS Pools: health, capacity and the member disks of a pool')}
+      ${_gIdeas([
+        ['Mirror', 'Two (or more) copies of everything. Simple and fast; survives a disk failure.'],
+        ['RAIDZ1 / RAIDZ2', 'Parity across 3+ disks: survives one (Z1) or two (Z2) failures with less space lost.'],
+        ['Stripe', 'All the space, no protection: one dead disk loses the pool. Only for scratch data.'],
+        ['Scrubs', 'A scrub reads everything and repairs silent corruption. ZNAS schedules them for you.'],
+      ])}
+      <p>Watch your drives' health in <strong>Physical Disks</strong> (SMART, temperature, SSD wear). If a pool ever becomes <em>DEGRADED</em>, the <strong>Pool Fixer</strong> walks you through the repair.</p>
+      <div class="guide-actions">${_gBtn('Open Physical Disks', 'disks', false, false)}${_gBtn('Open ZFS Pools', 'pools', true, false)}</div>
+      ${_gTip('Mix drives of the same size in a pool: a vdev only uses the capacity of its smallest disk.')}` },
+  { id: 'datasets', title: 'Datasets & snapshots', blurb: 'Organise data and rewind mistakes', ic: 'folder', c1: '#ff9f0a', c2: '#ff375f', render: () => `
+      <h2>Datasets & snapshots</h2>
+      <p class="guide-lead">A <strong>dataset</strong> is a folder with super-powers inside a pool: its own quota, compression and snapshots. Create one per kind of data (documents, photos, backups…) instead of one big folder.</p>
+      ${_gShot('qs-dataset', 'Create Dataset: name, quota, compression and more')}
+      ${_gIdeas([
+        ['Snapshots', 'An instant, read-only picture of a dataset. They take no space at first and let you restore files or the whole dataset.'],
+        ['Schedules', 'Let ZNAS take snapshots every hour or day and keep the last N automatically.'],
+        ['Quotas', 'Stop one dataset from filling the whole pool.'],
+        ['ZVols', 'Block devices carved from a pool, for iSCSI or virtual disks.'],
+      ])}
+      <div class="guide-actions">${_gBtn('Open Datasets', 'datasets', true, false)}${_gBtn('Schedule snapshots', 'schedule')}</div>
+      ${_gTip('Snapshots protect against mistakes and ransomware, not against losing the whole machine. For that, keep a copy on another server (see <strong>Protect your data</strong>).')}` },
+  { id: 'share', title: 'Share files', blurb: 'SMB for Windows and Mac, NFS for Linux', ic: 'share', c1: '#30d158', c2: '#0a9b75', render: () => `
+      <h2>Share files on your network</h2>
+      <p class="guide-lead">Shares make a dataset appear on the other computers of your network. <strong>SMB</strong> works everywhere (Windows, macOS, Linux, phones); <strong>NFS</strong> is the native choice between Linux machines.</p>
+      ${_gShot('smb', 'SMB Shares: each share, its path, access and the users allowed')}
+      ${_gIdeas([
+        ['Users', 'Create a ZNAS user for each person (role <em>smb-only</em> if they only need files). They sign in to shares with that name and password.'],
+        ['Per-user access', 'Give each user read/write or read-only access to each share.'],
+        ['Previous versions', 'Snapshots appear in Windows as "Previous Versions" so people can restore their own files.'],
+        ['NFS exports', 'Allow a network (e.g. 192.168.1.0/24) to mount a dataset, read-only or read-write.'],
+      ])}
+      <div class="guide-actions">${_gBtn('Create an SMB share', 'smbCreate', true)}${_gBtn('Open NFS Shares', 'nfs', false, false)}${_gBtn('Manage users', 'users')}</div>
+      ${_gTip('On Windows, open <strong>\\\\&lt;nas-address&gt;</strong> in File Explorer; on macOS use Finder → Go → Connect to Server → <strong>smb://&lt;nas-address&gt;</strong>.')}` },
+  { id: 'protect', title: 'Protect your data', blurb: 'Snapshots, replication, sync and UPS', ic: 'shield', c1: '#5e5ce6', c2: '#bf5af2', render: () => `
+      <h2>Protect your data</h2>
+      <p class="guide-lead">A NAS is only as good as its backups. The <strong>Protect</strong> page brings everything together: snapshot schedules, replication to another server, and file sync with external storage.</p>
+      ${_gShot('snapshots', 'Protect: snapshot & replication schedules')}
+      ${_gIdeas([
+        ['ZFS replication', 'Send datasets to another ZNAS (or any ZFS server) on a schedule. Fast and incremental.'],
+        ['Filesystem sync', 'Copy data to or from NFS, SMB and other storage with rsync.'],
+        ['Encryption', 'Encrypt sensitive datasets; ZNAS keeps the keys and unlocks them at boot. Export your keys and store them safely.'],
+        ['UPS', 'Plug in a UPS and ZNAS shuts down cleanly before the battery runs out.'],
+      ])}
+      <div class="guide-actions">${_gBtn('Open Protect', 'protect', true, false)}${_gBtn('Schedule snapshots', 'schedule')}</div>
+      ${_gTip('The 3-2-1 rule: 3 copies of your data, on 2 different devices, 1 of them off-site.')}` },
+  { id: 'virt', title: 'VMs & containers', blurb: 'Run apps right next to your storage', ic: 'vm', c1: '#ff375f', c2: '#ff9f0a', render: () => `
+      <h2>Virtual machines & containers</h2>
+      <p class="guide-lead">Run Linux or Windows <strong>VMs</strong>, lightweight <strong>LXC containers</strong> and <strong>Docker Compose</strong> apps on the same box, with their disks stored on your ZFS pools.</p>
+      ${_gShot('vms', 'VMs & Containers: every instance with live CPU, memory, disk and network')}
+      ${_gIdeas([
+        ['Datastores', 'A datastore is where instance disks live: one per ZFS pool. Create it first (sidebar: Infrastructure mode).'],
+        ['Create', 'Pick an image (Debian, Ubuntu, …) or an ISO, set CPU, memory and disk, and attach a network.'],
+        ['Compose stacks', 'Paste a docker-compose.yml: ZNAS installs Docker in the instance and keeps the stack updated.'],
+        ['Backups', 'Back instances up to another pool or another ZNAS, and restore in one click.'],
+      ])}
+      <p>The three icons under the server name switch the sidebar between <strong>Storage</strong>, <strong>Compute</strong> (your instances) and <strong>Infrastructure</strong> (networks, datastores, backups).</p>
+      <div class="guide-actions">${window._appliance ? '' : _gBtn('Enable in Optional Features', 'optfeat')}${_gBtn('Add a datastore', 'datastore')}${_gBtn('Open VMs & Containers', 'vms', true, false)}</div>` },
+  { id: 'monitor', title: 'Monitor & get alerts', blurb: 'Know what happens, before it matters', ic: 'bell', c1: '#ff9f0a', c2: '#ffd60a', render: () => `
+      <h2>Monitor & get alerts</h2>
+      <p class="guide-lead">The top bar always shows the selected pool's capacity and live disk activity. <strong>Performance</strong> charts CPU, memory, network and disk I/O; <strong>Capacity Trend</strong> shows how fast your storage fills up.</p>
+      ${_gShot('topbar', 'The top bar: pool capacity, what uses the space, and live read/write/busy')}
+      ${_gIdeas([
+        ['Notifications', 'Get alerts by email, ntfy, Gotify, Pushover or syslog: failing disks, pool problems, scrub errors, UPS events…'],
+        ['Activity & Events', 'The bar at the bottom lists everything that happened, who did it and when.'],
+        ['Disk health', 'SMART data, temperatures and SSD wear for every drive.'],
+        ['Storage map', 'Capacity Trend → Topology draws your disks, pools, datasets and shares with live I/O.'],
+      ])}
+      <div class="guide-actions">${_gBtn('Set up notifications', 'alerts', true)}${_gBtn('Open Performance', 'dashboard', false, false)}${_gBtn('Open Capacity Trend', 'capacity', false, false)}</div>
+      ${_gTip('Set up at least one notification channel: a failing disk is easy to fix when you hear about it early.')}` },
+  { id: 'admin', title: 'Users, security & updates', blurb: 'Keep ZNAS secure and up to date', ic: 'users', c1: '#64d2ff', c2: '#5e5ce6', render: () => `
+      <h2>Users, security & updates</h2>
+      <p class="guide-lead">Give everyone their own account with just the rights they need, protect admin accounts with two-factor login, and keep ZNAS current with one-click updates.</p>
+      ${_gShot('users', 'Settings → Users: roles and accounts')}
+      ${_gIdeas([
+        ['Roles', '<em>admin</em> (everything), <em>standard</em> (pick from 11 permissions), <em>read-only</em>, and <em>smb-only</em> (file sharing only).'],
+        ['Two-factor login', 'Turn on TOTP for any account from its user settings; use an authenticator app.'],
+        ['Updates', window._appliance ? 'Platform → USB Appliance Upgrades installs new signed images; the portal updates separately.' : 'Platform → ZFSNAS Instant Update installs new signed releases in seconds.'],
+        ['Many servers', 'Link several ZNAS with InterLink and switch between them from the server name menu.'],
+      ])}
+      <div class="guide-actions">${_gBtn('Manage users', 'users', true)}${_gBtn('Security settings', 'security')}${_gBtn('Open Platform', 'platform', false, false)}</div>
+      ${_gShot('platform', 'Platform: check for and install ZNAS updates')}` },
+];
+
+function openGuide(topicId) {
+  const m = document.getElementById('modal-guide');
+  if (!m) return;
+  const prefs = (currentUser && currentUser.preferences) || {};
+  document.getElementById('guide-hide-login').checked = !!prefs.guide_hide_at_login;
+  const i = _GUIDE_TOPICS.findIndex(t => t.id === topicId);
+  _guideRenderNav();
+  _guideShow(i >= 0 ? i : _guideIdx);
+  m.classList.remove('hidden');
+}
+function closeGuide() {
+  const m = document.getElementById('modal-guide');
+  if (m) m.classList.add('hidden');
+}
+function _guideRenderNav() {
+  document.getElementById('guide-nav').innerHTML = _GUIDE_TOPICS.map((t, i) => `
+    <button class="guide-topic" id="guide-topic-${i}" onclick="_guideShow(${i})">
+      <span class="guide-topic-ic" style="background:linear-gradient(135deg,${t.c1},${t.c2});">${_gSvg(_G_IC[t.ic], 16)}</span>
+      <span style="min-width:0;"><span class="guide-topic-n">${i + 1}</span> <span class="guide-topic-t">${esc(t.title)}</span>
+        <div class="guide-topic-d">${esc(t.blurb)}</div></span>
+    </button>`).join('');
+}
+function _guideShow(i) {
+  _guideIdx = Math.max(0, Math.min(_GUIDE_TOPICS.length - 1, i));
+  _GUIDE_TOPICS.forEach((_, k) => {
+    const b = document.getElementById('guide-topic-' + k);
+    if (b) b.classList.toggle('active', k === _guideIdx);
+  });
+  const active = document.getElementById('guide-topic-' + _guideIdx);
+  if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const c = document.getElementById('guide-content');
+  c.innerHTML = _GUIDE_TOPICS[_guideIdx].render() || '';
+  c.scrollTop = 0;
+  document.getElementById('guide-pos').textContent = `${_guideIdx + 1} of ${_GUIDE_TOPICS.length}`;
+  document.getElementById('guide-prev').disabled = _guideIdx === 0;
+  const next = document.getElementById('guide-next');
+  next.textContent = _guideIdx === _GUIDE_TOPICS.length - 1 ? 'Done' : 'Next';
+}
+function _guideStep(d) {
+  if (d > 0 && _guideIdx === _GUIDE_TOPICS.length - 1) { closeGuide(); return; }
+  _guideShow(_guideIdx + d);
+}
+
+// ── Quick Start: a live checklist of this server's first steps ──────────────
+function _guideRenderQuickStart() {
+  const appliance = !!window._appliance;
+  const steps = [
+    { key: 'disks', t: 'Check your physical disks', go: 'disks', shot: 'qs-disks', cap: 'Physical Disks: every drive ZNAS can use, with size, type and health',
+      p: 'Make sure ZNAS sees all your drives, with sensible sizes and healthy SMART status, before you build a pool on them.' },
+    { key: 'pool', t: 'Create a ZFS pool', go: 'poolCreate', shot: 'qs-pool', cap: 'Create ZFS Pool: pick the disks and a layout (Mirror, RAIDZ…)',
+      p: 'Group your data disks into a pool. <strong>Mirror</strong> for 2 disks, <strong>RAIDZ1/RAIDZ2</strong> for 3 or more. Already have a pool from another system? ZFS Pools can import it instead.' },
+    { key: 'datasets', t: 'Create datasets', go: 'dsCreate', shot: 'qs-dataset', cap: 'Create Dataset: one per kind of data',
+      p: 'Create a dataset for each kind of data (e.g. <em>documents</em>, <em>photos</em>, <em>backups</em>), so each gets its own snapshots and quota.' },
+    { key: 'shares', t: 'Share it over SMB', opt: true, go: 'smbCreate', shot: 'qs-share', cap: 'New Share: pick a dataset and who can access it',
+      p: 'Want to reach your files from other computers? Create an SMB share on a dataset and allow the users who need it.' },
+    appliance
+      ? { key: 'datastore', t: 'Create your first datastore', go: 'datastore', shot: 'qs-datastore', cap: 'Add Datastore: pick the ZFS pool that will hold your VMs and containers',
+          p: 'Virtualization is built into the appliance. Create a <strong>datastore</strong> on a pool so you can run VMs, containers and Compose apps.' }
+      : { key: 'optfeat', t: 'Install optional features', opt: true, go: 'optfeat', shot: 'qs-optfeat', cap: 'Requisites → Optional Features: one click per feature',
+          p: 'Add what you need: <strong>VMs & Containers</strong>, iSCSI, UPS monitoring, disk power management, MergerFS, remote VM backups…' },
+  ];
+  const html = `
+    <h2>Quick Start</h2>
+    <p class="guide-lead">${appliance
+      ? 'Welcome to your ZNAS USB Appliance! Every feature is already installed: these steps get your storage ready and your first apps running.'
+      : 'Welcome to ZNAS! These steps take you from bare disks to shared, protected storage. Each step checks what is already done on this server.'}</p>
+    <div class="guide-progress"><div class="guide-progress-bar"><div id="guide-qs-bar" style="width:0%"></div></div><span class="guide-progress-t" id="guide-qs-count">Checking this server…</span></div>
+    <div id="guide-qs-banner"></div>
+    ${steps.map((s, i) => `
+      <div class="guide-step" id="guide-qs-${s.key}">
+        <span class="guide-step-n">${i + 1}</span>
+        <div style="min-width:0;">
+          <div class="guide-step-h"><span class="guide-step-t">${s.t}</span>
+            <span class="guide-badge ${s.opt ? 'opt' : 'todo'}" id="guide-qs-${s.key}-badge">${s.opt ? 'Optional' : 'To do'}</span></div>
+          <div class="guide-step-s" id="guide-qs-${s.key}-state"></div>
+          <p>${s.p}</p>
+          ${_gShot(s.shot, s.cap)}
+          <div class="guide-actions">${_gBtn('Take me there', s.go, true)}${_guideIsAdmin() ? '' : '<span class="guide-step-s">Ask an administrator to do this step.</span>'}</div>
+        </div>
+      </div>`).join('')}`;
+  setTimeout(() => _guideCheckQuickStart(steps), 0);
+  return html;
+}
+
+async function _guideCheckQuickStart(steps) {
+  const req = ++_guideQSReq;
+  const get = url => fetch(url, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const list = d => Array.isArray(d) ? d : (d && typeof d === 'object' ? (Object.values(d).find(Array.isArray) || []) : []);
+  const [disks, pools, datasets, shares, stores] = await Promise.all([
+    get('/api/disks'), get('/api/pools'), get('/api/datasets'), get('/api/shares'),
+    window._appliance ? get('/api/incus/storage-pools-detail') : Promise.resolve(null),
+  ]);
+  if (req !== _guideQSReq || !document.getElementById('guide-qs-disks')) return; // left Quick Start meanwhile
+  // User datasets only: not pool roots, nor what virtualization creates.
+  const userDS = list(datasets).map(d => d.name || '').filter(n =>
+    n.includes('/') && !/(^|\/)(LXD-|incus-|\.znas-)/i.test(n));
+  const state = {
+    disks:     [list(disks).length > 0, n => `${n} disk${n === 1 ? '' : 's'} detected`, list(disks).length],
+    pool:      [list(pools).length > 0, () => list(pools).map(p => p.name).join(', '), list(pools).length],
+    datasets:  [userDS.length > 0, n => `${n} dataset${n === 1 ? '' : 's'}`, userDS.length],
+    shares:    [list(shares).length > 0, n => `${n} share${n === 1 ? '' : 's'}`, list(shares).length],
+    datastore: [list(stores).length > 0, () => list(stores).map(d => d.name).join(', '), list(stores).length],
+    optfeat:   [false, () => '', 0],
+  };
+  let done = 0, required = 0;
+  steps.forEach(s => {
+    const [ok, label, n] = state[s.key];
+    if (!s.opt) { required++; if (ok) done++; }
+    const row = document.getElementById('guide-qs-' + s.key);
+    const badge = document.getElementById('guide-qs-' + s.key + '-badge');
+    const st = document.getElementById('guide-qs-' + s.key + '-state');
+    if (!row) return;
+    row.classList.toggle('done', ok);
+    if (ok) {
+      badge.className = 'guide-badge ok'; badge.innerHTML = _gSvg(_G_IC.check, 11) + ' Done';
+      row.querySelector('.guide-step-n').innerHTML = _gSvg(_G_IC.check, 16);
+      if (st) st.textContent = label(n);
+    } else if (s.key === 'pool' && list(disks).length === 0) {
+      if (st) st.textContent = 'Add a disk first';
+    }
+  });
+  const pct = required ? Math.round(done * 100 / required) : 0;
+  document.getElementById('guide-qs-bar').style.width = pct + '%';
+  document.getElementById('guide-qs-count').textContent = `${done} of ${required} essential steps done`;
+  if (done === required) {
+    document.getElementById('guide-qs-banner').innerHTML = `<div class="guide-done-banner">${_gSvg(_G_IC.party, 22)}<div><strong>Your NAS is ready.</strong> Explore the other topics on the left to share, protect and monitor your data${window._appliance ? ', and to run your first VM or container' : ''}.</div></div>`;
+  }
+}
+
+// ── "Don't show this guide at login" ──────────────────────────────────────────
+function _guideSetHideAtLogin(hide) {
+  if (currentUser) {
+    currentUser.preferences = Object.assign({}, currentUser.preferences || {}, { guide_hide_at_login: !!hide });
+  }
+  fetch('/api/prefs', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guide_hide_at_login: !!hide }),
+  }).catch(() => {});
+}
+
+// Called once the app has loaded the signed-in user. The login page leaves a
+// one-shot flag, so this fires after a real login only (not on reloads).
+function _guideAfterLogin() {
+  let fromLogin = false;
+  try {
+    fromLogin = sessionStorage.getItem('znas-guide-after-login') === '1';
+    sessionStorage.removeItem('znas-guide-after-login');
+  } catch {}
+  if (!fromLogin || !_guideIsAdmin()) return;
+  if (currentUser.preferences && currentUser.preferences.guide_hide_at_login) return;
+  setTimeout(() => openGuide('quick'), 900);
 }
 
 // ===== USB appliance image upgrades =====

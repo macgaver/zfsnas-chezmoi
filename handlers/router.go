@@ -352,6 +352,19 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// --- USB appliance: SSH unlock (admin only, appliance mode only) ---
 	r.Handle("/api/appliance/ssh-access",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceSSHAccess)))).Methods("POST")
+	// --- Configuration backup & migration (.znasbak export / import) ---
+	// inspect / apply / jobs authorise themselves: admin, OR the first-run
+	// window when no user exists yet (import from /setup on a fresh server).
+	r.Handle("/api/backup/export",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleBackupExport)))).Methods("POST")
+	r.Handle("/api/backup/status",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleBackupStatus)))).Methods("GET")
+	r.Handle("/api/backup/rollback",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleBackupRollback)))).Methods("POST")
+	r.HandleFunc("/api/backup/inspect", HandleBackupInspect).Methods("POST")
+	r.HandleFunc("/api/backup/apply", HandleBackupApply).Methods("POST")
+	r.HandleFunc("/api/backup/jobs/{id}", HandleBackupJob).Methods("GET")
+
 	// --- USB appliance: image upgrades from macgaver/znas-usb-appliance ---
 	r.Handle("/api/appliance/upgrade",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeStatus)))).Methods("GET")

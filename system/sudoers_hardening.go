@@ -1128,6 +1128,9 @@ var sudoersExplanations = map[string]string{
 	"/usr/sbin/groupdel *":                                                   "Removes a Linux group when deleting the last user that owned it.",
 	"/usr/bin/gpasswd *":                                                     "Manages Linux group membership; used during user deletion to remove users from the sambashare group (and other group-management operations).",
 	"/usr/bin/smbpasswd *":                                                   "Sets or removes the Samba password for a user.",
+	"/usr/bin/pdbedit -L -w":                                                 "Configuration backup: reads the SMB password hashes of portal users so they move to the new server.",
+	"/usr/bin/pdbedit -i smbpasswd\\:/dev/stdin -e tdbsam":                   "Configuration import: loads the SMB password hashes from a backup, fed on stdin from an already-unlinked private file (nothing readable at a path).",
+	"/usr/bin/getent shadow *":                                               "Configuration backup: reads the Linux password hash of a portal user with SSH login, so it keeps working after a migration.",
 	"/usr/bin/smbstatus -S":                                                  "Lists active SMB sessions per share (v6.1.0+).",
 	"/usr/bin/chgrp sambashare *":                                            "Sets group ownership of a share directory to sambashare (v6.3.27+).",
 	"/usr/sbin/exportfs -ra":                                                 "Reloads all NFS exports after the export table is updated.",
@@ -1287,6 +1290,9 @@ Cmnd_Alias ZFSNAS_SMB = \
     /usr/sbin/groupdel *, \
     /usr/bin/gpasswd *, \
     /usr/bin/smbpasswd *, \
+    /usr/bin/pdbedit -L -w, \
+    /usr/bin/pdbedit -i smbpasswd\:/dev/stdin -e tdbsam, \
+    /usr/bin/getent shadow *, \
     /usr/bin/chgrp sambashare *, \
     /usr/bin/tee /etc/samba/smb.conf, \
     /usr/bin/smbstatus -S

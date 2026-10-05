@@ -133,6 +133,21 @@ func (s *Store) Delete(token string) {
 	s.deleteWithReason(token, "manual")
 }
 
+// DeleteAll signs everyone out and saves the now-empty store at once. Used
+// when the users themselves are replaced (configuration import / rollback):
+// a session must not outlive the account and role it was issued for.
+func (s *Store) DeleteAll(reason string) {
+	s.mu.Lock()
+	old := s.sessions
+	s.sessions = make(map[string]*Session)
+	s.mu.Unlock()
+	s.savePersistAsync()
+	s.FlushNow()
+	for _, sess := range old {
+		s.notifyEvict(sess.UserID, reason)
+	}
+}
+
 // deleteWithReason is the internal Delete variant that lets callers (the
 // eviction paths in Get and CleanExpired) record why a session went away.
 func (s *Store) deleteWithReason(token, reason string) {
