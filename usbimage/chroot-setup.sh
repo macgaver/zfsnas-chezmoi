@@ -7,6 +7,10 @@
 set -euo pipefail
 CODENAME="$1"; MIRROR="$2"; INCUS_VERSION="${3:-}"
 export DEBIAN_FRONTEND=noninteractive
+# The caller's HOME means nothing inside the chroot. CI runs build.sh with
+# `sudo -E`, which keeps HOME=/home/ghrunner — a path that does not exist in
+# the rootfs, so any tool that writes under ~ (gpg did) aborts the build.
+export HOME=/root
 
 cat > /etc/apt/sources.list <<EOF
 deb $MIRROR $CODENAME main universe
@@ -82,7 +86,10 @@ if [ -n "$INCUS_VERSION" ]; then
     install -d -m 0755 /etc/apt/keyrings
     curl -fsSL --retry 3 https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
     # The fingerprint the Incus documentation publishes for this key.
-    fp=$(gpg --show-keys --with-colons /etc/apt/keyrings/zabbly.asc | awk -F: '/^fpr/{print $10; exit}')
+    # Throwaway keyring dir: reading a key file must not create ~/.gnupg in the image.
+    gnupg_tmp=$(mktemp -d)
+    fp=$(GNUPGHOME="$gnupg_tmp" gpg --batch --show-keys --with-colons /etc/apt/keyrings/zabbly.asc | awk -F: '/^fpr/{print $10; exit}')
+    rm -rf "$gnupg_tmp"
     [ "$fp" = "4EFC590696CB15B87C73A3AD82CC8797C838DCFD" ] \
         || { echo "ERROR: unexpected Zabbly key fingerprint $fp" >&2; exit 1; }
     printf '%s\n' "Enabled: yes" "Types: deb" "URIs: https://pkgs.zabbly.com/incus/stable" \

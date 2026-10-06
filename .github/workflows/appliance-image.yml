@@ -1,8 +1,8 @@
 # USB appliance image: build, sign and publish to macgaver/znas-usb-appliance.
 #
 # ── TO SHIP A NEW APPLIANCE IMAGE, EDIT THE VALUES BELOW AND PUSH. ──
-# A push that changes this file builds an image only when there is something
-# new to ship, so any other edit here is a no-op:
+# A push that changes this file (or anything under usbimage/) builds an image
+# only when there is something new to ship, so any other edit is a no-op:
 #   - release v<APPLIANCE_UBUNTU_VERSION>-<APPLIANCE_BUILD> does not exist yet
 #     on the appliance repo, or
 #   - APPLIANCE_INCUS_VERSION differs from the Incus version recorded in the
@@ -60,6 +60,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/appliance-image.yml
+      # A fix to the image build retries a release that failed to publish;
+      # once the release exists the check job turns any push into a no-op.
+      - usbimage/**
   workflow_dispatch:   # manual retry of a failed build (same skip rule applies)
 
 permissions:
