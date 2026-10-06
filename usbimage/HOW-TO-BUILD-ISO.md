@@ -130,6 +130,7 @@ Everything is kept in `./work/`, so you can resume from any stage:
 |---|---|---|
 | `APPLIANCE_BUILD` | `1` | The last digit of the version (`26.04.1-N`). Bump it to ship a new image on the same Ubuntu release; go back to 1 when Ubuntu moves. |
 | `UBUNTU_VERSION` | unset | If set (e.g. `26.04.1`), the build fails unless the rootfs really is that Ubuntu point release. Official builds set it. |
+| `INCUS_VERSION` | unset | If set (e.g. `7.5.1`), Incus is installed at exactly that version from the Incus project's own packages (Zabbly, `stable`) instead of Ubuntu's archive (frozen at 6.0.5 on 26.04). `remote-build.sh` defaults it to `APPLIANCE_INCUS_VERSION` from the workflow. Only ever move it forward: Incus upgrades its database on first start and an older Incus cannot read it back. |
 | `IMAGE_VERSION` | see `conf.sh` | The portal version you are baking in; only used for labels and a mismatch warning. |
 | `WORK` | `./work` | Where the rootfs and intermediate files live. |
 | `ZNAS_MINIO_CACHE` | unset | A folder holding `minio` and `mc` to seed a fresh rootfs with (MinIO no longer publishes them). |
@@ -212,8 +213,11 @@ built into the portal, in `internal/updater/pubkey.go`.
   (`cosign sign-blob --key your.key --tlog-upload=false --output-signature X.iso.sig X.iso`)
   and publish them with `./publish-iso.sh --repo you/your-repo`.
 - **Official images** are built by `.github/workflows/appliance-image.yml`.
-  Maintainers change `APPLIANCE_UBUNTU_VERSION` / `APPLIANCE_BUILD` at the top
-  of that file and push; the workflow builds, boot-tests, signs and publishes.
+  Maintainers change `APPLIANCE_UBUNTU_VERSION` / `APPLIANCE_BUILD` /
+  `APPLIANCE_INCUS_VERSION` at the top of that file and push; the workflow
+  builds, boot-tests, signs and publishes. A new `APPLIANCE_INCUS_VERSION`
+  alone is enough: the workflow compares it with the Incus version recorded in
+  the newest release's notes and builds the next free build number.
 
 Each release carries three assets whose **names must not change**: the portal
 reads the version from the ISO's file name.
@@ -256,3 +260,18 @@ clears leftovers before it deletes the old rootfs. After a hard kill, check
 
 **Out of disk space**
 Delete `./work/` and old ISOs. A build needs about 10 GB free.
+
+## Realtek NICs
+
+The in-kernel `r8169` driver (with `linux-firmware-realtek`) handles every
+Realtek Ethernet chip and is always the default. The image also carries
+Realtek's own `r8168` (RTL8111/8168) and `r8125` (RTL8125 2.5G) drivers, built
+against the image kernel, for older RTL8111 revisions whose link drops or never
+comes up under `r8169`. They are blacklisted and only used on request:
+
+- once: boot **"ZNAS System - load OS to RAM, Realtek vendor NIC driver"** (last GRUB entry);
+- always: `touch /persist/.zfsnas-persist/realtek-vendor` and reboot (remove it to go back).
+
+They need Secure Boot off (or legacy BIOS): they are signed with a key made at
+build time that no firmware trusts. `r8169` is always reloaded afterwards for
+any chip the vendor drivers did not claim. Logic: `overlay/usr/lib/zfsnas/realtek-vendor.sh`.

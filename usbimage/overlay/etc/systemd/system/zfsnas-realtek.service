@@ -1,0 +1,14 @@
+[Unit]
+Description=ZFS NAS appliance: Realtek vendor NIC driver (opt-in)
+DefaultDependencies=no
+After=systemd-udev-trigger.service systemd-modules-load.service local-fs.target
+Before=zfsnas-netgen.service networking.service network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/zfsnas/realtek-vendor.sh
+
+[Install]
+WantedBy=sysinit.target

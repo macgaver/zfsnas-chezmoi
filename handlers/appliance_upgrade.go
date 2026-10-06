@@ -472,6 +472,13 @@ func HandleApplianceUpgradeApply(w http.ResponseWriter, r *http.Request) {
 			`The appliance was started with "run from stick", so the image on the stick is in use. Reboot and let the default "load OS to RAM" entry start, then upgrade.`)
 		return
 	}
+	if bad := system.UnavailableIncusStoragePools(); len(bad) > 0 {
+		jsonErr(w, http.StatusConflict,
+			"Incus storage pool(s) "+strings.Join(bad, ", ")+" are unavailable. A new image can bring a newer Incus, "+
+				"which upgrades its database on first start and refuses to start at all while a storage pool is missing — "+
+				"every VM and container would stay down. Reconnect or import the pool, or delete the datastore, then upgrade.")
+		return
+	}
 	var req struct {
 		Mode string `json:"mode"` // "stage" (default) or "reboot"
 	}

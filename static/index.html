@@ -4267,23 +4267,26 @@
             </tbody>
           </table>
         </div>
+        <div style="margin:0 0 10px;">
+          <h3 style="margin:0;">Network Interfaces</h3>
+          <div style="font-size:13px;color:var(--text-3);margin-top:2px;">The server's physical ports, and the VLANs and bonds built on them.</div>
+        </div>
         <div class="card" style="padding:0;overflow:hidden;">
           <table class="data-table" id="lxd-other-networks-table">
             <thead>
               <tr>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="name" onclick="sortNetworksTable('others','name')">Name<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:80px;" data-net-table="others" data-net-key="type" onclick="sortNetworksTable('others','type')">Type<span class="sort-arrow"></span></th>
-                <th class="lxd-sortable" style="width:120px;" data-net-table="others" data-net-key="ports_label" onclick="sortNetworksTable('others','ports_label')">Physical NIC<span class="sort-arrow"></span></th>
+                <th class="lxd-sortable" style="width:150px;" data-net-table="others" data-net-key="ports_label" onclick="sortNetworksTable('others','ports_label')">Physical NIC<i class="info-tip" data-tip="For a VLAN or a bond: the physical port(s) it actually runs on, found by following it down through any bridge or bond.&#10;&#10;A physical port is its own NIC, so its row shows a dash."></i><span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" style="width:96px;" data-net-table="others" data-net-key="speed_mbps" onclick="sortNetworksTable('others','speed_mbps')">Speed<i class="info-tip" data-tip="The link speed the physical NIC has currently negotiated with its switch, read from the kernel (/sys/class/net/&lt;nic&gt;/speed).&#10;&#10;Shows a dash when there is nothing to report: the network has no physical port, or the port has no carrier — an unplugged NIC has negotiated nothing.&#10;&#10;For a NAT network this is the uplink it masquerades onto."></i><span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="ipv4" onclick="sortNetworksTable('others','ipv4')">IPv4<span class="sort-arrow"></span></th>
                 <th class="lxd-sortable" data-net-table="others" data-net-key="ipv6" onclick="sortNetworksTable('others','ipv6')">IPv6<span class="sort-arrow"></span></th>
-                <th class="lxd-sortable" style="width:60px;" data-net-table="others" data-net-key="vm_count" onclick="sortNetworksTable('others','vm_count')">VMs<span class="sort-arrow"></span></th>
-                <th class="lxd-sortable" data-net-table="others" data-net-key="description" onclick="sortNetworksTable('others','description')">Description<span class="sort-arrow"></span></th>
+                <th class="lxd-sortable" data-net-table="others" data-net-key="nic_model" onclick="sortNetworksTable('others','nic_model')">Model<span class="sort-arrow"></span></th>
                 <th style="width:40px;"></th>
               </tr>
             </thead>
             <tbody id="lxd-other-networks-tbody">
-              <tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>
             </tbody>
           </table>
         </div>
@@ -62890,13 +62893,14 @@ function renderLXDNetworksTable(nets) {
   if (!tbodyBridges || !tbodyOther) return;
   if (!nets || nets.length === 0) {
     tbodyBridges.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>';
-    tbodyOther.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>';
+    tbodyOther.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>';
     return;
   }
   // ports_label backs the sortable "Physical NIC" column.
   (nets || []).forEach(n => {
     const phys = (n.ports || []).filter(p => !/^(veth|tap|macvlan|vlan)/.test(p));
     n.ports_label = phys.length ? phys.join(', ') : (n.nat && n.uplink ? n.uplink : '');
+    if (n.type !== 'bridge') n.ports_label = (n.parent_nics || []).join(', ');
   });
   _bridgesCache = (nets || []).filter(n => n.type === 'bridge');
   _othersCache = (nets || []).filter(n => n.type !== 'bridge');
@@ -62906,8 +62910,8 @@ function renderLXDNetworksTable(nets) {
     ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No bridges found.</td></tr>'
     : _bridgesCache.map(n => _renderNetworkRow(n)).join('');
   tbodyOther.innerHTML = _othersCache.length === 0
-    ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
-    : _othersCache.map(n => _renderNetworkRow(n)).join('');
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
+    : _othersCache.map(n => _renderInterfaceRow(n)).join('');
 }
 
 function _sortArr(arr, key, dir) {
@@ -62920,7 +62924,7 @@ function _sortArr(arr, key, dir) {
   });
 }
 
-function _renderNetworkRow(n) {
+function _renderNetworkRow(n, opts) {
   const typeBadge = `<span style="background:rgba(99,179,237,0.15);color:#63b3ed;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;">${esc(n.type)}</span>`;
   const vmPill = n.vm_count > 0
     ? `<span style="background:rgba(63,185,80,0.15);color:#3fb950;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600;">${n.vm_count}</span>`
@@ -62977,6 +62981,34 @@ function _renderNetworkRow(n) {
     actionsEl = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
       onclick='togglePhysicalIfaceBurger(event,${JSON.stringify(n.name)})'><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
   }
+  if (opts && opts.iface) {
+    // Network Interfaces table: physical ports, VLANs and bonds. No VM count
+    // (instances attach to bridges, not to these), and the NIC hardware in
+    // place of the Incus description, which these rows never have.
+    const parents = n.parent_nics || [];
+    if (n.type === 'physical' || !parents.length) {
+      portsEl = `<span style="font-size:12px;color:var(--text-3);">—</span>`;
+    } else {
+      const via = n.vlan_parent && !parents.includes(n.vlan_parent)
+        ? ` <span style="color:var(--text-3);">via ${esc(n.vlan_parent)}</span>` : '';
+      portsEl = `<span style="font-family:monospace;font-size:12px;">${esc(parents.join(', '))}${via}</span>`;
+    }
+    const tag = n.vlan_id
+      ? `<span style="background:rgba(188,140,255,0.15);color:#bc8cff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;margin-right:6px;">VLAN ${n.vlan_id}</span>` : '';
+    const modelEl = n.nic_model
+      ? `<span style="font-size:12px;color:var(--text-2);">${esc(n.nic_model)}</span>`
+      : `<span style="font-size:12px;color:var(--text-3);font-style:italic;">${n.type === 'physical' ? 'unknown' : '—'}</span>`;
+    return `<tr>
+    <td style="font-family:monospace;font-weight:600;">${esc(n.name)}</td>
+    <td>${typeBadge}</td>
+    <td>${portsEl}</td>
+    <td>${speedEl}</td>
+    <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.ipv4 || '—')}</td>
+    <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.ipv6 || '—')}</td>
+    <td>${tag}${modelEl}</td>
+    <td style="text-align:right;">${actionsEl}</td>
+  </tr>`;
+  }
   return `<tr>
     <td style="font-family:monospace;font-weight:600;">${esc(n.name)}</td>
     <td>${typeBadge}</td>
@@ -62989,6 +63021,8 @@ function _renderNetworkRow(n) {
     <td style="text-align:right;">${actionsEl}</td>
   </tr>`;
 }
+
+function _renderInterfaceRow(n) { return _renderNetworkRow(n, { iface: true }); }
 
 function sortNetworksTable(table, key) {
   const tbodyId = table === 'bridges' ? 'lxd-networks-tbody-bridges' : 'lxd-other-networks-tbody';
@@ -63006,8 +63040,8 @@ function sortNetworksTable(table, key) {
     else { _othersSortKey = key; _othersSortDir = 'asc'; }
     _sortArr(_othersCache, _othersSortKey, _othersSortDir);
     tbody.innerHTML = _othersCache.length === 0
-      ? '<tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
-      : _othersCache.map(n => _renderNetworkRow(n)).join('');
+      ? '<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px;">No other networks.</td></tr>'
+      : _othersCache.map(n => _renderInterfaceRow(n)).join('');
   }
   // Update sort arrows: clear all headers for this table, then mark the active one.
   document.querySelectorAll(`th.lxd-sortable[data-net-table="${table}"]`).forEach(th => {

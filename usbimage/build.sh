@@ -131,7 +131,7 @@ stage_chroot() {
     fi
     mount_chroot
     trap umount_chroot EXIT
-    chroot "$ROOTFS" /chroot-setup.sh "$UBUNTU_CODENAME" "$MIRROR"
+    chroot "$ROOTFS" /chroot-setup.sh "$UBUNTU_CODENAME" "$MIRROR" "${INCUS_VERSION:-}"
     umount_chroot
     trap - EXIT
     rm -f "$ROOTFS/chroot-setup.sh"
@@ -154,8 +154,9 @@ stage_squashfs() {
     # Stamped here, the last step before the rootfs is frozen, so the Ubuntu
     # release it names is the one actually shipped whatever stage we resumed
     # from. appliance_version is what the portal compares against GitHub.
-    printf 'version=%s\nappliance_version=%s\nbuild_date=%s\n' \
+    printf 'version=%s\nappliance_version=%s\nbuild_date=%s\nincus_version=%s\n' \
         "$IMAGE_VERSION" "$(appliance_version)" "$(date -u +%F)" \
+        "$(chroot "$ROOTFS" dpkg-query -W -f='${Version}' incus 2>/dev/null || true)" \
         > "$ROOTFS/etc/zfsnas-release"
     # Console pre-login line (agetty): name the appliance, not just Ubuntu.
     # Display only — version checks read os-release / zfsnas-release, never this.
@@ -203,6 +204,9 @@ stage_iso() {
     # themselves are already in the stock generic kernel.
     # "safe graphics" deliberately does NOT get these flags: on hardware with a
     # broken IOMMU implementation it is the way back in.
+    # The Realtek entry is LAST so test.sh's positions stay valid; it is the
+    # default entry plus znas.realtek=vendor (see realtek-vendor.sh), for an
+    # old RTL8111 whose link does not come up with the in-kernel r8169.
     # noprompt: casper-stop otherwise ends every shutdown/reboot with "Please
     # remove the installation medium, then press ENTER" and waits forever for
     # a keypress — a headless appliance never reboots. (The portal also drops
@@ -230,6 +234,10 @@ menuentry "ZNAS System (USB appliance) - run from stick, upgrade from another PC
 }
 menuentry "ZNAS System (safe graphics)" {
     linux  /casper/vmlinuz boot=casper noprompt nomodeset nopersistent console=tty0 console=ttyS0,115200n8 ---
+    initrd /casper/initrd
+}
+menuentry "ZNAS System - load OS to RAM, Realtek vendor NIC driver (r8168/r8125)" {
+    linux  /casper/vmlinuz boot=casper noprompt toram nopersistent znas.realtek=vendor intel_iommu=on amd_iommu=on iommu=pt console=tty0 console=ttyS0,115200n8 ---
     initrd /casper/initrd
 }
 EOF

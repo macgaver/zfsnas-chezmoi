@@ -2,9 +2,10 @@
 # chroot-setup.sh — runs INSIDE the target rootfs chroot. Installs the
 # kernel, casper, the signed boot chain, and every feature package the
 # portal can enable (spec: everything baked, user only configures), then
-# applies appliance hygiene. Args: $1 = Ubuntu codename, $2 = mirror.
+# applies appliance hygiene. Args: $1 = Ubuntu codename, $2 = mirror,
+# $3 = Incus version to install from Zabbly (empty: Ubuntu's own package).
 set -euo pipefail
-CODENAME="$1"; MIRROR="$2"
+CODENAME="$1"; MIRROR="$2"; INCUS_VERSION="${3:-}"
 export DEBIAN_FRONTEND=noninteractive
 
 cat > /etc/apt/sources.list <<EOF
@@ -67,14 +68,111 @@ apt-get install -y --no-install-recommends \
 #                   NTFS guest disks.
 #   chrony       -> chronyc, behind the Network Time panel; the virt enable
 #                   flow installs it off-appliance for guest time sync.
+# Incus. Ubuntu's archive keeps one Incus for the life of the release (26.04:
+# 6.0.5, frozen), so official images take it from the Incus project's own
+# packages (Zabbly) at exactly the version the CI workflow declares
+# (APPLIANCE_INCUS_VERSION). Pinned at 1001 so it wins over the archive and
+# can replace an archive build left in a reused rootfs; the archive's incus*
+# are pinned away so a later apt run can never swap it back.
+# Note: Zabbly's Incus ships its own QEMU, OVMF and LXC under /opt/incus.
+INCUS_PKGS=(incus incus-base incus-client incus-extra)
+if [ -n "$INCUS_VERSION" ]; then
+    echo "== Incus $INCUS_VERSION from Zabbly =="
+    apt-get install -y --no-install-recommends gnupg
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL --retry 3 https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
+    # The fingerprint the Incus documentation publishes for this key.
+    fp=$(gpg --show-keys --with-colons /etc/apt/keyrings/zabbly.asc | awk -F: '/^fpr/{print $10; exit}')
+    [ "$fp" = "4EFC590696CB15B87C73A3AD82CC8797C838DCFD" ] \
+        || { echo "ERROR: unexpected Zabbly key fingerprint $fp" >&2; exit 1; }
+    printf '%s\n' "Enabled: yes" "Types: deb" "URIs: https://pkgs.zabbly.com/incus/stable" \
+        "Suites: $CODENAME" "Components: main" "Architectures: amd64" \
+        "Signed-By: /etc/apt/keyrings/zabbly.asc" \
+        > /etc/apt/sources.list.d/zabbly-incus-stable.sources
+    # incus-agent is the exception: Ubuntu's package is the GUEST side (unit +
+    # udev rule that start the agent when this appliance itself runs as an
+    # Incus/LXD VM) and Zabbly ships no equivalent; without it `incus exec`
+    # into an appliance VM stops working. apt applies the first matching
+    # record, so it comes before the incus* block.
+    printf '%s\n' "Package: incus-agent" "Pin: release o=Ubuntu" "Pin-Priority: 500" "" \
+        "Package: ${INCUS_PKGS[*]}" "Pin: version 1:${INCUS_VERSION}-*" "Pin-Priority: 1001" "" \
+        "Package: incus*" "Pin: release o=Ubuntu" "Pin-Priority: -1" \
+        > /etc/apt/preferences.d/zabbly-incus
+    apt-get update
+    apt-get install -y --allow-downgrades "${INCUS_PKGS[@]}" incus-agent
+    got=$(dpkg-query -W -f='${Version}' incus)
+    case "$got" in
+        1:"$INCUS_VERSION"-*) echo "incus $got installed" ;;
+        *) echo "ERROR: incus $got installed, expected $INCUS_VERSION" >&2; exit 1 ;;
+    esac
+    # VMs created under Ubuntu's Incus keep their UEFI variables in a file
+    # named after Ubuntu's firmware (qemu.nvram -> OVMF_VARS_4M.fd). Zabbly's
+    # Incus only searches its own folder, under its own names, so without
+    # these aliases every existing UEFI VM fails after the upgrade with
+    # "Unable to locate matching firmware" (seen on the 26.04.1-4 test).
+    q=/opt/incus/share/qemu
+    for pair in OVMF_CODE.4MB.fd:OVMF_CODE_4M.fd OVMF_CODE.4MB.fd:OVMF_CODE_4M.secboot.fd \
+                OVMF_VARS.4MB.fd:OVMF_VARS_4M.fd OVMF_VARS.4MB.ms.fd:OVMF_VARS_4M.ms.fd; do
+        src=${pair%%:*} alias=${pair#*:}
+        [ -e "$q/$src" ] || { echo "ERROR: $q/$src missing from Zabbly's Incus" >&2; exit 1; }
+        [ -e "$q/$alias" ] || ln -s "$src" "$q/$alias"
+    done
+else
+    apt-get install -y incus
+fi
+
 apt-get install -y \
-    zfsutils-linux incus genisoimage samba nfs-kernel-server nut mergerfs tgt \
+    zfsutils-linux genisoimage samba nfs-kernel-server nut mergerfs tgt \
     zram-tools \
     pciutils usbutils targetcli-fb sshpass ntfs-3g chrony \
     smartmontools hdparm rsync sanoid pv \
     ifupdown bridge-utils \
     gdisk parted dosfstools e2fsprogs zstd \
     python3 jq net-tools ethtool lsof nvme-cli lsscsi
+
+# Realtek vendor NIC drivers (r8168: RTL8111/8168 family, r8125: RTL8125
+# 2.5G). The in-kernel r8169 already drives every Realtek chip and stays the
+# default; these are the opt-in fallback for older RTL8111 revisions that drop
+# their link or time out under r8169 — common on second-hand desktops. See
+# /usr/lib/zfsnas/realtek-vendor.sh for how they are switched on.
+# Built here against the image kernel, then only the .ko files are kept and
+# DKMS + the compiler are purged: the image kernel never changes in place, and
+# gcc/dkms would cost ~200 MB of squashfs. Best-effort per driver: a vendor
+# source that does not compile against a new kernel must not sink the image.
+echo "== Realtek vendor NIC drivers =="
+KVER=$(ls -1 /lib/modules | sort -V | tail -n1)
+printf '%s\n' "deb $MIRROR $CODENAME multiverse" > /etc/apt/sources.list.d/znas-build-multiverse.list
+apt-get update
+HAD_HEADERS=0
+dpkg -s "linux-headers-$KVER" >/dev/null 2>&1 && HAD_HEADERS=1
+VENDOR_DIR=/lib/modules/$KVER/updates/znas-realtek
+mkdir -p "$VENDOR_DIR"
+for drv in r8168 r8125; do
+    if apt-get install -y --no-install-recommends "linux-headers-$KVER" dkms "${drv}-dkms" \
+        && ko=$(find "/lib/modules/$KVER" -name "${drv}.ko*" -path '*dkms*' -o -name "${drv}.ko*" -path '*updates*' | grep -v znas-realtek | head -n1) \
+        && [ -n "$ko" ]; then
+        cp "$ko" "$VENDOR_DIR/"
+        echo "realtek: built $drv for $KVER"
+    else
+        echo "WARNING: realtek: $drv did not build for $KVER — the image ships without it" >&2
+    fi
+    apt-get purge -y "${drv}-dkms" 2>/dev/null || true
+done
+apt-get purge -y dkms 2>/dev/null || true
+[ "$HAD_HEADERS" = 1 ] || apt-get purge -y "linux-headers-$KVER" 2>/dev/null || true
+apt-get autoremove -y --purge
+rm -f /etc/apt/sources.list.d/znas-build-multiverse.list
+apt-get update
+# The DKMS packages ship a "blacklist r8169" of their own; the purge removes
+# it, and must have: r8169 stays the default.
+rm -f /etc/modprobe.d/r8168-dkms.conf /etc/modprobe.d/r8125-dkms.conf
+# Never auto-load the vendor drivers (udev would race them against r8169);
+# realtek-vendor.sh loads them explicitly, which a blacklist does not stop.
+printf '%s\n' "# ZNAS appliance: opt-in only, see /usr/lib/zfsnas/realtek-vendor.sh" \
+    "blacklist r8168" "blacklist r8125" > /etc/modprobe.d/zfsnas-realtek-vendor.conf
+depmod "$KVER"
+systemctl enable zfsnas-realtek.service
+ls -l "$VENDOR_DIR"
 
 # MinIO is not in the archive — bake the same binaries the portal's
 # install flow downloads (system/minio.go).

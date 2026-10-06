@@ -623,3 +623,30 @@ func HostBridgeNames() []string {
 	sort.Strings(out)
 	return out
 }
+
+// UnavailableIncusStoragePools lists storage pools Incus cannot reach right
+// now (disks missing, pool not imported). Empty when Incus is absent.
+//
+// A newer Incus upgrades its database on first start, and some of those
+// upgrade steps need EVERY storage pool: with one unavailable, incusd refuses
+// to start at all (seen going 6.0.5 -> 7.5.1: "Failed applying patch …:
+// Unavailable storage pools"), taking every VM and container down with it.
+func UnavailableIncusStoragePools() []string {
+	if _, err := exec.LookPath("incus"); err != nil {
+		return nil
+	}
+	var pools []struct {
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	}
+	if err := incusQuery("/1.0/storage-pools?recursion=1", &pools); err != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range pools {
+		if p.Status != "" && p.Status != "Created" {
+			out = append(out, p.Name)
+		}
+	}
+	return out
+}

@@ -195,6 +195,14 @@ type LXDNetwork struct {
 	// instead of lexically, where "10 Gb/s" would sort before "1 Gb/s".
 	SpeedLabel string `json:"speed_label"`
 	SpeedMbps  int    `json:"speed_mbps"`
+	// Interfaces table (non-bridge rows): the real port(s) a VLAN or bond
+	// rides on (walked down through bridges and bonds), the VLAN tag, and the
+	// hardware behind the row — its own for a physical NIC, its port's for a
+	// VLAN — e.g. "Realtek Semiconductor RTL8111/8168/8211/8411 …".
+	ParentNICs []string `json:"parent_nics,omitempty"`
+	VLANParent string   `json:"vlan_parent,omitempty"`
+	VLANID     int      `json:"vlan_id,omitempty"`
+	NICModel   string   `json:"nic_model,omitempty"`
 }
 
 // physicalNICs returns the real ports behind this network: the interfaces
@@ -207,6 +215,9 @@ func (n LXDNetwork) physicalNICs() []string {
 	// own NICs that way, so the row's name is the NIC to report on. Those rows
 	// have no ports and no uplink, and would otherwise be the one place in
 	// these tables showing a real NIC with no speed beside it.
+	if len(n.ParentNICs) > 0 {
+		return n.ParentNICs // a VLAN/bond: the speed is its port's
+	}
 	if n.Type == "physical" || n.Type == "vlan" {
 		return []string{n.Name}
 	}
@@ -297,8 +308,44 @@ func ListLXDNetworks() ([]LXDNetwork, error) {
 				n.UplinkPinned = r.Config[HostNatUplinkKey] != ""
 			}
 		}
+		if r.Type != "bridge" {
+			if parent, id, ok := VLANInfo(r.Name); ok {
+				n.VLANParent, n.VLANID = parent, id
+			}
+			if !hasHardware(r.Name) {
+				n.ParentNICs = PhysicalPortsUnder(r.Name)
+			}
+		}
 		n.SpeedLabel, n.SpeedMbps = NICSpeedsLabel(n.physicalNICs())
 		nets = append(nets, n)
+	}
+	// One lspci call for every port the interfaces table names.
+	var ports []string
+	for _, n := range nets {
+		if n.Type != "bridge" {
+			ports = append(ports, n.Name)
+			ports = append(ports, n.ParentNICs...)
+		}
+	}
+	models := NICModels(ports)
+	for i := range nets {
+		n := &nets[i]
+		if n.Type == "bridge" {
+			continue
+		}
+		if m := models[n.Name]; m != "" {
+			n.NICModel = m
+			continue
+		}
+		var ms []string
+		seen := map[string]bool{}
+		for _, p := range n.ParentNICs {
+			if m := models[p]; m != "" && !seen[m] {
+				seen[m] = true
+				ms = append(ms, m)
+			}
+		}
+		n.NICModel = strings.Join(ms, " + ")
 	}
 	return nets, nil
 }

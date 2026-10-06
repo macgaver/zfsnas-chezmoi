@@ -63,7 +63,7 @@ fi
 
 default_notes() {
     cat <<NOTES
-ZNAS USB appliance image **${VERSION}**: Ubuntu ${UBUNTU} LTS with the ZNAS portal ${IMAGE_VERSION}.
+ZNAS USB appliance image **${VERSION}**: Ubuntu ${UBUNTU} LTS with the ZNAS portal ${IMAGE_VERSION}${INCUS_VERSION:+ and Incus **${INCUS_VERSION}**}.
 
 **Upgrading an appliance:** Platform → USB Appliance Upgrades. Your settings are kept.
 
