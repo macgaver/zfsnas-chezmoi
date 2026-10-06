@@ -100,7 +100,7 @@ func HandleTestAlert(w http.ResponseWriter, r *http.Request) {
 		alerts.EventTest,
 		"Test Alert",
 		"Manual Test",
-		"This is a test alert from the ZFS NAS management portal.",
+		"This is a test alert from the ZNAS portal.",
 	); err != nil {
 		jsonErr(w, http.StatusInternalServerError, "failed to dispatch test alerts: "+err.Error())
 		return

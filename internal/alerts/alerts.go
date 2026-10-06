@@ -570,7 +570,7 @@ func TestEmail() error {
 		return err
 	}
 	hostname, _ := os.Hostname()
-	return sendEmail(cfg, "Test Alert", "Manual Test", "This is a test alert from the ZFS NAS management portal.", hostname)
+	return sendEmail(cfg, "Test Alert", "Manual Test", "This is a test alert from the ZNAS portal.", hostname)
 }
 
 func TestNtfy() error {
@@ -579,7 +579,7 @@ func TestNtfy() error {
 		return err
 	}
 	hostname, _ := os.Hostname()
-	return sendNtfy(cfg.Ntfy, "Test Alert", "Manual Test", "This is a test notification from the ZFS NAS management portal.", hostname)
+	return sendNtfy(cfg.Ntfy, "Test Alert", "Manual Test", "This is a test notification from the ZNAS portal.", hostname)
 }
 
 func TestGotify() error {
@@ -588,7 +588,7 @@ func TestGotify() error {
 		return err
 	}
 	hostname, _ := os.Hostname()
-	return sendGotify(cfg.Gotify, "Test Alert", "Manual Test", "This is a test notification from the ZFS NAS management portal.", hostname)
+	return sendGotify(cfg.Gotify, "Test Alert", "Manual Test", "This is a test notification from the ZNAS portal.", hostname)
 }
 
 func TestPushover() error {
@@ -597,7 +597,7 @@ func TestPushover() error {
 		return err
 	}
 	hostname, _ := os.Hostname()
-	return sendPushover(cfg.Pushover, "Test Alert", "Manual Test", "This is a test notification from the ZFS NAS management portal.", hostname)
+	return sendPushover(cfg.Pushover, "Test Alert", "Manual Test", "This is a test notification from the ZNAS portal.", hostname)
 }
 
 func TestSyslog() error {
@@ -606,7 +606,7 @@ func TestSyslog() error {
 		return err
 	}
 	hostname, _ := os.Hostname()
-	return sendSyslogMsg(cfg.Syslog, "Test Alert", "Manual Test", "This is a test from the ZFS NAS management portal.", hostname)
+	return sendSyslogMsg(cfg.Syslog, "Test Alert", "Manual Test", "This is a test from the ZNAS portal.", hostname)
 }
 
 func TestWebSocket() {
@@ -617,7 +617,7 @@ func TestWebSocket() {
 	wsHub.BroadcastJSON(map[string]string{
 		"subject":  "Test Alert",
 		"event":    "Manual Test",
-		"details":  "This is a test in-app notification from the ZFS NAS management portal.",
+		"details":  "This is a test in-app notification from the ZNAS portal.",
 		"hostname": hostname,
 		"time":     time.Now().Format("2006-01-02 15:04:05 MST"),
 	})
@@ -638,7 +638,7 @@ func sendEmail(cfg *AlertConfig, subject, event, details, hostname string) error
 	if err != nil {
 		return err
 	}
-	return sendSMTP(&cfg.Email, subject, body)
+	return sendSMTP(&cfg.Email, notifTitle(hostname, subject), body)
 }
 
 func sendSMTP(t *EmailTarget, subject, htmlBody string) error {
@@ -709,12 +709,23 @@ func buildMIME(from string, to []string, subject, htmlBody string) []byte {
 	for _, t := range to {
 		fmt.Fprintf(&buf, "To: %s\r\n", t)
 	}
-	fmt.Fprintf(&buf, "Subject: [ZFS NAS] %s\r\n", subject)
+	fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
 	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&buf, "Content-Type: text/html; charset=UTF-8\r\n")
 	fmt.Fprintf(&buf, "\r\n")
 	fmt.Fprintf(&buf, "%s", htmlBody)
 	return buf.Bytes()
+}
+
+// notifTitle is the title every channel shows: "[nas01 ZNAS] Pool degraded".
+// The server's name leads so several servers sending to one phone or inbox
+// are told apart at a glance — that is why no channel repeats it as a
+// "Host:" line in the body any more.
+func notifTitle(hostname, subject string) string {
+	if hostname == "" {
+		return "[ZNAS] " + subject
+	}
+	return "[" + hostname + " ZNAS] " + subject
 }
 
 // ── ntfy sender ───────────────────────────────────────────────────────────────
@@ -723,14 +734,14 @@ func sendNtfy(t NtfyTarget, subject, event, details, hostname string) error {
 	if t.URL == "" {
 		return nil
 	}
-	body := fmt.Sprintf("Event: %s\nDetails: %s\nHost: %s\nTime: %s",
-		event, details, hostname, time.Now().Format("2006-01-02 15:04:05 MST"))
+	body := fmt.Sprintf("Event: %s\nDetails: %s\nTime: %s",
+		event, details, time.Now().Format("2006-01-02 15:04:05 MST"))
 	req, err := http.NewRequest(http.MethodPost, t.URL, strings.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "text/plain")
-	req.Header.Set("X-Title", "[ZFS NAS] "+subject)
+	req.Header.Set("X-Title", notifTitle(hostname, subject))
 	req.Header.Set("X-Tags", "warning")
 	if t.Priority != "" && t.Priority != "default" {
 		req.Header.Set("X-Priority", t.Priority)
@@ -759,10 +770,10 @@ func sendGotify(t GotifyTarget, subject, event, details, hostname string) error 
 	if prio == 0 {
 		prio = 5
 	}
-	msgBody := fmt.Sprintf("%s\n\nHost: %s\nTime: %s",
-		details, hostname, time.Now().Format("2006-01-02 15:04:05 MST"))
+	msgBody := fmt.Sprintf("%s\n\nTime: %s",
+		details, time.Now().Format("2006-01-02 15:04:05 MST"))
 	payload, _ := json.Marshal(map[string]interface{}{
-		"title":    "[ZFS NAS] " + subject,
+		"title":    notifTitle(hostname, subject),
 		"message":  msgBody,
 		"priority": prio,
 	})
@@ -784,12 +795,12 @@ func sendPushover(t PushoverTarget, subject, event, details, hostname string) er
 	if t.UserKey == "" || t.APIToken == "" {
 		return nil
 	}
-	msgBody := fmt.Sprintf("%s\n\nHost: %s\nTime: %s",
-		details, hostname, time.Now().Format("2006-01-02 15:04:05 MST"))
+	msgBody := fmt.Sprintf("%s\n\nTime: %s",
+		details, time.Now().Format("2006-01-02 15:04:05 MST"))
 	vals := url.Values{
 		"token":    {t.APIToken},
 		"user":     {t.UserKey},
-		"title":    {"[ZFS NAS] " + subject},
+		"title":    {notifTitle(hostname, subject)},
 		"message":  {msgBody},
 		"priority": {fmt.Sprintf("%d", t.Priority)},
 	}
@@ -856,7 +867,7 @@ func sendSyslogMsg(t SyslogTarget, subject, event, details, hostname string) err
 
 	// RFC 3164: <PRI>TIMESTAMP HOSTNAME TAG[PID]: MSG
 	ts  := time.Now().Format("Jan _2 15:04:05")
-	msg := fmt.Sprintf("[ZFS NAS] %s | event=%s | details=%s", subject, event, details)
+	msg := fmt.Sprintf("%s | event=%s | details=%s", notifTitle(hostname, subject), event, details)
 	pkt := fmt.Sprintf("<%d>%s %s %s[%d]: %s\n",
 		syslogPRI(t.Facility), ts, hostname, tag, os.Getpid(), msg)
 
@@ -879,7 +890,7 @@ var emailTmpl = template.Must(template.New("email").Parse(`<!DOCTYPE html>
 <body style="margin:0;padding:0;background:#0d0d0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:32px auto;border-radius:12px;overflow:hidden;border:1px solid #2a2a35;">
     <div style="background:linear-gradient(135deg,#bf5af2,#6e40c9);padding:20px 28px;">
-      <div style="color:#fff;font-size:20px;font-weight:700;">ZFS NAS Alert</div>
+      <div style="color:#fff;font-size:20px;font-weight:700;">{{if .Hostname}}{{.Hostname}} {{end}}ZNAS Alert</div>
       <div style="color:rgba(255,255,255,.75);font-size:13px;margin-top:4px;">{{.Event}}</div>
     </div>
     <div style="background:#161619;padding:28px;">
@@ -893,17 +904,13 @@ var emailTmpl = template.Must(template.New("email").Parse(`<!DOCTYPE html>
           <td style="padding:10px 0;border-bottom:1px solid #2a2a35;">{{.Details}}</td>
         </tr>
         <tr>
-          <td style="padding:10px 0;border-bottom:1px solid #2a2a35;color:#8e8e93;">Host</td>
-          <td style="padding:10px 0;border-bottom:1px solid #2a2a35;font-family:monospace;">{{.Hostname}}</td>
-        </tr>
-        <tr>
           <td style="padding:10px 0;color:#8e8e93;">Time</td>
           <td style="padding:10px 0;font-family:monospace;">{{.Time}}</td>
         </tr>
       </table>
     </div>
     <div style="background:#0d0d0f;padding:14px 28px;font-size:11px;color:#48484a;border-top:1px solid #2a2a35;">
-      Sent by ZFS NAS Management Portal &middot; {{.Hostname}}
+      Sent by ZNAS
     </div>
   </div>
 </body></html>`))

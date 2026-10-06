@@ -252,7 +252,7 @@ func main() {
 	// callback lives on the system package so we don't create an import
 	// cycle (alerts already imports system via the interlink relay sub).
 	system.OnVMUnexpectedStop = func(name, details, cause string) {
-		subject := "[ZFS NAS] " + name + " stopped unexpectedly"
+		subject := name + " stopped unexpectedly"
 		body := "Instance: " + name + "\nState change: " + details + "\nDetected cause: " + cause + "\n"
 		if err := alerts.Send(alerts.EventVMUnexpectedStop, subject, "vm_unexpected_stop", body); err != nil {
 			log.Printf("[alerts] vm_unexpected_stop send failed for %s: %v", name, err)
@@ -269,7 +269,7 @@ func main() {
 	// Partial delivery counts as success — one target through is what matters
 	// when the battery is nearly flat.
 	system.OnUPSShutdown = func(upsName, summary, details string) error {
-		subject := "[ZFS NAS] UPS shutdown: " + upsName
+		subject := "UPS shutdown: " + upsName
 		body := "The server is shutting down because " + summary + ".\n\n" +
 			"UPS: " + upsName + "\n" + details + "\n\n" +
 			"This is the last message before the machine halts.\n"
