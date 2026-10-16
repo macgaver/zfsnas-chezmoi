@@ -152,7 +152,9 @@ func deriveLiveAlerts(appCfg *config.AppConfig) []LiveAlert {
 	// Deriving it here means it survives the "All Servers" aggregate view and
 	// is reported by interlink peers (both previously dropped it because it
 	// only ever lived in the browser's _liveAlertsRegistry).
-	if appCfg.SudoersHardeningEnabled {
+	// Not on the USB appliance: its portal runs as root, so there is no sudoers
+	// allow-list to review (and no Hardening tab to send the admin to).
+	if appCfg.SudoersHardeningEnabled && !system.ApplianceMode() {
 		current, _ := sudoersCurrentContent(appCfg)
 		diff := system.ComputeSudoersDiff(current, system.RequiredSudoersContent(), appCfg.SudoersSilencedLines)
 		pending := 0

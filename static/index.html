@@ -1533,14 +1533,16 @@
             OS Packages
             <span id="prereq-ospkgs-tab-dot" style="display:none;width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 4px rgba(74,222,128,0.6);flex-shrink:0;"></span>
           </button>
-          <button class="settings-tab" id="ptab-security" onclick="switchPrereqTab('security')" style="display:flex;align-items:center;gap:6px;">
+          <!-- Hidden on the USB appliance: its portal always runs as root, so there
+               is no service account whose sudo rights could be restricted. -->
+          <button class="settings-tab appliance-hide" id="ptab-security" onclick="switchPrereqTab('security')" style="display:flex;align-items:center;gap:6px;">
             Hardening
             <span id="prereq-security-tab-dot" style="display:none;width:7px;height:7px;border-radius:50%;background:#f0b429;box-shadow:0 0 4px rgba(240,180,41,0.6);flex-shrink:0;"></span>
           </button>
         </div>
 
         <!-- Tab: Hardening (sudoers restriction — optional) -->
-        <div id="ptab-panel-security" style="display:none;">
+        <div id="ptab-panel-security" class="appliance-hide" style="display:none;">
           <div class="card" style="max-width:960px;">
             <div style="background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.25);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--text-2);line-height:1.6;">
               <strong style="color:var(--text-1);">Hardening is optional.</strong> ZFS NAS is fully functional without it — the service account already uses passwordless <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px;">sudo</code> for the commands it needs. This tab lets you <em>restrict</em> that sudo access to a reviewed allow-list of exact commands instead of broad access, and review any drift.
@@ -1832,12 +1834,12 @@
         <div id="prot-panel-rsync" style="display:none;">
           <div class="card" style="margin-bottom:20px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px;">
-              <h3 style="margin:0;display:flex;align-items:center;gap:8px;">External Storage
+              <h3 style="margin:0;display:flex;align-items:center;gap:8px;">Remote Storage
                 <i class="info-tip tip-down" data-tip="Connect remote SMB, NFS, FTP or SSH storage. Each storage is mounted locally so you can browse it with the File Browser and set up a scheduled rsync synchronization — pulling remote files onto this NAS, or pushing local folders to the remote."></i>
               </h3>
               <div style="display:flex;gap:8px;">
                 <button class="btn btn-ghost btn-sm" onclick="loadExtStorages()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M3 12a9 9 0 0 0 9 9c2.52 0 4.93-1 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg> Refresh</button>
-                <button class="btn btn-primary btn-sm" onclick="openExtStorageModal()" id="btn-add-extstorage">+ Add External Storage</button>
+                <button class="btn btn-primary btn-sm" onclick="openExtStorageModal()" id="btn-add-extstorage">+ Add Remote Storage</button>
               </div>
             </div>
             <div id="extstorage-content">
@@ -8768,8 +8770,8 @@ Select the Console tab to load.</pre>
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:8px;">
         <div>
           <label style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-            ARC Maximum
-            <i class="info-tip" data-tip="Hard ceiling for ARC RAM usage. Reducing this frees RAM for applications but may increase disk I/O. ZFS default is roughly 50% of total RAM."></i>
+            ARC Maximum <span style="color:var(--text-3);font-weight:400;">(soft limit)</span>
+            <i class="info-tip" data-tip="Target ceiling for ARC RAM usage — a SOFT limit. ZFS frees cached data to stay under it, but it cannot free the metadata of files Linux still keeps cached, so a workload with many active files can push the ARC above it (see the bottom of this window). Reducing it frees RAM for applications but may increase disk I/O. ZFS default is roughly 50% of total RAM."></i>
           </label>
           <div style="position:relative;" id="arc-max-dropdown-wrap">
             <button id="arc-max-trigger" type="button" onclick="toggleARCMaxDropdown(event)"
@@ -8802,6 +8804,18 @@ Select the Console tab to load.</pre>
       <!-- Statistics row -->
       <h4 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);">Statistics</h4>
       <div id="arc-stats-row" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:18px;font-size:13px;color:var(--text-2);"></div>
+
+      <!-- Why the ARC can sit above its (soft) maximum + recommended size -->
+      <h4 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);display:flex;align-items:center;gap:7px;">
+        <!-- The Pool Fixer sparkle, in the Fixer's purple → blue → green gradient
+             (strokes can't use the text-clip trick the Fixer title uses). -->
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="url(#arc-fixer-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;">
+          <defs><linearGradient id="arc-fixer-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a78bfa"/><stop offset=".5" stop-color="#60a5fa"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+          <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+        </svg>
+        Sizing the ARC for your workload
+      </h4>
+      <div id="arc-pressure" style="margin-bottom:6px;"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeARCModal()">Close</button>
@@ -9995,7 +10009,7 @@ Select the Console tab to load.</pre>
 <div class="modal-backdrop hidden" id="modal-extstorage">
   <div class="modal" style="max-width:560px;max-height:92vh;display:flex;flex-direction:column;">
     <div class="modal-header">
-      <h3 id="ext-modal-title" style="margin:0;">Add External Storage</h3>
+      <h3 id="ext-modal-title" style="margin:0;">Add Remote Storage</h3>
       <button class="modal-close" onclick="closeExtStorageModal()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <form onsubmit="submitExtStorage(event)" style="display:flex;flex-direction:column;flex:1;min-height:0;padding:0;">
@@ -13620,6 +13634,8 @@ document.addEventListener('DOMContentLoaded', () => _hydrateIcons());
 
 // ===== Settings Tabs =====
 function switchPrereqTab(tab) {
+  // No Hardening tab on the appliance (portal runs as root): fall back to the first tab.
+  if (tab === 'security' && document.body.classList.contains('appliance')) tab = 'optfeat';
   ['security','optfeat','ospkgs'].forEach(t => {
     const panel = document.getElementById('ptab-panel-' + t);
     const btn   = document.getElementById('ptab-' + t);
@@ -21850,6 +21866,7 @@ function _renderARCModal(s) {
   _setARCBreakdown(s);
   _setARCStatsRow(s);
   _buildARCMaxDropdown(s);
+  _setARCPressure(s);
   document.getElementById('arc-input-min').value = s.param_arc_min ? Math.round(s.param_arc_min / 1024 / 1024) : '';
   document.getElementById('arc-hint-min').textContent = s.arc_min ? 'Current kernel: ' + _fmtARCBytes(s.arc_min) : '';
 }
@@ -22051,11 +22068,83 @@ function _closeARCMaxDropdown() {
   if (panel) panel.style.display = 'none';
 }
 
+// Explains why the ARC can sit above its maximum and recommends a size.
+// zfs_arc_max is a soft limit: every file Linux keeps in its inode cache pins
+// that file's ZFS metadata in the ARC, so a workload touching many files keeps
+// the ARC above a small maximum while arc_evict burns CPU trying to shrink it.
+function _setARCPressure(s) {
+  const el = document.getElementById('arc-pressure');
+  if (!el) return;
+  const p = s && s.pressure;
+  if (!p) { el.innerHTML = ''; return; }
+  const B = _fmtARCBytes;
+  const n = v => Number(v || 0).toLocaleString();
+  const perFile = p.bytes_per_file > 0 ? p.bytes_per_file : 4096;
+  const perFileTxt = (perFile / 1024).toFixed(1) + ' KB';
+  const li = t => `<li style="margin:0 0 6px;">${t}</li>`;
+  let head = '', facts = [], rec = '';
+
+  if (p.status === 'over') {
+    head = `<div style="background:rgba(255,159,10,0.10);border:1px solid rgba(255,159,10,0.45);border-left:3px solid var(--accent-warn);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--text-1);">
+      The ARC is using <strong>${B(s.arc_size)}</strong>, above its <strong>${B(s.arc_max)}</strong> maximum. This is not a fault: the maximum is a soft limit, and most of the ARC is held in place by files Linux keeps cached.</div>`;
+    facts.push(`Only <strong>${B(p.data_bytes)}</strong> of it is file data; <strong>${B(p.metadata_bytes)}</strong> is metadata — per-file records (dnodes ${B(p.dnode_bytes)}), file attributes (${B(p.bonus_bytes)}) and buffers (${B(p.dbuf_bytes)}).`);
+    facts.push(`Only <strong>${B(p.evictable_bytes)}</strong> could be freed right now. Linux keeps <strong>${n(p.cached_inodes)} files</strong> cached, and ZFS must keep the metadata of every cached file in the ARC — about <strong>${perFileTxt} per file</strong> here.`);
+    if (p.evict_cpu_seconds >= 60) {
+      const hrs = p.evict_cpu_seconds / 3600;
+      const avg = p.uptime_seconds > 0 ? ` (${(p.evict_cpu_seconds / p.uptime_seconds * 100).toFixed(1)}% of one CPU core on average)` : '';
+      facts.push(`ZFS's eviction thread has used <strong>${hrs >= 1 ? hrs.toFixed(1) + ' hours' : Math.round(p.evict_cpu_seconds / 60) + ' minutes'} of CPU</strong> since boot${avg} trying to get back under the maximum.`);
+    }
+    if (p.recommended_max > 0) {
+      const mb = Math.round(p.recommended_max / 1048576);
+      rec = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:4px 0 12px;">
+        <div style="flex:1;min-width:220px;font-size:13px;color:var(--text-1);">
+          Recommended ARC maximum: <strong style="color:var(--accent-2);">${B(p.recommended_max)}</strong>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">${p.recommended_capped
+            ? 'Capped at half of the RAM: this workload pins more than that. Consider also the cache-pressure option below.'
+            : 'Fits the metadata this workload keeps pinned, plus room for file data. The eviction thread then stops spinning.'}</div>
+        </div>
+        <button class="btn btn-sm" style="background:var(--accent-2);color:#fff;" onclick="_arcUseRecommended(${mb})">Use ${B(p.recommended_max)}</button>
+      </div>`;
+    }
+  } else {
+    const msg = p.status === 'default'
+      ? 'No maximum is set by ZNAS: ZFS sizes the ARC itself.'
+      : `The ARC is within its maximum (${B(s.arc_size)} of ${B(s.arc_max)}).`;
+    head = `<div style="font-size:13px;color:var(--text-1);margin-bottom:10px;">${msg}</div>`;
+    facts.push(`<strong>${B(p.metadata_bytes)}</strong> of the ARC is metadata, for the <strong>${n(p.cached_inodes)} files</strong> Linux keeps cached — about <strong>${perFileTxt} per file</strong>.`);
+  }
+
+  const ex = files => B(files * perFile);
+  const pressure = p.vfs_cache_pressure || 100;
+  el.innerHTML = head
+    + (facts.length ? `<ul style="margin:0 0 10px;padding-left:18px;font-size:13px;color:var(--text-2);line-height:1.55;">${facts.map(li).join('')}</ul>` : '')
+    + rec
+    + `<details style="font-size:13px;color:var(--text-2);line-height:1.55;"${p.status === 'over' ? ' open' : ''}>
+        <summary style="cursor:pointer;color:var(--text-1);font-weight:600;margin-bottom:6px;">How the ARC size works</summary>
+        <ul style="margin:6px 0 0;padding-left:18px;">
+          ${li('<strong>The maximum is a soft limit.</strong> ZFS frees cached data to stay under it, but it cannot free the metadata of a file that Linux still keeps in its cache.')}
+          ${li(`<strong>What sizes the ARC is the number of files your workloads keep active</strong> × about ${perFileTxt}: 200,000 files ≈ ${ex(200000)}, 1 million files ≈ ${ex(1000000)}. Build servers, Docker image layers and mail stores touch millions of files.`)}
+          ${li('<strong>A reboot only helps for a while:</strong> it empties the caches, which fill again as the workloads run.')}
+          ${li(`<strong>Alternative to a bigger ARC:</strong> make Linux release cached files sooner with the kernel setting <code>vm.vfs_cache_pressure</code> (currently ${pressure}; 200–500 releases them more readily). Less metadata stays pinned, at the cost of more metadata reads from disk.`)}
+        </ul>
+      </details>`;
+}
+
+function _arcUseRecommended(mb) {
+  _arcMaxSelectedPct = -1;
+  _arcMaxCustomMB = mb;
+  _buildARCMaxDropdown(Object.assign({}, _arcStats, { param_arc_max: mb * 1048576 }));
+  _updateARCMaxTrigger(_hwTotalRamBytes > 0 ? _hwTotalRamBytes : (_arcStats && _arcStats.total_ram_bytes) || 0);
+  const t = document.getElementById('arc-max-trigger');
+  if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.style.outline = '2px solid var(--accent-2)'; setTimeout(() => { t.style.outline = ''; }, 1600); }
+  showToast('ARC maximum set to ' + _fmtARCBytes(mb * 1048576) + ' — click Apply Changes to save it.', 'success');
+}
+
 function _setARCStatCards(s) {
   const cards = [
     { id: 'arc-card-size',  label: 'ARC Size', tip: 'Current amount of RAM used by the ARC cache.',      val: s ? _fmtARCBytes(s.arc_size) : '—', color: 'var(--accent-2)' },
     { id: 'arc-card-hit',   label: 'Hit Ratio', tip: 'Percentage of read requests served from ARC. Values above 90% indicate a well-sized cache.', val: s ? s.hit_ratio.toFixed(1) + '%' : '—', color: s && s.hit_ratio >= 90 ? 'var(--accent-3)' : s && s.hit_ratio >= 70 ? 'var(--accent-warn)' : 'var(--accent-danger)' },
-    { id: 'arc-card-max',   label: 'ARC Max',  tip: 'Hard ceiling for ARC RAM usage.',                   val: s ? _fmtARCBytes(s.arc_max) : '—', color: 'var(--text-1)' },
+    { id: 'arc-card-max',   label: 'ARC Max (soft)',  tip: 'Soft limit: ZFS frees cached data to stay under it, but metadata of files Linux keeps cached stays pinned and can push the ARC above it.', val: s ? _fmtARCBytes(s.arc_max) + (s.pressure && s.pressure.status === 'over' ? ' <span style="font-size:11px;font-weight:600;color:var(--accent-warn);">exceeded</span>' : '') : '—', color: s && s.pressure && s.pressure.status === 'over' ? 'var(--accent-warn)' : 'var(--text-1)' },
     { id: 'arc-card-min',   label: 'ARC Min',  tip: 'ARC will not shrink below this size.',              val: s ? _fmtARCBytes(s.arc_min) : '—', color: 'var(--text-1)' },
   ];
   cards.forEach(c => {
@@ -25925,7 +26014,7 @@ async function loadExtStorages() {
       jobs.filter(j => j.status === 'running').forEach(j => _extAttachJobPoller(j.id, j.storage_name, { localOnly: local }));
     }
   } catch (e) {
-    el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">Could not load external storages.</div>';
+    el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">Could not load remote storages.</div>';
     return;
   }
   renderExtStorages(el);
@@ -25958,7 +26047,7 @@ function renderExtStorages(el) {
           ${Object.keys(_EXT_TYPES).map(t => `
             <span style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:14px;background:color-mix(in srgb,${_EXT_TYPES[t].color} 12%,transparent);border:1px solid color-mix(in srgb,${_EXT_TYPES[t].color} 35%,transparent);">${_EXT_TYPES[t].icon}</span>`).join('')}
         </div>
-        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px;">Sync files with external storage</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px;">Sync files with remote storage</div>
         <div style="font-size:13px;color:var(--text-2);max-width:480px;margin:0 auto 18px;line-height:1.5;">
           Connect an SMB, NFS, FTP or SSH location, browse it like a local folder,
           and schedule rsync to pull remote files onto this NAS — or push local folders out.
@@ -25968,7 +26057,7 @@ function renderExtStorages(el) {
           <span><span style="color:var(--accent);font-weight:700;">2</span> Browse files</span>
           <span><span style="color:var(--accent);font-weight:700;">3</span> Schedule sync</span>
         </div>
-        <button class="btn btn-primary" onclick="openExtStorageModal()">+ Add External Storage</button>
+        <button class="btn btn-primary" onclick="openExtStorageModal()">+ Add Remote Storage</button>
       </div>`;
     return;
   }
@@ -26145,7 +26234,7 @@ function extDeleteStorage(id) {
   const s = _extStorages.find(x => x.id === id);
   if (!s) return;
   showConfirm({
-    title: 'Delete external storage?',
+    title: 'Delete remote storage?',
     body: `“${s.name}” will be unmounted and removed, together with its sync configuration. No files are deleted — neither local nor remote.`,
     confirmText: 'Delete',
     danger: true,
@@ -26154,7 +26243,7 @@ function extDeleteStorage(id) {
         const r = await fetch('/api/extstorage/' + encodeURIComponent(id), { method: 'DELETE' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || 'failed');
-        showToast('External storage deleted', 'success');
+        showToast('Remote storage deleted', 'success');
       } catch (e) { showToast('Delete failed: ' + e.message, 'error'); }
       loadExtStorages();
     },
@@ -26194,7 +26283,7 @@ async function extRunNow(id) {
 function _extAttachJobPoller(jobId, storageName, opts) {
   if (!jobId) return;
   opts = opts || {};
-  _bgPollJob(jobId, 'rsync — ' + (storageName || 'external storage'),
+  _bgPollJob(jobId, 'rsync — ' + (storageName || 'remote storage'),
     `/api/rsync-jobs/${encodeURIComponent(jobId)}/progress`,
     () => loadExtStorages(),
     { cancelURL: `/api/rsync-jobs/${encodeURIComponent(jobId)}/cancel`, kind: 'rsync',
@@ -26400,7 +26489,7 @@ function openExtStorageModal(id) {
   _extType = s ? s.type : 'smb';
   _extSSHAuth = s && s.ssh_key ? 'key' : 'pass';
   _extMountMode = s ? (s.mount_mode || 'ondemand') : 'ondemand';
-  document.getElementById('ext-modal-title').textContent = s ? 'Edit External Storage' : 'Add External Storage';
+  document.getElementById('ext-modal-title').textContent = s ? 'Edit Remote Storage' : 'Add Remote Storage';
   document.getElementById('ext-submit-btn').textContent  = s ? 'Save Changes' : 'Add Storage';
   document.getElementById('ext-alert').classList.add('hidden');
   document.getElementById('ext-test-result').innerHTML = '';
@@ -26486,7 +26575,7 @@ async function submitExtStorage(ev) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || 'save failed');
     closeExtStorageModal();
-    showToast(_extEditId ? 'Storage updated' : 'External storage added', 'success');
+    showToast(_extEditId ? 'Storage updated' : 'Remote storage added', 'success');
     if (d.mount_error) showToast('Saved, but mounting failed: ' + d.mount_error, 'error');
     loadExtStorages();
   } catch (e) {
@@ -26719,7 +26808,7 @@ async function submitExtSync(ev, runNow) {
 function extSyncRemove() {
   showConfirm({
     title: 'Remove synchronization?',
-    body: 'The schedule and sync settings are removed. The external storage itself is kept, and no files are deleted.',
+    body: 'The schedule and sync settings are removed. The remote storage itself is kept, and no files are deleted.',
     confirmText: 'Remove',
     danger: true,
     onConfirm: async () => {
@@ -32828,7 +32917,7 @@ const _GUIDE_TOPICS = [
       ${_gTip('On Windows, open <strong>\\\\&lt;nas-address&gt;</strong> in File Explorer; on macOS use Finder → Go → Connect to Server → <strong>smb://&lt;nas-address&gt;</strong>.')}` },
   { id: 'protect', title: 'Protect your data', blurb: 'Snapshots, replication, sync and UPS', ic: 'shield', c1: '#5e5ce6', c2: '#bf5af2', render: () => `
       <h2>Protect your data</h2>
-      <p class="guide-lead">A NAS is only as good as its backups. The <strong>Protect</strong> page brings everything together: snapshot schedules, replication to another server, and file sync with external storage.</p>
+      <p class="guide-lead">A NAS is only as good as its backups. The <strong>Protect</strong> page brings everything together: snapshot schedules, replication to another server, and file sync with remote storage.</p>
       ${_gShot('snapshots', 'Protect: snapshot & replication schedules')}
       ${_gIdeas([
         ['ZFS replication', 'Send datasets to another ZNAS (or any ZFS server) on a schedule. Fast and incremental.'],
@@ -60792,7 +60881,7 @@ async function openFileBrowser(sourceType, sourceId, subpath) {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { showToast('Mount failed: ' + (d.error || 'unknown'), 'error'); return; }
       absPath = d.mountpoint;
-      label = d.label || 'External storage';
+      label = d.label || 'Remote storage';
       extId = sourceId;
     } catch (e) {
       showToast('Mount failed: ' + e.message, 'error');

@@ -127,6 +127,87 @@ func InstallMinIO() error {
 	return nil
 }
 
+const minIOUnitPath = "/etc/systemd/system/minio.service"
+
+// EnsureMinIOService makes sure everything the minio unit needs exists: the
+// minio-user account, /var/lib/minio, and the enabled systemd unit. Idempotent;
+// run before any apply/start/restart.
+//
+// The USB appliance bakes the minio/mc binaries into its image (MinIO no
+// longer publishes them), so the portal sees MinIO as installed and the
+// Install step that creates all of this never runs. And the appliance root
+// lives in RAM: whatever is created here is gone at the next reboot, which is
+// why startup calls ReapplyMinIOAtStartup too. Without this, saving the S3
+// configuration failed with "restart minio: exit status 5" (unit not found).
+func EnsureMinIOService() error {
+	if !MinIOPrereqsInstalled() {
+		return fmt.Errorf("the minio and mc binaries are not installed")
+	}
+	if err := exec.Command("id", "minio-user").Run(); err != nil {
+		// Argument order must match the sudoers rule exactly.
+		if out, err := exec.Command("sudo", "useradd",
+			"--system", "--home-dir", "/var/lib/minio",
+			"--shell", "/usr/sbin/nologin", "minio-user").CombinedOutput(); err != nil {
+			return fmt.Errorf("create minio-user: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+	}
+	for _, cmd := range [][]string{
+		{"mkdir", "-p", "/var/lib/minio"},
+		{"chown", "minio-user:minio-user", "/var/lib/minio"},
+	} {
+		if out, err := exec.Command("sudo", cmd...).CombinedOutput(); err != nil {
+			return fmt.Errorf("%s: %w: %s", strings.Join(cmd, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+	if _, err := os.Stat(minIOUnitPath); err != nil {
+		if err := WriteMinIOServiceUnit(); err != nil {
+			return fmt.Errorf("write minio.service: %w", err)
+		}
+		for _, args := range [][]string{{"systemctl", "daemon-reload"}, {"systemctl", "enable", "minio"}} {
+			if out, err := exec.Command("sudo", args...).CombinedOutput(); err != nil {
+				return fmt.Errorf("%s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+			}
+		}
+	}
+	return nil
+}
+
+// ReapplyMinIOAtStartup brings a configured MinIO back when its unit is
+// missing — every boot of the USB appliance, whose root (unit file,
+// minio-user, TLS certs under /var/lib/minio) lives in RAM, while the
+// configuration itself is in the portal's persisted settings. A no-op when
+// MinIO is not configured or its unit is already there (regular installs).
+func ReapplyMinIOAtStartup(cfg *config.MinIOConfig, configDir string) {
+	if !cfg.Enabled || cfg.DataDir == "" || !MinIOPrereqsInstalled() {
+		return
+	}
+	if _, err := os.Stat(minIOUnitPath); err == nil {
+		return
+	}
+	// Never start MinIO on an unmounted mountpoint: on the appliance that is
+	// an empty folder in RAM, and objects written there would vanish (and
+	// hide under the dataset once it mounts).
+	mounted := func() bool {
+		if cfg.DatasetPath == "" {
+			return true
+		}
+		out, err := exec.Command("sudo", "zfs", "get", "-H", "-o", "value", "mounted", cfg.DatasetPath).Output()
+		return err == nil && strings.TrimSpace(string(out)) == "yes"
+	}
+	for i := 0; !mounted(); i++ {
+		if i >= 60 {
+			fmt.Printf("[minio] %s is not mounted after 5 minutes — S3 service not started\n", cfg.DatasetPath)
+			return
+		}
+		time.Sleep(5 * time.Second)
+	}
+	if err := ApplyMinIOConfig(cfg, configDir); err != nil {
+		fmt.Printf("[minio] could not restore the S3 service at startup: %v\n", err)
+		return
+	}
+	fmt.Println("[minio] S3 service restored from the saved configuration")
+}
+
 // WriteMinIOServiceUnit writes /etc/systemd/system/minio.service via sudo tee.
 func WriteMinIOServiceUnit() error {
 	unit := `[Unit]
@@ -149,7 +230,7 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 `
-	tee := exec.Command("sudo", "tee", "/etc/systemd/system/minio.service")
+	tee := exec.Command("sudo", "tee", minIOUnitPath)
 	tee.Stdin = strings.NewReader(unit)
 	if out, err := tee.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
@@ -197,6 +278,11 @@ func WriteMinIOEnvFile(cfg *config.MinIOConfig) error {
 // ApplyMinIOConfig writes the env file, installs/removes TLS certs, restarts the service,
 // and refreshes the mc alias. configDir is the portal's config directory (contains certs/).
 func ApplyMinIOConfig(cfg *config.MinIOConfig, configDir string) error {
+	// The account, the folder and the unit first: the TLS files and the env
+	// file below are chown'ed to minio-user, and the restart needs the unit.
+	if err := EnsureMinIOService(); err != nil {
+		return err
+	}
 	// Install or remove TLS certs before writing the env file.
 	if cfg.TLS {
 		if cfg.TLSCertName == "" || cfg.TLSCertName == "auto" {
@@ -220,8 +306,8 @@ func ApplyMinIOConfig(cfg *config.MinIOConfig, configDir string) error {
 	if err := exec.Command("sudo", "systemctl", "daemon-reload").Run(); err != nil {
 		return fmt.Errorf("daemon-reload: %w", err)
 	}
-	if err := exec.Command("sudo", "systemctl", "restart", "minio").Run(); err != nil {
-		return fmt.Errorf("restart minio: %w", err)
+	if out, err := exec.Command("sudo", "systemctl", "restart", "minio").CombinedOutput(); err != nil {
+		return fmt.Errorf("restart minio: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	// Wait for MinIO to become ready (up to 10 s).
 	for i := 0; i < 10; i++ {
@@ -447,6 +533,9 @@ func GetMinIOServiceStatus() MinIOServiceStatus {
 
 // StartMinIOService starts the MinIO service.
 func StartMinIOService() error {
+	if err := EnsureMinIOService(); err != nil {
+		return err
+	}
 	out, err := exec.Command("sudo", "systemctl", "start", "minio").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
@@ -465,6 +554,9 @@ func StopMinIOService() error {
 
 // RestartMinIOService restarts the MinIO service.
 func RestartMinIOService() error {
+	if err := EnsureMinIOService(); err != nil {
+		return err
+	}
 	out, err := exec.Command("sudo", "systemctl", "restart", "minio").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))

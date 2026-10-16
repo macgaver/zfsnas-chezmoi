@@ -47,6 +47,40 @@ type ARCStats struct {
 
 	// Total system RAM in bytes (from /proc/meminfo MemTotal)
 	TotalRAMBytes int64 `json:"total_ram_bytes"`
+
+	// Why the ARC can sit above its maximum (see ARCPressure).
+	Pressure ARCPressure `json:"pressure"`
+}
+
+// ARCPressure explains an ARC that sits above zfs_arc_max, and what to set
+// instead. zfs_arc_max is a SOFT limit: ZFS can only evict what nothing else
+// holds, and every file Linux keeps in its inode cache pins that file's ZFS
+// metadata (dnode, bonus buffer, dbufs) in the ARC. A workload that touches
+// millions of files (build servers, Docker image layers, mail stores) keeps
+// the ARC well above a small maximum, and ZFS burns CPU in arc_evict trying
+// to get back under it.
+type ARCPressure struct {
+	DataBytes        int64   `json:"data_bytes"`        // cached file data
+	MetadataBytes    int64   `json:"metadata_bytes"`    // all metadata (arc_meta_used)
+	DnodeBytes       int64   `json:"dnode_bytes"`       // per-file dnodes
+	BonusBytes       int64   `json:"bonus_bytes"`       // per-file bonus buffers (attributes)
+	DbufBytes        int64   `json:"dbuf_bytes"`        // dbuf headers
+	EvictableBytes   int64   `json:"evictable_bytes"`   // what ZFS could free right now
+	CachedInodes     int64   `json:"cached_inodes"`     // inodes Linux keeps cached (all filesystems)
+	CachedDentries   int64   `json:"cached_dentries"`   // directory entries cached
+	UnusedDentries   int64   `json:"unused_dentries"`   // of which nothing uses them
+	BytesPerFile     int64   `json:"bytes_per_file"`    // ARC metadata held per cached file
+	EvictCPUSeconds  float64 `json:"evict_cpu_seconds"` // CPU used by arc_evict since boot
+	UptimeSeconds    float64 `json:"uptime_seconds"`
+	VFSCachePressure int     `json:"vfs_cache_pressure"`
+	// Status: "ok" (within the maximum), "over" (above it, mostly pinned
+	// metadata), "default" (no maximum set by ZNAS: kernel managed).
+	Status string `json:"status"`
+	// RecommendedMax is a maximum that fits what this workload pins, rounded
+	// up to 512 MiB (0 when the current maximum is fine). RecommendedCapped
+	// is true when the need is above half the RAM and the figure was capped.
+	RecommendedMax    int64 `json:"recommended_max"`
+	RecommendedCapped bool  `json:"recommended_capped"`
 }
 
 const arcStatsPath = "/proc/spl/kstat/zfs/arcstats"
@@ -108,7 +142,122 @@ func GetARCStats() (*ARCStats, error) {
 		s.TotalRAMBytes = int64(totalKB) * 1024
 	}
 
+	p := &s.Pressure
+	p.DataBytes = kstatInt(kstat, "data_size")
+	p.MetadataBytes = s.ARCMetaUsed
+	p.DnodeBytes = kstatInt(kstat, "dnode_size")
+	p.BonusBytes = kstatInt(kstat, "bonus_size")
+	p.DbufBytes = kstatInt(kstat, "dbuf_size")
+	p.EvictableBytes = kstatInt(kstat, "mru_evictable_data") + kstatInt(kstat, "mru_evictable_metadata") +
+		kstatInt(kstat, "mfu_evictable_data") + kstatInt(kstat, "mfu_evictable_metadata")
+	p.CachedInodes = firstProcInt("/proc/sys/fs/inode-nr", 0)
+	p.CachedDentries = firstProcInt("/proc/sys/fs/dentry-state", 0)
+	p.UnusedDentries = firstProcInt("/proc/sys/fs/dentry-state", 1)
+	p.VFSCachePressure = int(firstProcInt("/proc/sys/vm/vfs_cache_pressure", 0))
+	p.EvictCPUSeconds = kernelThreadCPUSeconds("arc_evict")
+	if up := firstProcFloat("/proc/uptime"); up > 0 {
+		p.UptimeSeconds = up
+	}
+	explainARCPressure(s, s.ParamARCMax > 0 && readSysfsInt64(arcParamDir+"zfs_arc_max") > 0)
 	return s, nil
+}
+
+// explainARCPressure fills Status, BytesPerFile and the recommendation from
+// the raw figures. Pure, so it is unit-tested with the numbers seen live.
+func explainARCPressure(s *ARCStats, maxSet bool) {
+	p := &s.Pressure
+	const mib = int64(1) << 20
+	pinnedMeta := p.MetadataBytes
+	if p.CachedInodes > 1000 && pinnedMeta > 0 {
+		p.BytesPerFile = pinnedMeta / p.CachedInodes
+	}
+	switch {
+	case !maxSet:
+		p.Status = "default"
+	case s.ARCMax > 0 && s.ARCSize > s.ARCMax+s.ARCMax/10:
+		p.Status = "over"
+	default:
+		p.Status = "ok"
+	}
+	if p.Status != "over" {
+		return
+	}
+	// What the workload needs: the metadata it pins, plus room for file data
+	// (what is cached now, at least 512 MiB), with 20% headroom.
+	data := p.DataBytes
+	if data < 512*mib {
+		data = 512 * mib
+	}
+	need := (pinnedMeta + data) * 12 / 10
+	rec := (need + 512*mib - 1) / (512 * mib) * (512 * mib)
+	if half := s.TotalRAMBytes / 2; half > 0 && rec > half {
+		rec = half / (512 * mib) * (512 * mib)
+		p.RecommendedCapped = true
+	}
+	if rec > s.ARCMax {
+		p.RecommendedMax = rec
+	}
+}
+
+// firstProcInt reads the idx-th whitespace-separated integer of a /proc file.
+func firstProcInt(path string, idx int) int64 {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	f := strings.Fields(string(b))
+	if idx >= len(f) {
+		return 0
+	}
+	n, _ := strconv.ParseInt(f[idx], 10, 64)
+	return n
+}
+
+func firstProcFloat(path string) float64 {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	f := strings.Fields(string(b))
+	if len(f) == 0 {
+		return 0
+	}
+	v, _ := strconv.ParseFloat(f[0], 64)
+	return v
+}
+
+// kernelThreadCPUSeconds sums utime+stime of the kernel threads named comm
+// (e.g. arc_evict) from /proc/<pid>/stat. Kernel threads are children of
+// kthreadd (pid 2), so only those are opened.
+func kernelThreadCPUSeconds(comm string) float64 {
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0
+	}
+	var ticks int64
+	for _, e := range ents {
+		pid := e.Name()
+		if pid[0] < '0' || pid[0] > '9' {
+			continue
+		}
+		b, err := os.ReadFile("/proc/" + pid + "/stat")
+		if err != nil {
+			continue
+		}
+		st := string(b)
+		open, close := strings.IndexByte(st, '('), strings.LastIndexByte(st, ')')
+		if open < 0 || close < open || st[open+1:close] != comm {
+			continue
+		}
+		f := strings.Fields(st[close+1:])
+		// After the comm: state(0) ppid(1) … utime(11) stime(12).
+		if len(f) > 12 && f[1] == "2" {
+			u, _ := strconv.ParseInt(f[11], 10, 64)
+			k, _ := strconv.ParseInt(f[12], 10, 64)
+			ticks += u + k
+		}
+	}
+	return float64(ticks) / 100 // USER_HZ is 100 on Linux
 }
 
 // SetARCParams applies new ARC size limits immediately via sysfs and persists

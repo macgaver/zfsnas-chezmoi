@@ -285,7 +285,7 @@ func HandleExtStorageCreate(appCfg *config.AppConfig) http.HandlerFunc {
 				return
 			}
 		}
-		extAudit(r, audit.ActionExtStorageCreate, es.Name, "created external storage ("+es.Type+"://"+es.Host+")")
+		extAudit(r, audit.ActionExtStorageCreate, es.Name, "created remote storage ("+es.Type+"://"+es.Host+")")
 		jsonOK(w, map[string]interface{}{"ok": true, "id": es.ID})
 	}
 }
@@ -353,7 +353,7 @@ func HandleExtStorageUpdate(appCfg *config.AppConfig) http.HandlerFunc {
 				mountErr = merr.Error()
 			}
 		}
-		extAudit(r, audit.ActionExtStorageUpdate, esCopy.Name, "updated external storage")
+		extAudit(r, audit.ActionExtStorageUpdate, esCopy.Name, "updated remote storage")
 		resp := map[string]interface{}{"ok": true}
 		if mountErr != "" {
 			resp["mount_error"] = mountErr
@@ -389,7 +389,7 @@ func HandleExtStorageDelete(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 		system.RemoveExtSecrets(appCfg.ConfigDir, id)
-		extAudit(r, audit.ActionExtStorageDelete, name, "deleted external storage")
+		extAudit(r, audit.ActionExtStorageDelete, name, "deleted remote storage")
 		jsonOK(w, map[string]bool{"ok": true})
 	}
 }
@@ -697,7 +697,7 @@ func extFinishRsync(appCfg *config.AppConfig, j *system.RsyncJob) {
 			alerts.EventReplicationFailure,
 			"rsync failed: "+j.StorageName,
 			"Filesystem rsync Failed",
-			fmt.Sprintf("rsync %s for external storage '%s' failed: %s",
+			fmt.Sprintf("rsync %s for remote storage '%s' failed: %s",
 				j.Direction, j.StorageName, j.Error),
 		)
 	}
@@ -744,7 +744,7 @@ func HandleExtStorageInstall(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusInternalServerError, err.Error()+"\n"+out)
 		return
 	}
-	extAudit(r, audit.ActionInstallPrereqs, system.ExtPackageForType(req.Type), "installed for external storage")
+	extAudit(r, audit.ActionInstallPrereqs, system.ExtPackageForType(req.Type), "installed for remote storage")
 	jsonOK(w, map[string]bool{"ok": true})
 }
 
@@ -976,7 +976,7 @@ func StartRsyncScheduler(appCfg *config.AppConfig) {
 						alerts.EventReplicationFailure,
 						"rsync failed: "+es.Name,
 						"Filesystem rsync Failed",
-						fmt.Sprintf("Scheduled rsync for external storage '%s' could not start: %v", es.Name, err),
+						fmt.Sprintf("Scheduled rsync for remote storage '%s' could not start: %v", es.Name, err),
 					)
 				} else {
 					// Started — clear any pause marker (this was the resume).
