@@ -118,6 +118,12 @@ type MinIOConfig struct {
 	SiteName     string     `json:"site_name"`
 	ServerURL    string     `json:"server_url"`
 	Buckets      []S3Bucket `json:"buckets"`
+	// Engine is the S3 server this configuration drives: "rustfs" (v6.10.17+).
+	// Empty means MinIO (end of life): its buckets were moved to
+	// LegacyMinIOBuckets when RustFS took over, since RustFS cannot read
+	// MinIO's on-disk format (the old data stays in <dataset>/minio-data).
+	Engine             string     `json:"engine,omitempty"`
+	LegacyMinIOBuckets []S3Bucket `json:"legacy_minio_buckets,omitempty"`
 }
 
 // ISCSIHost is a known initiator that can be granted access to iSCSI shares.
@@ -860,8 +866,11 @@ func LoadAppConfig() (*AppConfig, error) {
 	if cfg.MinIO.Region == "" {
 		cfg.MinIO.Region = "us-east-1"
 	}
-	if cfg.MinIO.RootUser == "" {
-		cfg.MinIO.RootUser = "minioadmin"
+	// "minioadmin" is the old MinIO-era default. Until S3 is configured on
+	// RustFS it is only the form's suggestion (the RustFS server starts
+	// empty), so it moves to the RustFS-era default.
+	if cfg.MinIO.RootUser == "" || (cfg.MinIO.RootUser == "minioadmin" && cfg.MinIO.Engine != "rustfs") {
+		cfg.MinIO.RootUser = "s3admin"
 	}
 	if cfg.MinIO.Buckets == nil {
 		cfg.MinIO.Buckets = []S3Bucket{}

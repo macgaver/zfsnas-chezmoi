@@ -47,8 +47,6 @@ dir  system/samba-state                 /var/lib/samba
 dir  system/nut                         /etc/nut
 file system/exports                     /etc/exports
 dir  system/iscsi                       /etc/tgt
-dir  system/minio                       /etc/minio
-file system/minio-default               /etc/default/minio
 dir  system/incus                       /var/lib/incus
 # dhcpcd's DUID and leases: without these the appliance presents a new client
 # identity on every boot and the DHCP server hands it a DIFFERENT address —

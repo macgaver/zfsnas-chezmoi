@@ -1569,14 +1569,14 @@
               <button id="prereq-iscsi-btn" class="btn btn-ghost btn-sm" onclick="enableISCSIFeature()" style="font-size:12px;white-space:nowrap;">Enable iSCSI Feature</button>
               <span id="prereq-iscsi-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'iscsi')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
-            <!-- S3 (MinIO): hidden unless already installed. MinIO archived its open-source
-                 server in 2026 and dl.min.io no longer serves the binaries, so it
-                 cannot be installed any more; existing installs keep working. -->
-            <div id="optfeat-minio-row" style="display:none;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+            <!-- S3 object storage: RustFS (v6.10.17, Apache-2.0) replaces MinIO, whose
+                 open-source edition is end of life (repositories archived, no binaries). -->
+            <div id="optfeat-minio-row" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
                 <span style="color:var(--text-1);font-size:14px;font-weight:500;">S3-compatible object storage server</span>
-                <i class="info-tip" data-tip="Required for the S3 Object Server feature. Installs the MinIO server binary and the mc management client.&#10;Both binaries are downloaded directly from dl.min.io.&#10;MinIO runs as a dedicated system user (minio-user) via a systemd service."></i>
-                <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Packages: minio, mc</div>
+                <span title="New in ZNAS 6.10.17: RustFS replaces MinIO" style="font-size:10px;font-weight:700;background:#f5a623;color:#000;border-radius:4px;padding:1px 6px;letter-spacing:.04em;margin-left:6px;vertical-align:1px;">BETA</span>
+                <i class="info-tip" data-tip="Required for the S3 Object Server feature. Installs RustFS, an open-source (Apache-2.0) S3-compatible object server, from its official GitHub release. ZNAS checks the download against a SHA-256 checksum built into ZNAS before installing it.&#10;RustFS runs as a dedicated system user (rustfs) and keeps its data in a folder of the dataset you choose. Users, buckets and permissions are managed from the S3 page."></i>
+                <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Package: rustfs (RustFS S3 server)</div>
               </div>
               <span id="prereq-minio-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
               <label class="appliance-only optfeat-appl-check" data-status="prereq-minio-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
@@ -1976,22 +1976,25 @@
         </div>
       </div>
 
-      <!-- S3 BUCKETS (MinIO) -->
+      <!-- S3 BUCKETS (RustFS) -->
       <div class="page hidden" id="page-s3">
         <!-- Prerequisites banner -->
         <div id="s3-prereqs-banner" class="hidden" style="padding:18px 20px;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);opacity:0.85;">
-          <span style="font-size:14px;color:var(--text-2);">S3 Object Server requires <strong>MinIO</strong> to be installed. Go to <a onclick="showPage('prereqs')" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Prerequisites</a> to enable this feature.</span>
+          <span style="font-size:14px;color:var(--text-2);">S3 Object Server requires <strong>RustFS</strong> to be installed. Go to <a onclick="showPage('prereqs')" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Prerequisites</a> to enable this feature.</span>
         </div>
         <!-- Configure required banner -->
         <div id="s3-configure-banner" class="hidden" style="padding:18px 20px;margin-bottom:20px;background:rgba(100,210,255,0.07);border:1px solid rgba(100,210,255,0.25);border-radius:var(--radius-sm);">
-          <span style="font-size:14px;color:var(--text-2);">MinIO is installed but not yet configured. Click <strong>Configure</strong> to set up the S3 Object Server.</span>
+          <span style="font-size:14px;color:var(--text-2);">RustFS is installed but not yet configured. Click <strong>Configure</strong> to set up the S3 Object Server.</span>
           <button class="btn btn-primary btn-sm" onclick="openS3ConfigureModal()" style="margin-left:12px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> Configure</button>
         </div>
+        <!-- Former MinIO server: its buckets are not on RustFS -->
+        <div id="s3-legacy-banner" class="hidden" style="padding:14px 18px;margin-bottom:16px;background:rgba(255,214,10,0.10);border:1px solid rgba(255,214,10,0.45);border-left:3px solid var(--accent-warn);border-radius:var(--radius-sm);font-size:13px;color:var(--text-1);line-height:1.55;"></div>
         <!-- Main content -->
         <div id="s3-content" class="hidden">
           <div class="page-header">
             <div style="display:flex;align-items:center;gap:8px;">
               <h2>S3 Buckets</h2>
+              <span id="s3-version" style="font-size:11px;color:var(--text-3);"></span>
               <!-- Clickable service badge — click to open start/stop/restart menu -->
               <div style="position:relative;">
                 <span id="s3-svc-badge" onclick="s3ServiceMenu()" style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:var(--surface2);color:var(--text-3);cursor:pointer;user-select:none;">unknown</span>
@@ -2004,7 +2007,7 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <a id="s3-portal-link" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="color:var(--text-3);text-decoration:none;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg> MinIO Portal</a>
+              <a id="s3-portal-link" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="color:var(--text-3);text-decoration:none;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg> RustFS Console</a>
               <button class="btn btn-ghost btn-sm" onclick="openS3UsersModal()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> S3 Users</button>
               <button class="btn btn-ghost btn-sm" onclick="openS3ConfigureModal()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> Configure</button>
               <button class="btn btn-primary btn-sm" onclick="openNewS3BucketModal()">+ New S3 Bucket</button>
@@ -11267,16 +11270,16 @@ Select the Console tab to load.</pre>
     <div class="modal-body" style="display:grid;gap:16px;">
       <div id="s3cfg-error" class="alert alert-error hidden"></div>
       <div class="form-group">
-        <label>Backend Dataset <i class="info-tip" data-tip="The ZFS dataset whose mountpoint MinIO will use to store all S3 objects. ZFSNAS will ensure the minio-user owns this directory. Choose a dataset with enough free space."></i></label>
+        <label>Backend Dataset <i class="info-tip" data-tip="The ZFS dataset that stores the S3 objects. RustFS keeps them in a rustfs-data folder inside it (owned by the rustfs system account), so the dataset can also hold other files."></i></label>
         <select id="s3cfg-dataset"><option value="">Loading datasets…</option></select>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;">
         <div class="form-group" style="margin-bottom:0;">
-          <label>API Port <i class="info-tip" data-tip="TCP port MinIO listens on for S3 API requests (AWS CLI, SDKs, s3cmd, etc.). Default: 9000."></i></label>
+          <label>API Port <i class="info-tip" data-tip="TCP port RustFS listens on for S3 API requests (AWS CLI, SDKs, s3cmd, etc.). Default: 9000."></i></label>
           <input type="number" id="s3cfg-port" value="9000" min="1" max="65535">
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label>Console Port <i class="info-tip" data-tip="TCP port for the built-in MinIO web management console. Must differ from the API port. Default: 9001."></i></label>
+          <label>Console Port <i class="info-tip" data-tip="TCP port for the RustFS web console. Must differ from the API port. Default: 9001."></i></label>
           <input type="number" id="s3cfg-console-port" value="9001" min="1" max="65535">
         </div>
         <div class="form-group" style="margin-bottom:0;">
@@ -11292,11 +11295,11 @@ Select the Console tab to load.</pre>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="form-group">
-          <label>Admin User <i class="info-tip" data-tip="MinIO administrator username (MINIO_ROOT_USER). This is the superuser for MinIO, separate from ZFSNAS portal users. Minimum 3 characters."></i></label>
-          <input type="text" id="s3cfg-root-user" placeholder="minioadmin" autocomplete="off">
+          <label>Admin User <i class="info-tip" data-tip="RustFS administrator access key (RUSTFS_ACCESS_KEY). This is the superuser of the S3 server, separate from ZNAS portal accounts; use it for the web console and for administration. Create regular S3 users for applications."></i></label>
+          <input type="text" id="s3cfg-root-user" placeholder="s3admin" autocomplete="off">
         </div>
         <div class="form-group">
-          <label>Admin Password <i class="info-tip" data-tip="MinIO administrator password (MINIO_ROOT_PASSWORD). Minimum 8 characters. Leave blank to keep the existing password.&#10;&#10;Warning: MinIO stores this credential in cleartext in /etc/default/minio. ZFSNAS automatically restricts access to that file."></i></label>
+          <label>Admin Password <i class="info-tip" data-tip="RustFS administrator secret key (RUSTFS_SECRET_KEY). Minimum 8 characters. Leave blank to keep the existing one."></i></label>
           <input type="password" id="s3cfg-root-password" placeholder="Leave blank to keep existing" autocomplete="new-password">
         </div>
       </div>
@@ -11306,12 +11309,12 @@ Select the Console tab to load.</pre>
           <input type="text" id="s3cfg-region" placeholder="us-east-1">
         </div>
         <div class="form-group">
-          <label>Site Name <i class="info-tip" data-tip="Optional human-readable name for this MinIO instance (MINIO_SITE_NAME). Shown in the MinIO web console header."></i></label>
+          <label>Site Name <i class="info-tip" data-tip="Optional label for this S3 server, shown in ZNAS."></i></label>
           <input type="text" id="s3cfg-site-name" placeholder="Optional">
         </div>
       </div>
       <div class="form-group">
-        <label>Server URL <i class="info-tip" data-tip="Optional public URL when MinIO is behind a reverse proxy (MINIO_SERVER_URL). Example: https://s3.yourdomain.com. Leave blank if clients connect directly to this server's IP and port."></i></label>
+        <label>Server URL <i class="info-tip" data-tip="Optional public URL when the S3 server is reached through a host name or a reverse proxy. Example: https://s3.yourdomain.com. Its host name is given to RustFS (RUSTFS_SERVER_DOMAINS) so virtual-hosted-style requests (bucket.s3.yourdomain.com) work."></i></label>
         <input type="text" id="s3cfg-server-url" placeholder="https://s3.yourdomain.com  (optional)">
       </div>
     </div>
@@ -11404,7 +11407,7 @@ Select the Console tab to load.</pre>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="form-group">
-          <label>Versioning <i class="info-tip" data-tip="When enabled, MinIO preserves previous versions of objects on every write. Suspended keeps existing versions but stops creating new ones. Required for Object Lock."></i></label>
+          <label>Versioning <i class="info-tip" data-tip="When enabled, the S3 server preserves previous versions of objects on every write. Suspended keeps existing versions but stops creating new ones. Required for Object Lock."></i></label>
           <select id="s3bkt-versioning" onchange="_s3BktVersioningChange()">
             <option value="off">Off</option>
             <option value="enabled">Enabled</option>
@@ -30109,6 +30112,17 @@ function _updateS3NavDot(status) {
   }
 
   delete btn.dataset.prereqsMissing;
+  // Not configured (always the case on a fresh appliance, where RustFS is built
+  // in): no status at all — a stopped, never-configured server is not "down".
+  // The owner may also hide the item from the Optional Features ⋮ menu.
+  if (!status.configured) {
+    btn.style.display = status.hide_nav ? 'none' : '';
+    btn.style.opacity = '';
+    btn.title = 'S3 Buckets (not configured)';
+    if (dot) dot.style.display = 'none';
+    _clearLiveAlert('s3-service');
+    return;
+  }
   btn.style.display = '';
   btn.style.opacity = '';
   btn.title = 'S3 Buckets';
@@ -30126,7 +30140,7 @@ function _updateS3NavDot(status) {
   } else {
     dot.style.background = '#ff453a';
     dot.style.boxShadow  = '0 0 4px rgba(255,69,58,0.6)';
-    _setLiveAlert('s3-service', { severity: 'danger', label: 'S3/MinIO service is down', message: '', onclick: 'navS3()' });
+    _setLiveAlert('s3-service', { severity: 'danger', label: 'S3 service (RustFS) is down', message: '', onclick: 'navS3()' });
   }
 }
 
@@ -30156,6 +30170,16 @@ async function loadS3Page() {
     }
     configureBanner.classList.add('hidden');
     content.classList.remove('hidden');
+    const legacy = document.getElementById('s3-legacy-banner');
+    if (legacy) {
+      if (s.legacy_buckets > 0) {
+        legacy.innerHTML = `<strong>${s.legacy_buckets} bucket${s.legacy_buckets === 1 ? '' : 's'} from the former MinIO server ${s.legacy_buckets === 1 ? 'is' : 'are'} not on RustFS.</strong> `
+          + 'MinIO is end of life and RustFS cannot read its storage format, so they were not carried over. Their data is untouched in <code>' + esc(s.legacy_dir || 'the S3 dataset') + '</code>: the <code>.minio.sys</code> folder and one folder per bucket. Copy what you need into new buckets with an S3 tool (rclone, aws s3 sync) while running the old server; once you have deleted those MinIO folders (never <code>rustfs-data</code>), this notice disappears.';
+        legacy.classList.remove('hidden');
+      } else legacy.classList.add('hidden');
+    }
+    const ver = document.getElementById('s3-version');
+    if (ver) ver.textContent = s.version ? 'RustFS ' + s.version : '';
 
     const badge = document.getElementById('s3-svc-badge');
     if (badge) {
@@ -30163,9 +30187,9 @@ async function loadS3Page() {
       badge.style.background  = s.service_active ? 'rgba(48,209,88,0.15)'  : 'rgba(255,69,58,0.15)';
       badge.style.color       = s.service_active ? '#30d158' : '#ff453a';
     }
-    // Set MinIO portal link using the correct scheme and hostname.
+    // Set the RustFS console link using the correct scheme and hostname.
     // In relay mode use the remote server's hostname (saved before reload) so the
-    // browser opens the MinIO console directly on Server B — it cannot be relayed.
+    // browser opens the console directly on Server B — it cannot be relayed.
     const portalLink = document.getElementById('s3-portal-link');
     if (portalLink && s.console_port) {
       let minioHost = window.location.hostname;
@@ -30175,7 +30199,8 @@ async function loadS3Page() {
           if (relayUrl) minioHost = new URL(relayUrl).hostname;
         } catch(_) {}
       }
-      portalLink.href = (s.tls ? 'https' : 'http') + '://' + minioHost + ':' + s.console_port;
+      // RustFS serves its console under /rustfs/console/ (the port root answers 403).
+      portalLink.href = (s.tls ? 'https' : 'http') + '://' + minioHost + ':' + s.console_port + '/rustfs/console/';
     }
 
     await loadS3Buckets();
@@ -30231,10 +30256,10 @@ function _showS3SvcError(action, msg) {
   const cfgBtn = document.getElementById('s3-svc-err-cfg-btn');
   detail.textContent = msg;
   if (action === 'start' || action === 'restart') {
-    hint.textContent = 'MinIO could not start. This usually happens when the S3 Object Server has not been configured yet, or when the configuration contains invalid values (wrong dataset path, port conflict, missing credentials). Make sure all settings are correct in the Configure menu.';
+    hint.textContent = 'RustFS could not start. This usually happens when the S3 Object Server has not been configured yet, or when the configuration contains invalid values (wrong dataset path, port conflict, missing credentials). Make sure all settings are correct in the Configure menu.';
     cfgBtn.classList.remove('hidden');
   } else {
-    hint.textContent = 'The MinIO service action failed. Check that the service is installed correctly and that sufficient permissions are available.';
+    hint.textContent = 'The S3 service action failed. Check that the service is installed correctly and that sufficient permissions are available.';
     cfgBtn.classList.add('hidden');
   }
   document.getElementById('modal-s3-svc-error').classList.remove('hidden');
@@ -30244,7 +30269,7 @@ async function s3ServiceAction(action) {
   const d = document.getElementById('s3-svc-dropdown');
   if (d) d.classList.add('hidden');
   const jobId = 's3-svc-' + Date.now();
-  addActiveJob(jobId, action + ' MinIO service…');
+  addActiveJob(jobId, action + ' S3 service (RustFS)…');
   try {
     const r = await fetch('/api/minio/service', {
       method: 'POST',
@@ -30301,7 +30326,7 @@ async function openS3ConfigureModal() {
   document.getElementById('s3cfg-console-port').value = cfg.console_port || 9001;
   document.getElementById('s3cfg-tls').checked        = !!cfg.tls;
   document.getElementById('s3cfg-cert-row').classList.toggle('hidden', !cfg.tls);
-  document.getElementById('s3cfg-root-user').value    = cfg.root_user    || 'minioadmin';
+  document.getElementById('s3cfg-root-user').value    = cfg.root_user    || 's3admin';
   document.getElementById('s3cfg-root-password').value = '';
   document.getElementById('s3cfg-region').value       = cfg.region       || 'us-east-1';
   document.getElementById('s3cfg-site-name').value    = cfg.site_name    || '';
@@ -30338,7 +30363,7 @@ async function submitS3Configure() {
     server_url:    document.getElementById('s3cfg-server-url').value.trim(),
   };
   const jobId = 's3-cfg-' + Date.now();
-  addActiveJob(jobId, 'Applying MinIO configuration…');
+  addActiveJob(jobId, 'Applying the S3 configuration…');
   try {
     const r = await fetch('/api/minio/config', {
       method: 'POST',
@@ -30667,10 +30692,8 @@ async function _updateMinIOPrereqStatus() {
     const r = await fetch('/api/minio/status');
     if (!r.ok) return;
     const s = await r.json();
-    // Only an existing install is listed (to manage/uninstall it): MinIO can no
-    // longer be downloaded, so offering "Enable" would always fail.
     const row = document.getElementById('optfeat-minio-row');
-    if (row) row.style.display = s.prereqs_installed ? 'flex' : 'none';
+    if (row) row.style.display = 'flex';
     if (s.prereqs_installed) {
       statusEl.innerHTML   = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> Installed';
       statusEl.style.color   = '#30d158';
@@ -30679,6 +30702,9 @@ async function _updateMinIOPrereqStatus() {
       if (menuWrap) {
         menuWrap.classList.remove('hidden');
         _renderOptFeatMenu('minio', true, s.hide_nav);
+        _optFeatMenuState._minio.configured = !!s.configured;
+        // On the appliance this menu only has an item (Hide/Show) while S3 is not configured.
+        menuWrap.classList.toggle('appl-menu', !!window._appliance && !s.configured);
       }
     } else {
       statusEl.textContent   = 'Not installed';
@@ -30719,7 +30745,7 @@ function _optFeatMenu(e, feature) {
   // "Hide/Unhide from menu" options were removed (nav items now auto-hide when
   // their feature isn't installed). Bail so we never open an empty menu.
   if (!state.installed) return;
-  const pkg = feature === 'minio' ? 'minio' : feature === 'ups' ? 'nut' : feature === 'diskpower' ? 'hdparm' : feature === 'lxd' ? 'lxd' : 'targetcli-fb';
+  const pkg = feature === 'minio' ? 'rustfs' : feature === 'ups' ? 'nut' : feature === 'diskpower' ? 'hdparm' : feature === 'lxd' ? 'lxd' : 'targetcli-fb';
   const dd = document.createElement('div');
   dd.addEventListener('click', ev => ev.stopPropagation());
   dd.style.cssText = 'position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);min-width:170px;overflow:hidden;';
@@ -30736,7 +30762,14 @@ function _optFeatMenu(e, feature) {
   // Requisites whether or not the topbar widget is showing, so it stays the
   // way back once the widget is hidden.
   const upsHideBtn = feature === 'ups' ? _upsHideIfNoneMenuItem() : '';
-  const itemHtml = upsHideBtn + redetectBtn + `<button class="uninstall-ui" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
+  // Appliance: S3 (RustFS) is built in and cannot be uninstalled, so while it
+  // is not configured its menu offers hiding the S3 Buckets item instead.
+  const s3HideBtn = (feature === 'minio' && window._appliance && !state.configured)
+    ? `<button onclick="_closeOptFeatMenus();_s3SetNavHidden(${!state.hidden})" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--text-1);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${state.hidden
+        ? '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> Show in menu'
+        : '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg> Hide from menu'}</button>`
+    : '';
+  const itemHtml = s3HideBtn + upsHideBtn + redetectBtn + `<button class="uninstall-ui" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
   dd.innerHTML = itemHtml;
   document.body.appendChild(dd);
   const rect = btn.getBoundingClientRect();
@@ -30749,7 +30782,7 @@ function _optFeatMenu(e, feature) {
 let _uninstallPkg = '';
 const _uninstallDesc = {
   'targetcli-fb': 'The iSCSI service will be stopped and targetcli-fb will be removed from the system.',
-  'minio':        'The MinIO service will be stopped and the minio and mc binaries will be removed from the system. This cannot be undone: MinIO no longer publishes its open-source binaries, so the S3 server cannot be installed again.',
+  'minio':        'The S3 server (RustFS) will be stopped and removed. Your S3 data stays on its dataset, and installing RustFS again brings it back.',
   'nut':          'The NUT service will be stopped and nut / nut-client will be removed from the system.',
   'hdparm':       'hdparm will be removed from the system. Disk power management settings will no longer apply on next boot.',
 };
@@ -30778,7 +30811,7 @@ async function _executeUninstallFeature() {
   _closeUninstallModal();
   _uninstallPkg = '';
 
-  const label = { nut: 'Uninstalling UPS feature (nut)…', minio: 'Uninstalling S3 Object Server (minio)…', 'targetcli-fb': 'Uninstalling iSCSI feature (targetcli-fb)…' }[pkg] || ('Uninstalling ' + pkg + '…');
+  const label = { nut: 'Uninstalling UPS feature (nut)…', minio: 'Uninstalling the S3 server (RustFS)…', 'targetcli-fb': 'Uninstalling iSCSI feature (targetcli-fb)…' }[pkg] || ('Uninstalling ' + pkg + '…');
   const jobId = 'uninstall-' + pkg + '-' + Date.now();
   addActiveJob(jobId, label);
   try {
@@ -30806,18 +30839,29 @@ async function _executeUninstallFeature() {
   }
 }
 
+// Hide / show the S3 Buckets menu item while S3 is not configured (appliance).
+async function _s3SetNavHidden(hidden) {
+  try {
+    const r = await fetch('/api/minio/nav', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hidden }) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Could not change the menu', 'error'); return; }
+    showToast(hidden ? 'S3 Buckets hidden from the menu' : 'S3 Buckets shown in the menu', 'success');
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  await _updateMinIOPrereqStatus();
+  loadS3NavStatus();
+}
+
 async function enableMinIOFeature() {
   const btn = document.getElementById('prereq-minio-btn');
   if (btn) { btn.disabled = true; btn.textContent = _installRunning ? 'Queued…' : 'Installing…'; }
   const jobId = 'minio-install-' + Date.now();
-  _queueInstall(jobId, 'Queued: Install MinIO and mc', 'Installing MinIO and mc…', async () => {
+  _queueInstall(jobId, 'Queued: Install the S3 server (RustFS)', 'Installing the S3 server (RustFS)…', async () => {
     if (btn) btn.textContent = 'Installing…';
     const statusEl = document.getElementById('prereq-minio-status');
     try {
       const r = await fetch('/api/prereqs/install', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ package: 'minio' }),
+        body: JSON.stringify({ package: 'rustfs' }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -34652,7 +34696,7 @@ function _buildCpuTooltipHTML() {
   let html = `<div style="font-weight:600;margin-bottom:8px;color:var(--text-2);font-size:13px;">CPU ${total.toFixed(1)}% total</div>`;
   html += `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;">`;
   if (data) {
-    [['vm','VMs'],['container','Containers'],['smb','SMB'],['nfs','NFS'],['zfs','ZFS'],['minio','MinIO'],['iscsi','iSCSI'],['other','Other']].forEach(([k,label]) => {
+    [['vm','VMs'],['container','Containers'],['smb','SMB'],['nfs','NFS'],['zfs','ZFS'],['minio','S3'],['iscsi','iSCSI'],['other','Other']].forEach(([k,label]) => {
       const pct = data[k+'_pct'] || 0;
       if (pct >= 0.05) html += `<span style="color:${CPU_CAT_COLORS[k]};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none"/></svg> ${label} ${pct.toFixed(1)}%</span>`;
     });
@@ -34860,7 +34904,7 @@ function _buildSwapTooltipHTML() {
 
   // Per-category breakdown (% of disk swap capacity), same palette as MEM.
   html += `<div style="margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;">`;
-  [['vm','VMs'],['container','Containers'],['smb','SMB'],['nfs','NFS'],['zfs','ZFS'],['minio','MinIO'],['iscsi','iSCSI'],['other','Other']].forEach(([k,label]) => {
+  [['vm','VMs'],['container','Containers'],['smb','SMB'],['nfs','NFS'],['zfs','ZFS'],['minio','S3'],['iscsi','iSCSI'],['other','Other']].forEach(([k,label]) => {
     const pct = data[k+'_swap_pct'] || 0;
     if (pct >= 0.05) html += `<span style="color:${CPU_CAT_COLORS[k]};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none"/></svg> ${label} ${pct.toFixed(1)}%</span>`;
   });
@@ -35012,7 +35056,7 @@ function _buildMemTooltipHTML() {
   let html = `<div style="font-weight:600;margin-bottom:8px;color:var(--text-2);font-size:13px;">${firstRow}</div>`;
   html += `<div style="margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;">`;
   if (data) {
-    [['vm','VMs'],['container','Containers'],['smb','SMB'],['nfs','NFS'],['zfs','ZFS (incl. ARC)'],['minio','MinIO'],['iscsi','iSCSI'],['other','Other'],['cache','Buff/Cache']].forEach(([k,label]) => {
+    [['vm','VMs'],['container','Containers'],['smb','SMB'],['nfs','NFS'],['zfs','ZFS (incl. ARC)'],['minio','S3'],['iscsi','iSCSI'],['other','Other'],['cache','Buff/Cache']].forEach(([k,label]) => {
       const pct = data[k+'_pct'] || 0;
       if (pct < 0.05) return;
       // Each chip carries its own tinted background pill (≈12% alpha of

@@ -577,6 +577,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// --- MinIO / S3 Object Server ---
 	r.Handle("/api/minio/status",
 		RequireAuth(http.HandlerFunc(HandleMinIOStatus(appCfg)))).Methods("GET")
+	r.Handle("/api/minio/nav",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetS3NavHidden(appCfg))))).Methods("POST")
 	r.Handle("/api/minio/service",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleMinIOServiceAction(appCfg))))).Methods("POST")
 	r.Handle("/api/minio/config",

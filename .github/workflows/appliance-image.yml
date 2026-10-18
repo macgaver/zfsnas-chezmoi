@@ -42,7 +42,7 @@
 # Needs:
 #   - a self-hosted runner labelled `usbbuild` in the build VM (root or
 #     passwordless sudo, git, gh, cosign, KVM, ~30 GB free in /srv/usbbuild,
-#     and the last MinIO binaries in /srv/usbbuild/minio-cache);
+#     internet access to github.com (Zabbly for Incus, RustFS releases));
 #   - secrets CODE_SIGN_PRIVATE_KEY + COSIGN_PASSWORD (already used by the
 #     binary release) and APPLIANCE_PUBLISH_TOKEN: a fine-grained PAT limited
 #     to macgaver/znas-usb-appliance with Contents: read and write — this
@@ -51,7 +51,7 @@ name: Appliance image
 
 env:
   APPLIANCE_UBUNTU_VERSION: "26.04.1"
-  APPLIANCE_BUILD: "3"
+  APPLIANCE_BUILD: "5"
   APPLIANCE_INCUS_VERSION: "7.5.1"
   APPLIANCE_REPO: macgaver/znas-usb-appliance
 
@@ -183,9 +183,9 @@ jobs:
           cd usbimage
           # UBUNTU_VERSION makes build.sh fail if the mirror delivered another
           # point release than the one declared above.
-          # ZNAS_MINIO_CACHE: MinIO no longer publishes its binaries; a fresh
-          # rootfs gets the last ones from this folder on the runner.
-          sudo -E WORK=/srv/usbbuild/work ZNAS_MINIO_CACHE=/srv/usbbuild/minio-cache \
+          # RustFS (S3 server): the build fetches the LATEST release from
+          # github.com/rustfs/rustfs and checks it against that release's SHA256SUMS.
+          sudo -E WORK=/srv/usbbuild/work \
             UBUNTU_VERSION="$APPLIANCE_UBUNTU_VERSION" APPLIANCE_BUILD="$APPLIANCE_BUILD" \
             INCUS_VERSION="$APPLIANCE_INCUS_VERSION" \
             ./build.sh --binary "$RUNNER_TEMP/bin/zfsnas" --test
@@ -215,7 +215,9 @@ jobs:
         run: |
           set -euo pipefail
           cd usbimage
-          INCUS_VERSION="$APPLIANCE_INCUS_VERSION" ./publish-iso.sh --repo "$APPLIANCE_REPO"
+          # The RustFS version is whatever the build fetched (latest at build time).
+          rustfs=$(sed -n 's/^rustfs_version=//p' /srv/usbbuild/work/rootfs/etc/zfsnas-release 2>/dev/null || true)
+          INCUS_VERSION="$APPLIANCE_INCUS_VERSION" RUSTFS_VERSION="$rustfs" ./publish-iso.sh --repo "$APPLIANCE_REPO"
 
       - name: Remove the image from the runner
         if: always()

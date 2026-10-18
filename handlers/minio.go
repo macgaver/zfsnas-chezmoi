@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"zfsnas/internal/audit"
@@ -15,9 +17,11 @@ import (
 // GET /api/minio/status
 func HandleMinIOStatus(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		prereqs := system.MinIOPrereqsInstalled()
+		prereqs := system.S3ServerInstalled()
 		svc := system.GetMinIOServiceStatus()
-		configured := appCfg.MinIO.RootUser != "" && appCfg.MinIO.DataDir != ""
+		// Configured = set up for RustFS. A MinIO-era configuration still
+		// pre-fills the form, but has to be saved once to move to RustFS.
+		configured := appCfg.MinIO.RootUser != "" && appCfg.MinIO.DataDir != "" && appCfg.MinIO.Engine == "rustfs"
 		jsonOK(w, map[string]interface{}{
 			"prereqs_installed": prereqs,
 			"enabled":           appCfg.MinIO.Enabled,
@@ -28,6 +32,10 @@ func HandleMinIOStatus(appCfg *config.AppConfig) http.HandlerFunc {
 			"console_port":      appCfg.MinIO.ConsolePort,
 			"tls":               appCfg.MinIO.TLS,
 			"hide_nav":          appCfg.MinIO.HideNav,
+			"engine":            "rustfs",
+			"version":           system.S3ServerVersion(),
+			"legacy_buckets":    legacyMinIOBucketsLeft(appCfg),
+			"legacy_dir":        appCfg.MinIO.DataDir,
 		})
 	}
 }
@@ -43,18 +51,13 @@ func HandleMinIOServiceAction(appCfg *config.AppConfig) http.HandlerFunc {
 			jsonErr(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		var err error
 		switch req.Action {
-		case "start":
-			err = system.StartMinIOService()
-		case "stop":
-			err = system.StopMinIOService()
-		case "restart":
-			err = system.RestartMinIOService()
+		case "start", "stop", "restart":
 		default:
 			jsonErr(w, http.StatusBadRequest, "invalid action")
 			return
 		}
+		err := system.S3ServiceAction(req.Action)
 		if err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
@@ -135,6 +138,10 @@ func HandleSaveMinIOConfig(appCfg *config.AppConfig) http.HandlerFunc {
 		if req.Region == "" {
 			req.Region = "us-east-1"
 		}
+		if !system.S3ServerInstalled() {
+			jsonErr(w, http.StatusServiceUnavailable, "the S3 server (RustFS) is not installed — install it from Requisites → Optional Features")
+			return
+		}
 
 		// Resolve the dataset mountpoint.
 		datasets, err := system.ListAllDatasets()
@@ -176,13 +183,21 @@ func HandleSaveMinIOConfig(appCfg *config.AppConfig) http.HandlerFunc {
 		appCfg.MinIO.SiteName = strings.TrimSpace(req.SiteName)
 		appCfg.MinIO.ServerURL = strings.TrimSpace(req.ServerURL)
 		appCfg.MinIO.Enabled = true
+		appCfg.MinIO.HideNav = false // a configured S3 server is always in the menu
+		// First save on RustFS: buckets listed for MinIO do not exist on the
+		// new server (it cannot read MinIO's data), so they move aside.
+		if appCfg.MinIO.Engine != "rustfs" {
+			appCfg.MinIO.LegacyMinIOBuckets = append(appCfg.MinIO.LegacyMinIOBuckets, appCfg.MinIO.Buckets...)
+			appCfg.MinIO.Buckets = nil
+			appCfg.MinIO.Engine = "rustfs"
+		}
 
 		if err := config.SaveAppConfig(appCfg); err != nil {
 			jsonErr(w, http.StatusInternalServerError, "save config: "+err.Error())
 			return
 		}
 
-		if err := system.ApplyMinIOConfig(&appCfg.MinIO, appCfg.ConfigDir); err != nil {
+		if err := system.ApplyS3Config(&appCfg.MinIO, appCfg.ConfigDir); err != nil {
 			jsonErr(w, http.StatusInternalServerError, "apply config: "+err.Error())
 			return
 		}
@@ -199,15 +214,14 @@ func HandleSaveMinIOConfig(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleListS3Users returns all MinIO IAM users.
+// HandleListS3Users returns all S3 users.
 // GET /api/minio/users
 func HandleListS3Users(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !system.MinIOPrereqsInstalled() {
-			jsonErr(w, http.StatusServiceUnavailable, "MinIO not installed")
+		if !s3Ready(w, appCfg) {
 			return
 		}
-		users, err := system.ListS3Users()
+		users, err := system.ListS3Users(&appCfg.MinIO)
 		if err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
@@ -216,7 +230,7 @@ func HandleListS3Users(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleCreateS3User creates a new MinIO IAM user.
+// HandleCreateS3User creates a new S3 user.
 // POST /api/minio/user/create
 func HandleCreateS3User(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +252,7 @@ func HandleCreateS3User(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 
-		if err := system.CreateS3User(req.AccessKey, req.SecretKey); err != nil {
+		if err := system.CreateS3User(&appCfg.MinIO, req.AccessKey, req.SecretKey); err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -256,7 +270,7 @@ func HandleCreateS3User(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleDeleteS3User removes a MinIO IAM user.
+// HandleDeleteS3User removes a S3 user.
 // POST /api/minio/user/delete
 func HandleDeleteS3User(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +287,7 @@ func HandleDeleteS3User(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 
-		if err := system.DeleteS3User(req.AccessKey); err != nil {
+		if err := system.DeleteS3User(&appCfg.MinIO, req.AccessKey); err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -309,7 +323,7 @@ func HandleDeleteS3User(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleSetS3UserStatus enables or disables a MinIO IAM user.
+// HandleSetS3UserStatus enables or disables a S3 user.
 // POST /api/minio/user/status
 func HandleSetS3UserStatus(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -325,7 +339,7 @@ func HandleSetS3UserStatus(appCfg *config.AppConfig) http.HandlerFunc {
 			jsonErr(w, http.StatusBadRequest, "access_key is required")
 			return
 		}
-		if err := system.SetS3UserStatus(req.AccessKey, req.Enabled); err != nil {
+		if err := system.SetS3UserStatus(&appCfg.MinIO, req.AccessKey, req.Enabled); err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -333,7 +347,7 @@ func HandleSetS3UserStatus(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleSetS3UserPassword updates a MinIO IAM user's secret key.
+// HandleSetS3UserPassword updates a S3 user's secret key.
 // POST /api/minio/user/password
 func HandleSetS3UserPassword(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -353,7 +367,7 @@ func HandleSetS3UserPassword(appCfg *config.AppConfig) http.HandlerFunc {
 			jsonErr(w, http.StatusBadRequest, "secret_key must be at least 8 characters")
 			return
 		}
-		if err := system.SetS3UserPassword(req.AccessKey, req.SecretKey); err != nil {
+		if err := system.SetS3UserPassword(&appCfg.MinIO, req.AccessKey, req.SecretKey); err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -373,7 +387,7 @@ func HandleListS3Buckets(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleCreateS3Bucket creates a new S3 bucket in MinIO and records it in config.
+// HandleCreateS3Bucket creates a new S3 bucket on the S3 server and records it in config.
 // POST /api/minio/bucket/create
 func HandleCreateS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -417,13 +431,19 @@ func HandleCreateS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 			Quota:      strings.TrimSpace(req.Quota),
 			AnonAccess: req.AnonAccess,
 		}
-		if err := system.CreateS3Bucket(opts); err != nil {
+		if !s3Ready(w, appCfg) {
+			return
+		}
+		if err := system.CreateS3Bucket(&appCfg.MinIO, opts); err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
 		if len(req.UserKeys) > 0 {
-			_ = system.ApplyBucketUserPolicy(req.Name, req.UserKeys, nil)
+			if err := system.ApplyBucketUserPolicy(&appCfg.MinIO, req.Name, req.UserKeys, nil); err != nil {
+				jsonErr(w, http.StatusInternalServerError, "bucket created, but user access failed: "+err.Error())
+				return
+			}
 		}
 
 		bucket := config.S3Bucket{
@@ -455,7 +475,7 @@ func HandleCreateS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 	}
 }
 
-// HandleDeleteS3Bucket removes a bucket from MinIO and from portal config.
+// HandleDeleteS3Bucket removes a bucket from the S3 server and from portal config.
 // POST /api/minio/bucket/delete
 func HandleDeleteS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -472,7 +492,10 @@ func HandleDeleteS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 
-		if err := system.DeleteS3Bucket(req.Name); err != nil {
+		if !s3Ready(w, appCfg) {
+			return
+		}
+		if err := system.DeleteS3Bucket(&appCfg.MinIO, req.Name); err != nil {
 			jsonErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -543,13 +566,25 @@ func HandleEditS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 		}
 		prevKeys := appCfg.MinIO.Buckets[idx].UserKeys
 
-		target := "zfsnas/" + req.Name
 		newQuota := strings.TrimSpace(req.Quota)
-
-		_ = system.S3ApplyVersioning(target, req.Versioning)
-		_ = system.S3ApplyQuota(target, newQuota)
-		_ = system.S3ApplyAnonAccess(target, req.AnonAccess)
-		_ = system.ApplyBucketUserPolicy(req.Name, req.UserKeys, prevKeys)
+		if !s3Ready(w, appCfg) {
+			return
+		}
+		cfg := &appCfg.MinIO
+		for _, step := range []struct {
+			what string
+			run  func() error
+		}{
+			{"versioning", func() error { return system.S3ApplyVersioning(cfg, req.Name, req.Versioning) }},
+			{"quota", func() error { return system.S3ApplyQuota(cfg, req.Name, newQuota) }},
+			{"anonymous access", func() error { return system.S3ApplyAnonAccess(cfg, req.Name, req.AnonAccess) }},
+			{"user access", func() error { return system.ApplyBucketUserPolicy(cfg, req.Name, req.UserKeys, prevKeys) }},
+		} {
+			if err := step.run(); err != nil {
+				jsonErr(w, http.StatusInternalServerError, step.what+": "+err.Error())
+				return
+			}
+		}
 
 		appCfg.MinIO.Buckets[idx].Comment = strings.TrimSpace(req.Comment)
 		appCfg.MinIO.Buckets[idx].Versioning = req.Versioning
@@ -573,6 +608,73 @@ func HandleEditS3Bucket(appCfg *config.AppConfig) http.HandlerFunc {
 
 		jsonOK(w, map[string]bool{"ok": true})
 	}
+}
+
+// HandleSetS3NavHidden hides or shows the S3 Buckets menu item while the S3
+// server is not configured (the USB appliance has RustFS built in, so the item
+// is there even for owners who never use S3). POST /api/minio/nav {"hidden":bool}
+func HandleSetS3NavHidden(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Hidden bool `json:"hidden"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		appCfg.MinIO.HideNav = req.Hidden
+		if err := config.SaveAppConfig(appCfg); err != nil {
+			jsonErr(w, http.StatusInternalServerError, "save config: "+err.Error())
+			return
+		}
+		jsonOK(w, map[string]bool{"hidden": req.Hidden})
+	}
+}
+
+// legacyMinIOBucketsLeft is how many buckets of the former MinIO server still
+// have their data on disk. MinIO (single drive) kept it at the top of the S3
+// dataset: a ".minio.sys" folder plus one folder per bucket. Once the owner has
+// removed them, the list is forgotten and the notice on the S3 page goes away.
+func legacyMinIOBucketsLeft(appCfg *config.AppConfig) int {
+	legacy := appCfg.MinIO.LegacyMinIOBuckets
+	if len(legacy) == 0 {
+		return 0
+	}
+	dir := appCfg.MinIO.DataDir
+	if dir == "" {
+		return len(legacy)
+	}
+	exists := func(name string) bool {
+		_, err := os.Stat(filepath.Join(dir, name))
+		return err == nil
+	}
+	left := 0
+	for _, b := range legacy {
+		if b.Name != "" && b.Name != system.RustFSDataSubdir && exists(b.Name) {
+			left++
+		}
+	}
+	if left == 0 && exists(".minio.sys") {
+		left = len(legacy) // bucket folders gone, MinIO's metadata still there
+	}
+	if left == 0 {
+		appCfg.MinIO.LegacyMinIOBuckets = nil
+		_ = config.SaveAppConfig(appCfg)
+	}
+	return left
+}
+
+// s3Ready answers 409/503 when the S3 server cannot take requests yet.
+func s3Ready(w http.ResponseWriter, appCfg *config.AppConfig) bool {
+	if !system.S3ServerInstalled() {
+		jsonErr(w, http.StatusServiceUnavailable, "the S3 server (RustFS) is not installed")
+		return false
+	}
+	if appCfg.MinIO.Engine != "rustfs" || appCfg.MinIO.RootUser == "" {
+		jsonErr(w, http.StatusConflict, "configure the S3 server first (Configuration tab)")
+		return false
+	}
+	return true
 }
 
 func validateS3BucketName(name string) error {

@@ -120,7 +120,7 @@ func main() {
 	// A configured S3 (MinIO) service whose unit is missing — every boot of
 	// the USB appliance, whose root lives in RAM — is rebuilt from the saved
 	// configuration. In the background: it waits on systemd and the pool.
-	go system.ReapplyMinIOAtStartup(&appCfg.MinIO, absConfig)
+	go system.ReapplyS3AtStartup(&appCfg.MinIO, absConfig)
 
 	// The USB appliance ships MergerFS in its image, so the Install click that
 	// enables the feature on a host never happens there: enable it once, as

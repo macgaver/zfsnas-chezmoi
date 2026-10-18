@@ -288,6 +288,7 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 		allowlist := map[string]bool{
 			"targetcli-fb":         true,
 			"minio":                true,
+			"rustfs":               true,
 			"nut":                  true,
 			"hdparm":               true,
 			"proxmox-import-tools": true,
@@ -304,8 +305,8 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 		defer aptInstallMu.Unlock()
 
 		// MinIO uses a custom binary installation (not apt-get).
-		if req.Package == "minio" {
-			if err := system.InstallMinIO(); err != nil {
+		if req.Package == "minio" || req.Package == "rustfs" {
+			if err := system.InstallS3Server(); err != nil {
 				jsonErr(w, http.StatusInternalServerError, err.Error())
 				return
 			}
@@ -316,9 +317,9 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 				Role:    sess.Role,
 				Action:  audit.ActionInstallPrereqs,
 				Result:  audit.ResultOK,
-				Details: "installed: minio, mc",
+				Details: "installed: rustfs",
 			})
-			jsonOK(w, map[string]string{"message": "minio installed"})
+			jsonOK(w, map[string]string{"message": "rustfs installed"})
 			return
 		}
 
@@ -455,8 +456,8 @@ func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 		defer aptInstallMu.Unlock()
 
 		switch req.Package {
-		case "minio":
-			if err := system.UninstallMinIO(); err != nil {
+		case "minio", "rustfs":
+			if err := system.UninstallS3Server(); err != nil {
 				jsonErr(w, http.StatusInternalServerError, err.Error())
 				return
 			}
@@ -471,7 +472,7 @@ func HandleUninstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 				Role:    sess.Role,
 				Action:  audit.ActionInstallPrereqs,
 				Result:  audit.ResultOK,
-				Details: "uninstalled: minio, mc",
+				Details: "uninstalled: rustfs",
 			})
 		case "targetcli-fb":
 			if err := system.UninstallISCSI(); err != nil {

@@ -28,18 +28,12 @@ BUILD_BINARY="/root/zfsnas"
 # the CI workflow's so one machine never holds two copies.
 BUILD_WORK="/srv/usbbuild/work"
 
-# Folder on the build machine with the last minio + mc binaries, used to seed
-# a fresh rootfs (MinIO no longer publishes them).
-ZNAS_MINIO_CACHE="/srv/usbbuild/minio-cache"
 
 # ---- what gets built ------------------------------------------------------
 # Ubuntu point release the image must be built from (build fails otherwise).
 # Leave empty to accept whatever the Ubuntu archive currently serves.
 UBUNTU_VERSION="26.04.1"
 
-# Set to 1 to build without MinIO/S3 when dl.min.io cannot provide it and the
-# build machine's rootfs has no copy yet (see HOW-TO-BUILD-ISO.md).
-ZNAS_ALLOW_NO_MINIO=0
 
 # ---- after the build ------------------------------------------------------
 # Where finished ISOs are copied (default: this usbimage/ folder).

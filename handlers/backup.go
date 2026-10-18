@@ -439,7 +439,7 @@ func featureInstalledHere(f string) bool {
 	case "mergerfs":
 		return system.MergerFSInstalled()
 	case "s3":
-		return system.MinIOPrereqsInstalled()
+		return system.S3ServerInstalled()
 	case "virtualization":
 		return system.LXDAvailable()
 	}

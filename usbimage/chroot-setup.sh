@@ -181,39 +181,39 @@ depmod "$KVER"
 systemctl enable zfsnas-realtek.service
 ls -l "$VENDOR_DIR"
 
-# MinIO is not in the archive — bake the same binaries the portal's
-# install flow downloads (system/minio.go).
-# Retries matter here: a single dropped connection to dl.min.io aborts the
-# whole chroot stage under `set -e`, costing a full rebuild (seen once).
-#
-# 2026-09: MinIO archived the open-source server/client and dl.min.io now
-# answers 410 Gone. Download to a temp file and keep the binary the rootfs
-# already has (from an earlier build) when that fails — `wget -O` straight
-# onto the target truncated it to 0 bytes and, under -q, aborted the build
-# with no message at all. A fresh rootfs with no binary still fails, loudly.
-fetch_bin() {
-    local dest="$1" url="$2" tmp="$1.new"
-    if wget -q --tries=3 --timeout=30 -O "$tmp" "$url" && [ -s "$tmp" ]; then
-        mv "$tmp" "$dest"
-    else
-        rm -f "$tmp"
-        if [ -s "$dest" ]; then
-            echo "WARNING: could not download $url — keeping the existing $(basename "$dest")" >&2
-        elif [ "${ZNAS_ALLOW_NO_MINIO:-0}" = 1 ]; then
-            # Fresh rootfs, no binary to keep: build without it on request.
-            # The image then has no S3 (MinIO) feature.
-            echo "WARNING: could not download $url — building WITHOUT $(basename "$dest") (ZNAS_ALLOW_NO_MINIO=1)" >&2
-            return 0
-        else
-            echo "ERROR: could not download $url and the rootfs has no $(basename "$dest")." >&2
-            echo "       Set ZNAS_ALLOW_NO_MINIO=1 to build an image without S3 (see HOW-TO-BUILD-ISO.md)." >&2
-            return 1
-        fi
-    fi
-    chmod +x "$dest"
-}
-fetch_bin /usr/local/bin/minio https://dl.min.io/server/minio/release/linux-amd64/minio
-fetch_bin /usr/local/bin/mc    https://dl.min.io/client/mc/release/linux-amd64/mc
+# S3 object server: RustFS (Apache-2.0), the official static Linux build of
+# the LATEST release on github.com/rustfs/rustfs — every image picks up the
+# newest one. RUSTFS_VERSION (build env, e.g. 1.0.2) pins a release instead.
+# Verified against the SHA256SUMS published with that release before it goes
+# into the image. MinIO (end of life: repositories archived, no binaries) is
+# no longer shipped; a reused rootfs loses its old minio/mc here.
+rm -f /usr/local/bin/minio /usr/local/bin/mc
+RUSTFS_VERSION="${RUSTFS_VERSION:-}"
+if [ -z "$RUSTFS_VERSION" ]; then
+    # /releases/latest redirects to /releases/tag/<version> (newest non-pre-release).
+    RUSTFS_VERSION=$(curl -fsSIL --retry 3 -o /dev/null -w '%{url_effective}' \
+        https://github.com/rustfs/rustfs/releases/latest | sed -n 's|.*/releases/tag/||p')
+fi
+[ -n "$RUSTFS_VERSION" ] || { echo "ERROR: cannot find the latest RustFS release" >&2; exit 1; }
+echo "== RustFS $RUSTFS_VERSION =="
+rfs_zip="rustfs-linux-x86_64-musl-v${RUSTFS_VERSION}.zip"
+rfs_base="https://github.com/rustfs/rustfs/releases/download/${RUSTFS_VERSION}"
+rfs_tmp=$(mktemp -d)
+curl -fsSL --retry 3 -o "$rfs_tmp/$rfs_zip" "$rfs_base/$rfs_zip"
+curl -fsSL --retry 3 -o "$rfs_tmp/SHA256SUMS" "$rfs_base/SHA256SUMS"
+(cd "$rfs_tmp" && grep -E "  ${rfs_zip}\$" SHA256SUMS | sha256sum -c -) \
+    || { echo "ERROR: $rfs_zip does not match the release's SHA256SUMS" >&2; exit 1; }
+python3 - "$rfs_tmp/$rfs_zip" "$rfs_tmp" <<'PY'
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+names = [n for n in z.namelist() if n.rsplit("/", 1)[-1] == "rustfs"]
+if not names:
+    sys.exit("ERROR: no rustfs binary in the archive")
+open(sys.argv[2] + "/rustfs", "wb").write(z.read(names[0]))
+PY
+install -m 0755 -o root -g root "$rfs_tmp/rustfs" /usr/local/bin/rustfs
+rm -rf "$rfs_tmp"
+/usr/local/bin/rustfs --version | head -n1
 
 # ---- appliance hygiene (spec §3 stage 2) -----------------------------------
 # Login banner (appliance + Ubuntu + kernel + portal version) for every

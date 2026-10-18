@@ -111,9 +111,9 @@ remote "set -e; mkdir -p '$BUILD_DIR'; tar -C '$BUILD_DIR' --no-same-owner -xzf 
 LOG="build-remote-$(date +%Y%m%d-%H%M%S).log"
 note "building (from stage '$FROM', appliance build $BUILD_NO, Incus ${INCUS_VERSION:-from the Ubuntu archive}) — log: $BUILD_DIR/$LOG"
 if ! remote "cd '$BUILD_DIR' && UBUNTU_VERSION='${UBUNTU_VERSION:-}' APPLIANCE_BUILD='$BUILD_NO' \
-        IMAGE_VERSION='$PORTAL_VERSION' ZNAS_ALLOW_NO_MINIO='${ZNAS_ALLOW_NO_MINIO:-0}' \
+        IMAGE_VERSION='$PORTAL_VERSION' RUSTFS_VERSION='${RUSTFS_VERSION:-}' \
         INCUS_VERSION='$INCUS_VERSION' \
-        ${BUILD_WORK:+WORK='$BUILD_WORK'} ${ZNAS_MINIO_CACHE:+ZNAS_MINIO_CACHE='$ZNAS_MINIO_CACHE'} \
+        ${BUILD_WORK:+WORK='$BUILD_WORK'} \
         ./build.sh --binary '$BUILD_BINARY' --from '$FROM' $TEST > '$LOG' 2>&1"; then
     echo; echo "BUILD FAILED — last lines of $LOG:"
     remote "tail -n 30 '$BUILD_DIR/$LOG'"

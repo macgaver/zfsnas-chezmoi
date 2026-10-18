@@ -180,9 +180,9 @@ var requiredSudoChecks = []sudoCheck{
 	{Binary: "tee", Match: "/etc/nut/upsd.conf", Name: "tee /etc/nut/upsd.conf", IfBinary: "upsc"},
 	{Binary: "tee", Match: "/etc/nut/upsd.users", Name: "tee /etc/nut/upsd.users", IfBinary: "upsc"},
 	{Binary: "tee", Match: "/etc/nut/upsmon.conf", Name: "tee /etc/nut/upsmon.conf", IfBinary: "upsc"},
-	// ── MinIO (S3) — only checked when minio is installed ────────────────────
-	{Binary: "tee", Match: "/etc/systemd/system/minio.service", Name: "tee /etc/systemd/system/minio.service", IfBinary: "minio"},
-	{Binary: "tee", Match: "/etc/default/minio", Name: "tee /etc/default/minio", IfBinary: "minio"},
+	// ── S3 server (RustFS) — only checked when rustfs is installed ───────────
+	{Binary: "tee", Match: "/etc/systemd/system/rustfs.service", Name: "tee /etc/systemd/system/rustfs.service", IfBinary: "rustfs"},
+	{Binary: "tee", Match: "/etc/default/rustfs", Name: "tee /etc/default/rustfs", IfBinary: "rustfs"},
 	// ── iSCSI — only checked when targetcli-fb is installed ──────────────────
 	{Binary: "targetcli", Name: "targetcli"},
 	// ── User / Samba ─────────────────────────────────────────────────────────

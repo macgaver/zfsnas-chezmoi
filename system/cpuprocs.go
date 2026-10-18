@@ -366,7 +366,7 @@ func categorizeProcName(lower string) string {
 		return CpuCatZFS
 
 	// ── MinIO (S3 object storage) ────────────────────────────────────────────
-	case lower == "minio":
+	case lower == "minio" || lower == "rustfs":
 		return CpuCatMinIO
 
 	// ── iSCSI ────────────────────────────────────────────────────────────────

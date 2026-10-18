@@ -16,7 +16,7 @@ build machine, about 30 minutes, and internet access.
 |---|---|---|
 | Build machine | x86-64, **Ubuntu 24.04 or newer** | Physical box, VM, or cloud instance. Builds run as **root** and mount/chroot a rootfs, so use a machine or VM you don't mind dedicating (not a container). |
 | CPU / RAM / disk | 4 cores, 8 GB, **30 GB free** | The rootfs, squashfs and ISO take ~10 GB; 30 GB leaves room for a second build. |
-| Network | `archive.ubuntu.com`, `dl.min.io` | Ubuntu packages, plus MinIO for the S3 feature (see *Troubleshooting* — MinIO stopped publishing binaries in 2026). |
+| Network | `archive.ubuntu.com`, `github.com`, `pkgs.zabbly.com` | Ubuntu packages, the RustFS S3 server (latest release, checksum-verified) and Incus (Zabbly). |
 | KVM (`/dev/kvm`) | only for the boot tests | In a VM this means **nested virtualization** must be on. Building works without it. |
 | Go 1.22+ | only to build the portal from source | Any machine; the binary is copied over. |
 | A USB stick | 8 GB minimum | 32 GB or more on USB 3 (or faster) recommended. Plus 4 GB RAM on the target machine (more with ZFS). |
@@ -80,7 +80,7 @@ Put a portal binary there, either way:
 **Build it from source** (Go 1.22+, any machine; copy the result to the
 repository root on the build machine):
 ```bash
-VERSION=6.10.7                     # what the portal will report
+VERSION=6.10.18                    # what the portal will report
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
   -ldflags "-s -w -X zfsnas/internal/version.Version=${VERSION}" -o zfsnas .
 ./zfsnas --version
@@ -133,8 +133,7 @@ Everything is kept in `./work/`, so you can resume from any stage:
 | `INCUS_VERSION` | unset | If set (e.g. `7.5.1`), Incus is installed at exactly that version from the Incus project's own packages (Zabbly, `stable`) instead of Ubuntu's archive (frozen at 6.0.5 on 26.04). `remote-build.sh` defaults it to `APPLIANCE_INCUS_VERSION` from the workflow. Only ever move it forward: Incus upgrades its database on first start and an older Incus cannot read it back. |
 | `IMAGE_VERSION` | see `conf.sh` | The portal version you are baking in; only used for labels and a mismatch warning. |
 | `WORK` | `./work` | Where the rootfs and intermediate files live. |
-| `ZNAS_MINIO_CACHE` | unset | A folder holding `minio` and `mc` to seed a fresh rootfs with (MinIO no longer publishes them). |
-| `ZNAS_ALLOW_NO_MINIO` | `0` | `1` = build without MinIO when it cannot be downloaded (the image then has no S3 feature). |
+| `RUSTFS_VERSION` | unset | Pin the RustFS (S3 server) release baked into the image, e.g. `1.0.2`. Unset = the latest release on github.com/rustfs/rustfs, verified against its `SHA256SUMS`. |
 
 **Where the version comes from**: the Ubuntu part is read from the built
 rootfs (`/etc/os-release`), so it follows whatever point release the Ubuntu
@@ -232,11 +231,9 @@ znas-usb-appliance-v26-04-1-1.iso.sig
 
 ## 8. Troubleshooting
 
-**`ERROR: could not download https://dl.min.io/...`**
-MinIO archived its open-source server and client in 2026, and `dl.min.io` now
-answers *410 Gone*. A rootfs that already has the binaries keeps them (with a
-warning); a fresh one cannot get them. Build with `ZNAS_ALLOW_NO_MINIO=1` to
-produce an image without the S3 feature.
+**`ERROR: ... does not match the release's SHA256SUMS`** / **`cannot find the latest RustFS release`**
+The RustFS download (github.com/rustfs/rustfs) failed or was altered. Retry; to
+build against a known release, set `RUSTFS_VERSION=<version>`.
 
 **`the rootfs is Ubuntu 26.04.2 but UBUNTU_VERSION declares 26.04.1`**
 Ubuntu shipped a new point release. Update `UBUNTU_VERSION` (or

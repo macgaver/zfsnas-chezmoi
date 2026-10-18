@@ -3883,10 +3883,11 @@ body:not(.appliance) .appliance-only { display: none !important; }
 body.appliance .appliance-hide { display: none !important; }
 /* Optional Features on the appliance: features ship in the image, so rows show
    a read-only "Enabled" checkbox; install/enable buttons, status text and
-   menus go — except UPS's menu (Re-Detect UPS, widget visibility). */
+   menus go — except UPS's menu (Re-Detect UPS, widget visibility) and S3's
+   while it is not configured (Hide / Show the S3 Buckets menu item). */
 body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-status"],
 body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-btn"] { display: none !important; }
-body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"]:not(#prereq-ups-menu-wrap) { visibility: hidden !important; pointer-events: none; }
+body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"]:not(#prereq-ups-menu-wrap):not(.appl-menu) { visibility: hidden !important; pointer-events: none; }
 .optfeat-appl-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); white-space: nowrap; cursor: default; }
 .optfeat-appl-check input { accent-color: var(--accent-ok, #30d158); margin: 0; }
 /* Optional Features: the ⋮ menu gets its own fixed column at the far right of

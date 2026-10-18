@@ -64,7 +64,7 @@ var sudoersSectionInfoMap = map[string]sudoersSectionInfo{
 	"ZFSNAS_SMB":       {Label: "Samba (SMB Shares)"},
 	"ZFSNAS_NFS":       {Label: "NFS Shares"},
 	"ZFSNAS_ISCSI":     {Label: "iSCSI Sharing", Optional: true},
-	"ZFSNAS_MINIO":     {Label: "S3 Object Server (MinIO)", Optional: true},
+	"ZFSNAS_S3":        {Label: "S3 Object Server (RustFS)", Optional: true},
 	"ZFSNAS_UPS":       {Label: "UPS Management (NUT)", Optional: true},
 	"ZFSNAS_DISKPOWER": {Label: "Disk Power Management", Optional: true},
 	"ZFSNAS_SYSPOWER":  {Label: "System Power Management", Optional: true},
@@ -1031,27 +1031,33 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/systemctl stop tgt":                    "Stops the SCSI target framework daemon (tgt).",
 	"/usr/bin/systemctl restart tgt":                 "Restarts the SCSI target framework daemon (tgt).",
 
-	// ── MinIO install / setup ─────────────────────────────────────────────────
-	"/usr/bin/chmod +x /usr/local/bin/minio":                                "Makes the downloaded MinIO server binary executable.",
-	"/usr/bin/chmod +x /usr/local/bin/mc":                                   "Makes the downloaded MinIO client (mc) binary executable.",
-	"/usr/bin/mkdir -p /var/lib/minio":                                      "Creates the MinIO data directory.",
-	"/usr/bin/mkdir -p /var/lib/minio/.minio/certs":                         "Creates the MinIO TLS certificate directory.",
-	"/usr/bin/mkdir -p *":                                                   "Creates directories on demand for the File Browser — the 'New Folder' action and the destination directory when uploading files. Also used by other features that provision their own directories (e.g. the MinIO/S3 object server's data directories). Path validation enforced in Go (SafeJoin against dataset/share roots).",
-	"/usr/bin/chown minio-user\\:minio-user /var/lib/minio":                 "Transfers ownership of the MinIO data directory to the minio-user account.",
-	"/usr/bin/chown -R minio-user\\:minio-user /var/lib/minio/.minio/certs": "Transfers ownership of the MinIO TLS certificate directory to minio-user.",
-	"/usr/bin/chown -R minio-user\\:minio-user *":                           "Transfers ownership of MinIO data directories to the minio-user account.",
-	"/usr/bin/chown root\\:minio-user /etc/default/minio":                   "Sets MinIO environment file ownership so minio-user can read it.",
-	"/usr/bin/chmod 640 /etc/default/minio":                                 "Restricts the MinIO environment file to root and minio-user.",
-	"/usr/bin/chmod 640 /var/lib/minio/.minio/certs/private.key":            "Protects the MinIO TLS private key from world-read access.",
-	"/usr/bin/tee /var/lib/minio/.minio/certs/public.crt":                   "Installs the MinIO TLS public certificate at a fixed destination. The source is read in-process and piped through sudo tee, so no source-path wildcard is granted.",
-	"/usr/bin/tee /var/lib/minio/.minio/certs/private.key":                  "Installs the MinIO TLS private key at a fixed destination. The source is read in-process and piped through sudo tee, so no source-path wildcard is granted.",
-	"/usr/bin/rm -f /var/lib/minio/.minio/certs/public.crt":                 "Removes the MinIO TLS certificate when TLS is disabled.",
-	"/usr/bin/rm -f /var/lib/minio/.minio/certs/private.key":                "Removes the MinIO TLS private key when TLS is disabled.",
-	"/usr/bin/systemctl enable minio":                                       "Enables MinIO to start automatically at boot.",
-	"/usr/bin/systemctl disable minio":                                      "Prevents MinIO from starting automatically at boot.",
-	"/usr/bin/systemctl start minio":                                        "Starts the MinIO S3 object server.",
-	"/usr/bin/systemctl stop minio":                                         "Stops the MinIO S3 object server.",
-	"/usr/bin/systemctl restart minio":                                      "Restarts the MinIO S3 object server.",
+	// ── S3 Object Server (RustFS) install / setup (v6.10.17) ─────────────────
+	"/usr/bin/tee /usr/local/bin/rustfs":                                                     "Installs the RustFS server binary. The portal downloads the pinned release from GitHub, checks its SHA-256 against the value built into ZNAS, and streams the verified file through tee to this fixed path.",
+	"/usr/bin/chmod 755 /usr/local/bin/rustfs":                                               "Makes the RustFS server binary executable.",
+	"/usr/sbin/useradd --system --home-dir /var/lib/rustfs --shell /usr/sbin/nologin rustfs": "Creates the unprivileged system account the RustFS service runs as.",
+	"/usr/bin/mkdir -p /var/lib/rustfs/tls":                                                  "Creates the RustFS home and its TLS certificate directory.",
+	"/usr/bin/chown -R rustfs\\:rustfs /var/lib/rustfs":                                      "Gives the RustFS account its home and TLS directory.",
+	"/usr/bin/chown -R rustfs\\:rustfs *":                                                    "Gives the RustFS account its data folder on the chosen dataset. The path comes from the S3 configuration (a dataset mountpoint).",
+	"/usr/bin/tee /etc/systemd/system/rustfs.service":                                        "Writes the RustFS systemd service unit.",
+	"/usr/bin/tee /etc/default/rustfs":                                                       "Writes the RustFS environment file (ports, data folder, admin credentials, TLS).",
+	"/usr/bin/chown root\\:rustfs /etc/default/rustfs":                                       "Lets the RustFS account read its environment file, which holds the admin credentials.",
+	"/usr/bin/chmod 640 /etc/default/rustfs":                                                 "Keeps the RustFS environment file (admin credentials) away from other users.",
+	"/usr/bin/tee /var/lib/rustfs/tls/rustfs_cert.pem":                                       "Installs the RustFS TLS certificate at its fixed path.",
+	"/usr/bin/tee /var/lib/rustfs/tls/rustfs_key.pem":                                        "Installs the RustFS TLS private key at its fixed path.",
+	"/usr/bin/chmod 640 /var/lib/rustfs/tls/rustfs_key.pem":                                  "Protects the RustFS TLS private key from other users.",
+	"/usr/bin/rm -f /var/lib/rustfs/tls/rustfs_cert.pem":                                     "Removes the RustFS TLS certificate when TLS is turned off.",
+	"/usr/bin/rm -f /var/lib/rustfs/tls/rustfs_key.pem":                                      "Removes the RustFS TLS private key when TLS is turned off.",
+	"/usr/bin/rm -f /usr/local/bin/rustfs":                                                   "Uninstall: removes the RustFS binary (the data folder is kept).",
+	"/usr/bin/rm -f /etc/systemd/system/rustfs.service":                                      "Uninstall: removes the RustFS service unit.",
+	"/usr/bin/rm -f /etc/default/rustfs":                                                     "Uninstall: removes the RustFS environment file.",
+	"/usr/bin/systemctl enable rustfs":                                                       "Starts RustFS automatically at boot.",
+	"/usr/bin/systemctl disable rustfs":                                                      "Stops RustFS from starting at boot (uninstall).",
+	"/usr/bin/systemctl start rustfs":                                                        "Starts the RustFS S3 server.",
+	"/usr/bin/systemctl stop rustfs":                                                         "Stops the RustFS S3 server.",
+	"/usr/bin/systemctl restart rustfs":                                                      "Restarts the RustFS S3 server after a configuration change.",
+	"/usr/bin/systemctl stop minio":                                                          "Switches a former MinIO server off when RustFS takes over (MinIO is end of life; its data is left untouched).",
+	"/usr/bin/systemctl disable minio":                                                       "Keeps a former MinIO server from starting at boot once RustFS has replaced it.",
+	"/usr/bin/mkdir -p *":                                                                    "Creates directories on demand for the File Browser — the 'New Folder' action and the destination directory when uploading files. Also used by other features that provision their own directories (e.g. the MinIO/S3 object server's data directories). Path validation enforced in Go (SafeJoin against dataset/share roots).",
 
 	// ── UPS / NUT install, config, service control ────────────────────────────
 	"/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get purge -y nut nut-client nut-server": "Removes all NUT UPS packages during feature uninstall.",
@@ -1238,10 +1244,6 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/chown -R *":                                                    "File Browser: recursive ownership change on a directory tree (v6.4.3+). Path validation enforced in Go.",
 	"/usr/bin/chmod *":                                                       "File Browser: non-recursive permission change (v6.4.3+). Path validation enforced in Go.",
 	"/usr/bin/chmod -R *":                                                    "File Browser: recursive permission change on a directory tree (v6.4.3+). Path validation enforced in Go.",
-	"/usr/bin/wget -q -O /usr/local/bin/minio *":                             "Downloads the MinIO binary during feature install.",
-	"/usr/bin/wget -q -O /usr/local/bin/mc *":                                "Downloads the MinIO client (mc) binary during feature install.",
-	"/usr/bin/tee /etc/systemd/system/minio.service":                         "Writes the MinIO systemd service unit file.",
-	"/usr/bin/tee /etc/default/minio":                                        "Writes the MinIO environment configuration file.",
 	"/usr/sbin/hdparm *":                                                     "Disk Power Management: applies APM, spindown, write-cache, and acoustic settings immediately to SATA/SAS drives (optional feature, v6.3.22+).",
 	"/usr/bin/tee /etc/hdparm.conf":                                          "Disk Power Management: persists hdparm settings across reboots via /etc/hdparm.conf (optional feature, v6.3.22+).",
 	"/usr/bin/tee *":                                                         "Writes feature config files where the path is determined at runtime: per-CPU scaling governor (/sys/devices/system/cpu/cpu*/...), PCIe ASPM policy, USB autosuspend, /etc/rc.local persistence block, and ISO Management uploads. Single trailing wildcard required because sudo-rs (Ubuntu 26.04+) does not allow wildcards in non-trailing argument positions.",
@@ -1346,35 +1348,37 @@ Cmnd_Alias ZFSNAS_ISCSI = \
     /usr/bin/systemctl stop tgt, \
     /usr/bin/systemctl restart tgt
 
-# ── S3 Object Server (MinIO) ──────────────────────────────────────────────────
-# since v6.3.20 — optional MinIO S3 server; binary download, system account
-#   setup, service unit, env file, data directory, TLS certs, and service control
-Cmnd_Alias ZFSNAS_MINIO = \
-    /usr/bin/wget -q -O /usr/local/bin/minio *, \
-    /usr/bin/wget -q -O /usr/local/bin/mc *, \
-    /usr/bin/chmod +x /usr/local/bin/minio, \
-    /usr/bin/chmod +x /usr/local/bin/mc, \
-    /usr/sbin/useradd --system --home-dir /var/lib/minio --shell /usr/sbin/nologin minio-user, \
-    /usr/bin/mkdir -p /var/lib/minio, \
-    /usr/bin/mkdir -p /var/lib/minio/.minio/certs, \
-    /usr/bin/mkdir -p *, \
-    /usr/bin/chown minio-user\:minio-user /var/lib/minio, \
-    /usr/bin/chown -R minio-user\:minio-user /var/lib/minio/.minio/certs, \
-    /usr/bin/chown -R minio-user\:minio-user *, \
-    /usr/bin/chown root\:minio-user /etc/default/minio, \
-    /usr/bin/chmod 640 /etc/default/minio, \
-    /usr/bin/chmod 640 /var/lib/minio/.minio/certs/private.key, \
-    /usr/bin/tee /var/lib/minio/.minio/certs/public.crt, \
-    /usr/bin/tee /var/lib/minio/.minio/certs/private.key, \
-    /usr/bin/rm -f /var/lib/minio/.minio/certs/public.crt, \
-    /usr/bin/rm -f /var/lib/minio/.minio/certs/private.key, \
-    /usr/bin/tee /etc/systemd/system/minio.service, \
-    /usr/bin/tee /etc/default/minio, \
-    /usr/bin/systemctl enable minio, \
-    /usr/bin/systemctl disable minio, \
-    /usr/bin/systemctl start minio, \
+# ── S3 Object Server (RustFS) ─────────────────────────────────────────────────
+# since v6.10.17 — optional RustFS S3 server (replaces MinIO, end of life): the
+#   portal downloads and verifies the release itself and streams the binary
+#   through tee; system account, service unit, env file, data directory, TLS
+#   files and service control. The last two lines switch a former MinIO off.
+Cmnd_Alias ZFSNAS_S3 = \
+    /usr/bin/tee /usr/local/bin/rustfs, \
+    /usr/bin/chmod 755 /usr/local/bin/rustfs, \
+    /usr/sbin/useradd --system --home-dir /var/lib/rustfs --shell /usr/sbin/nologin rustfs, \
+    /usr/bin/mkdir -p /var/lib/rustfs/tls, \
+    /usr/bin/chown -R rustfs\:rustfs /var/lib/rustfs, \
+    /usr/bin/chown -R rustfs\:rustfs *, \
+    /usr/bin/tee /etc/systemd/system/rustfs.service, \
+    /usr/bin/tee /etc/default/rustfs, \
+    /usr/bin/chown root\:rustfs /etc/default/rustfs, \
+    /usr/bin/chmod 640 /etc/default/rustfs, \
+    /usr/bin/tee /var/lib/rustfs/tls/rustfs_cert.pem, \
+    /usr/bin/tee /var/lib/rustfs/tls/rustfs_key.pem, \
+    /usr/bin/chmod 640 /var/lib/rustfs/tls/rustfs_key.pem, \
+    /usr/bin/rm -f /var/lib/rustfs/tls/rustfs_cert.pem, \
+    /usr/bin/rm -f /var/lib/rustfs/tls/rustfs_key.pem, \
+    /usr/bin/rm -f /usr/local/bin/rustfs, \
+    /usr/bin/rm -f /etc/systemd/system/rustfs.service, \
+    /usr/bin/rm -f /etc/default/rustfs, \
+    /usr/bin/systemctl enable rustfs, \
+    /usr/bin/systemctl disable rustfs, \
+    /usr/bin/systemctl start rustfs, \
+    /usr/bin/systemctl stop rustfs, \
+    /usr/bin/systemctl restart rustfs, \
     /usr/bin/systemctl stop minio, \
-    /usr/bin/systemctl restart minio
+    /usr/bin/systemctl disable minio
 
 # ── UPS Management (NUT) ──────────────────────────────────────────────────────
 # since v6.3.22 — optional NUT daemon; install, auto-detect UPS, write /etc/nut/
@@ -1640,5 +1644,5 @@ Cmnd_Alias ZFSNAS_SECURITY = \
 
 # ── Grant all of the above, passwordless, to the service account ──────────────
 zfsnas ALL=(ALL) NOPASSWD: \
-    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_MINIO, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_SYNCOID, ZFSNAS_MERGERFS, ZFSNAS_RSYNC, ZFSNAS_APT, ZFSNAS_SECURITY
+    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_S3, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_SYNCOID, ZFSNAS_MERGERFS, ZFSNAS_RSYNC, ZFSNAS_APT, ZFSNAS_SECURITY
 `
