@@ -2582,7 +2582,9 @@ func parseSnapshotLine(line string) (Snapshot, error) {
 
 // CreateSnapshot creates a snapshot named <dataset>@<label>-<timestamp>.
 func CreateSnapshot(dataset, label string) (string, error) {
-	ts := time.Now().Format("20060102-150405")
+	// UTC: Samba's Shadow Copy (Windows Previous Versions) reads the name's
+	// timestamp as UTC — see shadowCopyParams (issue #175).
+	ts := time.Now().UTC().Format("20060102-150405")
 	fullName := fmt.Sprintf("%s@%s-%s", dataset, label, ts)
 	out, err := exec.Command("sudo", "zfs", "snapshot", fullName).CombinedOutput()
 	if err != nil {
@@ -2654,7 +2656,7 @@ func CreateShadowCopySnapshot(dataset, shadowFormat string) (string, error) {
 	if shadowFormat == "" {
 		shadowFormat = "auto-%Y%m%d-%H%M%S"
 	}
-	snapName := time.Now().Format(strftimeToGo(shadowFormat))
+	snapName := time.Now().UTC().Format(strftimeToGo(shadowFormat)) // UTC, as Samba reads it
 	fullName := fmt.Sprintf("%s@%s", dataset, snapName)
 	out, err := exec.Command("sudo", "zfs", "snapshot", fullName).CombinedOutput()
 	if err != nil {

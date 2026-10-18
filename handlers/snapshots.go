@@ -75,6 +75,10 @@ func HandleCreateSnapshot(w http.ResponseWriter, r *http.Request) {
 		}
 		return '-'
 	}, req.Label)
+	// Shadow Copy shares find the timestamp at the first "-20" of the name
+	// (issue #175): a label such as "before-2026" would hide the snapshot
+	// from Windows Previous Versions, so it becomes "before_2026".
+	safe = strings.ReplaceAll(safe, "-20", "_20")
 
 	fullName, err := system.CreateSnapshot(req.Dataset, safe)
 	if err != nil {

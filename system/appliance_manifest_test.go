@@ -85,7 +85,9 @@ func TestPersistManifestCoversRuntimeWrites(t *testing.T) {
 		"/etc/nut",                   // UPS
 		"/etc/exports",               // NFS
 		"/etc/tgt",                   // iSCSI
-		"/etc/minio", "/etc/default/minio",
+		// S3 (RustFS, v6.10.17+): /etc/default/rustfs, its unit and TLS files are
+		// deliberately NOT persisted — ReapplyS3AtStartup rebuilds them at every
+		// boot from the portal settings (which are persisted).
 		"/var/lib/incus", // incus DB + certs
 		// dhcpcd's DUID and leases: without these the appliance presents a new
 		// client identity every boot and gets a DIFFERENT address, so the

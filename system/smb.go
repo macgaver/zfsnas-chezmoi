@@ -344,14 +344,7 @@ func renderManagedShares(shares []SMBShare) string {
 		}
 		// Shadow copy parameters
 		if s.ShadowCopy {
-			shadowFmt := s.ShadowCopyFormat
-			if shadowFmt == "" {
-				shadowFmt = "auto-%Y%m%d-%H%M%S"
-			}
-			sb.WriteString("   shadow:snapdir = .zfs/snapshot\n")
-			sb.WriteString("   shadow:sort = desc\n")
-			sb.WriteString("   shadow:format = " + shadowFmt + "\n")
-			sb.WriteString("   shadow:localtime = no\n")
+			sb.WriteString(shadowCopyParams(s.ShadowCopyFormat))
 		}
 
 		// Windows ACL compatibility — ensures executables keep the execute bit.
@@ -1253,4 +1246,41 @@ func writeFileSudo(path, content string) error {
 		return fmt.Errorf("write %s: %s", path, strings.TrimSpace(stderr.String()))
 	}
 	return nil
+}
+
+// DefaultShadowCopyFormat is the name format of the share's "VSS Snapshot"
+// action, and the value the share dialog has always saved by default.
+const DefaultShadowCopyFormat = "auto-%Y%m%d-%H%M%S"
+
+// shadowCopyParams renders the vfs_shadow_copy2 settings of a share (issue #175).
+//
+// Every ZNAS snapshot — manual, scheduled, VSS action — is named
+// "<label>-YYYYMMDD-HHMMSS". Matching only "auto-…" hid manual snapshots and
+// schedules with another label from Windows Previous Versions. With the
+// default (or the old default saved by the share dialog) any label is
+// accepted: shadow:snapprefix checks the label, the label ends at the first
+// "-20" (the year: labels may contain "-" themselves, e.g. "pre-upgrade"),
+// and the rest is the timestamp. Snapshots without one (syncoid_…, manual
+// zfs names) are simply not listed.
+//
+// The timestamps are UTC (CreateSnapshot / CreateShadowCopySnapshot), read
+// with "localtime = no". Not "localtime = yes" with local-time names: Samba
+// 4.22 lists the versions but fails to open them (NT_STATUS_NO_MEMORY) when
+// snapprefix and localtime=yes are combined on a non-UTC server — tested.
+// Snapshots named before v6.10.18 (local time) show shifted by the time-zone
+// offset on such servers, as they always did. A custom format keeps exact
+// matching. Checked against Samba 4.22.10.
+func shadowCopyParams(format string) string {
+	var b strings.Builder
+	b.WriteString("   shadow:snapdir = .zfs/snapshot\n")
+	b.WriteString("   shadow:sort = desc\n")
+	if format == "" || format == DefaultShadowCopyFormat {
+		b.WriteString("   shadow:snapprefix = ^[A-Za-z0-9_-]\\{1,\\}$\n")
+		b.WriteString("   shadow:delimiter = -20\n")
+		b.WriteString("   shadow:format = -%Y%m%d-%H%M%S\n")
+	} else {
+		b.WriteString("   shadow:format = " + format + "\n")
+	}
+	b.WriteString("   shadow:localtime = no\n")
+	return b.String()
 }
