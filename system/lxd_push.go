@@ -613,6 +613,9 @@ func sanitizeLXDName(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+// SanitizeLXDName is the destination-name normalisation LXDPushVM applies.
+func SanitizeLXDName(s string) string { return sanitizeLXDName(s) }
+
 // LXDPushVM runs a VM migration to a remote LXD server in a background job.
 // Must be called as a goroutine. ctx is derived from the job cancel function.
 func LXDPushVM(ctx context.Context, req LXDPushVMRequest, job *pushinterlink.Job, ls config.LinkedServer) {

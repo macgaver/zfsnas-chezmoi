@@ -325,6 +325,10 @@ func HandleLXDPushVMStart(appCfg *config.AppConfig) http.HandlerFunc {
 					break
 				}
 			}
+			// The instance's snapshot/backup schedules move with it.
+			if result == audit.ResultOK && ctx.Err() == nil {
+				details = carrySchedulesToPeer(appCfg, lsCopy, req.VMName, system.SanitizeLXDName(req.DestName))
+			}
 			audit.Log(audit.Entry{
 				User:    username,
 				Role:    role,

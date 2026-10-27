@@ -1908,9 +1908,14 @@
               </div>
             </div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openCreateNFSShare()" id="btn-create-nfs-share">+ New Share</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-ghost btn-sm" onclick="openNFSServerModal()" id="btn-nfs-server-settings" title="Server-wide NFS settings">
+              <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> Server settings</button>
+            <button class="btn btn-primary btn-sm" onclick="openCreateNFSShare()" id="btn-create-nfs-share">+ New Share</button>
+          </div>
         </div>
         <div id="nfs-status-banner" style="margin-bottom:16px;"></div>
+        <div id="nfs-hint"></div>
         <div id="nfs-content">
           <div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div>
         </div>
@@ -10954,9 +10959,42 @@ Select the Console tab to load.</pre>
   </div>
 </div>
 
+<!-- NFS server settings (v6.10.20) -->
+<div class="modal-backdrop hidden" id="modal-nfs-server" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h3>NFS server settings</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-nfs-server').classList.add('hidden')"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-3);margin:0 0 14px;">Apply to every NFS share of this server. ZNAS keeps them in its own file (<code>/etc/nfs.conf.d/zfsnas.conf</code>) and re-applies it at every start, so they also survive reboots of the USB appliance.</p>
+      <div id="nfs-srv-alert" class="alert alert-error hidden"></div>
+      <label style="display:flex;gap:9px;align-items:flex-start;margin-bottom:14px;cursor:pointer;font-weight:400;">
+        <input type="checkbox" id="nfs-srv-trust" style="width:auto;margin-top:3px;flex:0 0 auto;">
+        <span style="line-height:1.45;"><strong>Trust client groups</strong> — needed for Kubernetes <code>fsGroup</code>
+          <span style="display:block;font-size:12px;color:var(--text-3);">Uses the groups the client sends with each request (mountd <code>manage-gids = n</code>) instead of looking the user up on this server. Without it, pods that get write access through <code>fsGroup</code> (a supplementary group) are refused, e.g. KubeVirt/CDI disk imports. Trade-off: users in more than 16 groups have the extra ones ignored.</span>
+          <span id="nfs-srv-trust-now" style="display:block;font-size:12px;margin-top:4px;"></span></span>
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label style="font-size:13px;">Server threads <i class="info-tip tip-down" data-tip="Number of nfsd threads (0 = the distribution's default). Raise it for many busy clients, e.g. a Kubernetes cluster."></i>
+          <input type="number" id="nfs-srv-threads" min="0" max="256" placeholder="default" style="margin-top:4px;">
+          <span id="nfs-srv-threads-now" style="display:block;font-size:11px;color:var(--text-3);margin-top:3px;"></span>
+        </label>
+        <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-weight:400;font-size:13px;margin-top:20px;">
+          <input type="checkbox" id="nfs-srv-nov3" style="width:auto;margin-top:2px;"> <span>Serve NFSv4 only <span id="nfs-srv-nov3-note" style="display:block;font-size:11px;color:var(--text-3);">Turns NFSv3 off. Kubernetes CSI and recent clients use v4.</span></span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('modal-nfs-server').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-primary" id="nfs-srv-save" onclick="saveNFSServerSettings()">Save &amp; restart NFS</button>
+    </div>
+  </div>
+</div>
+
 <!-- Create / Edit NFS Share Modal -->
 <div class="modal-backdrop hidden" id="modal-nfs-share">
-  <div class="modal" style="max-width:500px;">
+  <div class="modal" style="max-width:640px;">
     <div class="modal-header">
       <div style="display:flex;align-items:center;gap:10px;">
         <h3 id="nfs-modal-title">New NFS Share</h3>
@@ -10982,30 +11020,61 @@ Select the Console tab to load.</pre>
         <div class="text-3 text-xs" style="margin-top:4px;">Choose a dataset or type a custom path.</div>
       </div>
       <div class="form-group">
-        <label>Client <span class="text-3 text-xs">(space-separated IPs, CIDRs, or * for all)</span></label>
-        <input type="text" id="nfs-client" placeholder="192.168.1.5 10.0.0.0/8 or *" value="*">
+        <label style="display:flex;align-items:center;gap:6px;">Clients
+          <i class="info-tip tip-down" data-tip="Who may mount this share, each with its own access.&#10;&#10;A client is * (any host), an IP address (10.128.8.103), a subnet (10.128.8.0/24), a host name or wildcard (*.lan), or an @netgroup.&#10;&#10;List your Kubernetes nodes or their subnet instead of * whenever root access is allowed."></i>
+        </label>
+        <div id="nfs-clients-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="_nfsAddClientRow('', false, true)">+ Add client</button>
       </div>
       <div class="form-group">
         <label>Comment <span class="text-3 text-xs">(optional)</span></label>
         <input type="text" id="nfs-comment" placeholder="Description" autocomplete="off">
       </div>
       <div class="form-group">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <label style="margin:0;">Root access
+            <i class="info-tip tip-down" data-tip="What a client's root user becomes on this share.&#10;&#10;Squash root (default, safest): client root acts as an anonymous user.&#10;No root squash: client root stays root — needed by Kubernetes (fsGroup, chown in init containers, KubeVirt disks) and by NFS CSI drivers.&#10;Squash all users: every client user becomes the anonymous user (set its uid/gid under Advanced) — one owner for everything."></i>
+          </label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="_nfsApplyK8sPreset()" title="Settings for Kubernetes NFS CSI drivers (csi-driver-nfs, nfs-subdir-external-provisioner) and KubeVirt / CDI">
+            <svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg> Kubernetes / CSI preset</button>
+        </div>
+        <div id="nfs-squash-seg" style="display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+          <button type="button" data-v="root" onclick="_nfsPickSquash('root')">Squash root</button>
+          <button type="button" data-v="none" onclick="_nfsPickSquash('none')">No root squash</button>
+          <button type="button" data-v="all" onclick="_nfsPickSquash('all')">Squash all users</button>
+        </div>
+        <div id="nfs-share-warning" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(255,214,10,.10);border:1px solid rgba(255,214,10,.45);border-left:3px solid var(--accent-warn);border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-1);line-height:1.5;"></div>
+        <div id="nfs-preset-note" style="display:none;margin-top:10px;font-size:12.5px;color:var(--text-2);line-height:1.5;"></div>
+        <div id="nfs-trust-offer" style="display:none;margin-top:10px;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:rgba(10,132,255,.08);border:1px solid rgba(10,132,255,.3);border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-1);line-height:1.5;"></div>
+      </div>
+      <div class="form-group">
         <label>Options</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-readonly" style="width:15px;height:15px;accent-color:var(--accent-2);"> Read-only <i class="info-tip tip-down" data-tip="Exports the share in read-only mode. Clients can read files but cannot write, create, or delete anything."></i>
+            <input type="checkbox" id="nfs-sync" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> sync <i class="info-tip tip-down" data-tip="Replies to client write requests only after the data is safely on disk. Safer; async is faster but can lose recent writes on a power cut."></i>
           </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-sync" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> sync <i class="info-tip tip-down" data-tip="Replies to client write requests only after data has been committed to stable storage. Prevents data loss on server crash. Recommended — disable only when raw throughput matters more than safety."></i>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-nosubtree" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> no_subtree_check <i class="info-tip tip-down" data-tip="Disables subtree checking, which verifies that a requested file is within the exported directory. Recommended: subtree checks can cause issues with open files and rarely add security value on dedicated ZFS datasets."></i>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-            <input type="checkbox" id="nfs-norootsquash" style="width:15px;height:15px;accent-color:var(--accent-2);"> no_root_squash <i class="info-tip tip-down" data-tip="By default (root_squash), the NFS server maps remote root (UID 0) to the anonymous user for safety. Enabling no_root_squash lets a remote root user act as root on this server. Use only on trusted private networks."></i>
+            <input type="checkbox" id="nfs-nosubtree" checked style="width:15px;height:15px;accent-color:var(--accent-2);"> no_subtree_check <i class="info-tip tip-down" data-tip="Disables subtree checking (recommended, and the NFS default). Subtree checking costs performance and breaks file handles when files are renamed."></i>
           </label>
         </div>
       </div>
+      <details id="nfs-adv" style="margin-bottom:12px;">
+        <summary style="cursor:pointer;font-size:13px;color:var(--text-2);user-select:none;">Advanced</summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="nfs-insecure" style="width:15px;height:15px;accent-color:var(--accent-2);"> insecure <i class="info-tip tip-down" data-tip="Accepts clients connecting from ports above 1024. Needed by macOS Finder and some user-space or container NFS clients. Off by default."></i>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="nfs-crossmnt" style="width:15px;height:15px;accent-color:var(--accent-2);"> crossmnt <i class="info-tip tip-down" data-tip="Also exports the ZFS datasets mounted below this path, so clients see their content instead of empty folders."></i>
+          </label>
+          <label style="font-size:13px;">anonuid <i class="info-tip tip-down" data-tip="User id that squashed users become (default 65534, nobody)."></i>
+            <input type="number" id="nfs-anonuid" min="0" placeholder="65534" style="margin-top:4px;">
+          </label>
+          <label style="font-size:13px;">anongid <i class="info-tip tip-down" data-tip="Group id that squashed users get (default 65534, nogroup)."></i>
+            <input type="number" id="nfs-anongid" min="0" placeholder="65534" style="margin-top:4px;">
+          </label>
+        </div>
+      </details>
       <div class="flex gap-2" style="margin-top:8px;">
         <button type="button" class="btn btn-ghost" onclick="closeNFSShareModal()">Cancel</button>
         <button type="submit" class="btn btn-primary" style="flex:1;" id="nfs-submit-btn">Create Share</button>
@@ -28843,6 +28912,9 @@ let nfsEditId = null;
 async function loadNFSShares() {
   const el = document.getElementById('nfs-content');
   el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px;">Loading…</div>';
+  _loadNFSHint();
+  const srvBtn = document.getElementById('btn-nfs-server-settings');
+  if (srvBtn) srvBtn.style.display = hasPerm('manage_nfs') ? '' : 'none';
 
   try {
     const resp = await fetch('/api/nfs/status');
@@ -28907,10 +28979,10 @@ function renderNFSShares(el, shares, sessions = {}) {
   const rows = shares.map((s, i) => `
     <tr>
       <td style="font-family:monospace;font-size:12px;">${esc(s.path)}</td>
-      <td style="font-family:monospace;font-size:12px;">${esc(s.client)}</td>
+      <td style="font-family:monospace;font-size:12px;">${_nfsShareClients(s).map(c => esc(c.host) + (c.read_only && !s.read_only ? ' <span class="text-3">(ro)</span>' : '')).join('<br>')}</td>
       <td>${s.read_only
         ? '<span class="badge badge-readonly">Read-only</span>'
-        : '<span class="badge badge-ok">Read/Write</span>'}</td>
+        : (_nfsShareClients(s).some(c => c.read_only) ? '<span class="badge badge-readonly">Mixed</span>' : '<span class="badge badge-ok">Read/Write</span>')}</td>
       <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${nfsOptsDisplay(s)}</td>
       ${sessions === null
         ? `<td data-nfs-sess-key="${esc(s.path)}"><span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:middle;"></span></td>`
@@ -28938,10 +29010,20 @@ function renderNFSShares(el, shares, sessions = {}) {
 }
 
 function nfsOptsDisplay(s) {
-  const opts = [s.read_only ? 'ro' : 'rw', s.sync ? 'sync' : 'async'];
+  const opts = [s.sync ? 'sync' : 'async'];
   if (s.no_subtree_check) opts.push('no_subtree_check');
-  if (s.no_root_squash)   opts.push('no_root_squash');
-  return opts.join(',');
+  const squash = s.squash || (s.no_root_squash ? 'none' : 'root');
+  if (squash === 'none') opts.push('no_root_squash');
+  if (squash === 'all') opts.push('all_squash');
+  if (s.anonuid != null) opts.push('anonuid=' + s.anonuid);
+  if (s.anongid != null) opts.push('anongid=' + s.anongid);
+  if (s.insecure) opts.push('insecure');
+  if (s.crossmnt) opts.push('crossmnt');
+  let html = esc(opts.join(','));
+  if (squash === 'none' && _nfsShareClients(s).some(c => c.host === '*')) {
+    html += ` <span title="No root squash on a * client: any host can act as root on this share" style="color:var(--accent-warn);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>`;
+  }
+  return html;
 }
 
 async function openCreateNFSShare() {
@@ -28949,12 +29031,12 @@ async function openCreateNFSShare() {
   document.getElementById('nfs-modal-title').textContent  = 'New NFS Share';
   document.getElementById('nfs-submit-btn').textContent   = 'Create Share';
   document.getElementById('nfs-path').value               = '';
-  document.getElementById('nfs-client').value             = '*';
   document.getElementById('nfs-comment').value            = '';
-  document.getElementById('nfs-readonly').checked         = false;
   document.getElementById('nfs-sync').checked             = true;
   document.getElementById('nfs-nosubtree').checked        = true;
-  document.getElementById('nfs-norootsquash').checked     = false;
+  _nfsFillAdvanced({});
+  _nfsSetClients([{ host: '*', read_only: false }]);
+  _nfsSetSquash('root');
   document.getElementById('nfs-enabled-wrap').style.display = 'none';
   document.getElementById('nfs-share-alert').classList.add('hidden');
   await loadNFSDatasetDropdown('');
@@ -28969,12 +29051,12 @@ function openEditNFSShare(i) {
   document.getElementById('nfs-modal-title').textContent  = 'Edit NFS Share';
   document.getElementById('nfs-submit-btn').textContent   = 'Save Changes';
   document.getElementById('nfs-path').value               = s.path;
-  document.getElementById('nfs-client').value             = s.client;
   document.getElementById('nfs-comment').value            = s.comment || '';
-  document.getElementById('nfs-readonly').checked         = !!s.read_only;
   document.getElementById('nfs-sync').checked             = !!s.sync;
   document.getElementById('nfs-nosubtree').checked        = !!s.no_subtree_check;
-  document.getElementById('nfs-norootsquash').checked     = !!s.no_root_squash;
+  _nfsFillAdvanced(s);
+  _nfsSetClients(_nfsShareClients(s));
+  _nfsSetSquash(s.squash || (s.no_root_squash ? 'none' : 'root'));
   setShareToggle('nfs', !s.disabled);
   document.getElementById('nfs-enabled-wrap').style.display = 'flex';
   document.getElementById('nfs-share-alert').classList.add('hidden');
@@ -29001,21 +29083,219 @@ function closeNFSShareModal() {
   nfsEditId = null;
 }
 
+// ── v6.10.20 share editor helpers ──────────────────────────────────────────
+let _nfsSquash = 'root';
+
+function _nfsShareClients(s) {
+  if (Array.isArray(s.clients) && s.clients.length) return s.clients;
+  return String(s.client || '*').split(/\s+/).filter(Boolean).map(h => ({ host: h, read_only: !!s.read_only }));
+}
+
+function _nfsSegStyle(seg, value) {
+  seg.querySelectorAll('button').forEach(b => {
+    const on = b.dataset.v === value;
+    b.style.cssText = 'flex:1;white-space:nowrap;padding:6px 12px;font-size:12.5px;border:0;cursor:pointer;border-right:1px solid var(--border);'
+      + (on ? 'background:var(--accent-2);color:#fff;font-weight:600;' : 'background:var(--surface2);color:var(--text-2);');
+  });
+}
+
+function _nfsSetSquash(v) {
+  _nfsSquash = v;
+  _nfsSegStyle(document.getElementById('nfs-squash-seg'), v);
+  _nfsUpdateWarning();
+}
+
+function _nfsAddClientRow(host, readOnly, focus) {
+  const list = document.getElementById('nfs-clients-list');
+  const row = document.createElement('div');
+  row.className = 'nfs-client-row';
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.innerHTML = `<input type="text" class="nfs-client-host" placeholder="10.128.8.0/24, 10.128.8.103 or *" style="flex:1;font-family:monospace;font-size:13px;" autocomplete="off">
+    <span class="nfs-client-access" style="display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex:0 0 auto;">
+      <button type="button" data-v="rw">Read/write</button><button type="button" data-v="ro">Read-only</button></span>
+    <button type="button" class="btn btn-ghost btn-sm nfs-client-del" title="Remove" style="padding:4px 8px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;
+  const inp = row.querySelector('.nfs-client-host');
+  inp.value = host || '';
+  inp.addEventListener('input', _nfsUpdateWarning);
+  const seg = row.querySelector('.nfs-client-access');
+  row.dataset.ro = readOnly ? '1' : '0';
+  _nfsSegStyle(seg, readOnly ? 'ro' : 'rw');
+  seg.querySelectorAll('button').forEach(b => b.onclick = () => { row.dataset.ro = b.dataset.v === 'ro' ? '1' : '0'; _nfsSegStyle(seg, b.dataset.v); });
+  row.querySelector('.nfs-client-del').onclick = () => { row.remove(); _nfsUpdateWarning(); };
+  list.appendChild(row);
+  if (focus) inp.focus();
+  _nfsUpdateWarning();
+}
+
+function _nfsSetClients(clients) {
+  document.getElementById('nfs-clients-list').innerHTML = '';
+  (clients.length ? clients : [{ host: '*', read_only: false }]).forEach(c => _nfsAddClientRow(c.host, !!c.read_only, false));
+}
+
+function _nfsGetClients() {
+  return [...document.querySelectorAll('#nfs-clients-list .nfs-client-row')]
+    .map(r => ({ host: r.querySelector('.nfs-client-host').value.trim(), read_only: r.dataset.ro === '1' }))
+    .filter(c => c.host);
+}
+
+function _nfsFillAdvanced(s) {
+  document.getElementById('nfs-insecure').checked = !!s.insecure;
+  document.getElementById('nfs-crossmnt').checked = !!s.crossmnt;
+  document.getElementById('nfs-anonuid').value = s.anonuid ?? '';
+  document.getElementById('nfs-anongid').value = s.anongid ?? '';
+  document.getElementById('nfs-adv').open = !!(s.insecure || s.crossmnt || s.anonuid != null || s.anongid != null);
+  document.getElementById('nfs-preset-note').style.display = 'none';
+  document.getElementById('nfs-trust-offer').style.display = 'none';
+}
+
+// No root squash on "*": any host that can reach the server is root on the files.
+function _nfsUpdateWarning() {
+  const el = document.getElementById('nfs-share-warning');
+  if (!el) return;
+  const open = _nfsSquash === 'none' && _nfsGetClients().some(c => c.host === '*');
+  el.style.display = open ? 'block' : 'none';
+  if (open) el.innerHTML = '<strong>Any host can act as root on this share.</strong> With no root squash, a * client lets every machine that reaches this server read, change or delete all its files as root. Replace * with your nodes or their subnet (e.g. <code>10.128.8.0/24</code>).';
+}
+
+// Squash mode picked by the user: no root squash is often (not always) for
+// Kubernetes, so offer the server-wide group setting fsGroup needs.
+function _nfsPickSquash(v) {
+  _nfsSetSquash(v);
+  document.getElementById('nfs-preset-note').style.display = 'none';
+  if (v === 'none') _nfsOfferTrustGroups(false);
+  else document.getElementById('nfs-trust-offer').style.display = 'none';
+}
+
+async function _nfsApplyK8sPreset() {
+  _nfsSetSquash('none');
+  document.getElementById('nfs-sync').checked = true;
+  document.getElementById('nfs-nosubtree').checked = true;
+  const note = document.getElementById('nfs-preset-note');
+  note.style.display = 'block';
+  note.innerHTML = 'Preset applied: <strong>no root squash</strong>, sync, no_subtree_check.';
+  _nfsOfferTrustGroups(true);
+}
+
+// Shown only while Trust client groups is off on this server.
+async function _nfsOfferTrustGroups(forK8s) {
+  const el = document.getElementById('nfs-trust-offer');
+  el.style.display = 'none';
+  if (!hasPerm('manage_nfs')) return;
+  try {
+    const r = await fetch('/api/nfs/server');
+    const d = await r.json();
+    if (!(d.effective && d.effective.available && d.effective.manage_gids)) return;
+  } catch (_) { return; }
+  el.innerHTML = `<span style="flex:1;min-width:220px;">${forK8s ? 'Kubernetes pods' : 'If this share is for Kubernetes: pods'} that get write access through <code>fsGroup</code> also need <strong>Trust client groups</strong>, a server-wide setting that is off. ${forK8s ? 'Without it, e.g. KubeVirt/CDI disk imports are refused.' : 'Not needed for other uses of no root squash.'}</span>
+    <button type="button" class="btn btn-primary btn-sm" onclick="_nfsEnableTrustGroups()">Turn it on</button>`;
+  el.style.display = 'flex';
+}
+
+async function _nfsEnableTrustGroups() {
+  const r = await fetch('/api/nfs/server');
+  const d = await r.json();
+  const settings = Object.assign({}, d.settings || {}, { trust_client_groups: true });
+  const resp = await fetch('/api/nfs/server', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+  const out = await resp.json().catch(() => ({}));
+  if (!resp.ok) { showToast(out.error || 'Could not change the NFS server settings', 'error'); return; }
+  showToast('Trust client groups is on — the NFS server was restarted', 'success');
+  const el = document.getElementById('nfs-trust-offer');
+  if (el) { el.innerHTML = '<span><strong>Trust client groups</strong> is on for this server.</span>'; }
+}
+
+// ── server settings dialog + hint ──────────────────────────────────────────
+async function openNFSServerModal() {
+  const alertEl = document.getElementById('nfs-srv-alert');
+  alertEl.classList.add('hidden');
+  try {
+    const r = await fetch('/api/nfs/server');
+    const d = await r.json();
+    const st = d.settings || {}, eff = d.effective || {};
+    document.getElementById('nfs-srv-trust').checked = !!st.trust_client_groups;
+    document.getElementById('nfs-srv-threads').value = st.threads || '';
+    const nov3 = document.getElementById('nfs-srv-nov3');
+    nov3.checked = !!st.disable_v3 && !eff.v4_root_broken;
+    nov3.disabled = !!eff.v4_root_broken;
+    document.getElementById('nfs-srv-nov3-note').textContent = eff.v4_root_broken
+      ? 'Not available: NFSv4 does not work on this appliance image (clients use NFSv3). Upgrade the image first.' : 'Turns NFSv3 off. Kubernetes CSI and recent clients use v4.';
+    const now = document.getElementById('nfs-srv-trust-now');
+    now.innerHTML = eff.available
+      ? (eff.manage_gids ? '<span style="color:var(--accent-warn);">Currently: the server looks groups up itself (manage-gids = y).</span>' : '<span style="color:var(--accent-3);">Currently: client groups are trusted (manage-gids = n).</span>')
+      : '';
+    document.getElementById('nfs-srv-threads-now').textContent = eff.threads ? 'Currently ' + eff.threads : '';
+  } catch (e) {
+    alertEl.textContent = 'Could not read the NFS server settings: ' + e.message;
+    alertEl.classList.remove('hidden');
+  }
+  document.getElementById('modal-nfs-server').classList.remove('hidden');
+}
+
+async function saveNFSServerSettings() {
+  const btn = document.getElementById('nfs-srv-save');
+  const alertEl = document.getElementById('nfs-srv-alert');
+  alertEl.classList.add('hidden');
+  const body = {
+    trust_client_groups: document.getElementById('nfs-srv-trust').checked,
+    threads: Number(document.getElementById('nfs-srv-threads').value || 0),
+    disable_v3: document.getElementById('nfs-srv-nov3').checked,
+  };
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/nfs/server', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    document.getElementById('modal-nfs-server').classList.add('hidden');
+    showToast(d.changed ? 'NFS server settings applied — the server was restarted' : 'NFS server settings unchanged', 'success');
+    _loadNFSHint();
+  } catch (e) {
+    alertEl.textContent = e.message;
+    alertEl.classList.remove('hidden');
+  } finally { btn.disabled = false; }
+}
+
+async function _loadNFSHint() {
+  const el = document.getElementById('nfs-hint');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/nfs/server');
+    const d = await r.json();
+    const v4warn = d.effective && d.effective.v4_root_broken
+      ? `<div style="padding:10px 14px;margin-bottom:14px;background:rgba(255,214,10,.10);border:1px solid rgba(255,214,10,.45);border-left:3px solid var(--accent-warn);border-radius:var(--radius-sm);font-size:13px;color:var(--text-1);line-height:1.5;">
+          <strong>NFSv4 is not available on this appliance image.</strong> Its RAM root filesystem cannot be exported, so clients fall back to NFSv3 (shares still work). Upgrade the USB appliance image to get NFSv4.</div>`
+      : '';
+    el.innerHTML = v4warn;
+  } catch (_) { el.innerHTML = ''; }
+}
+
 async function submitNFSShare(e) {
   e.preventDefault();
   const alertEl = document.getElementById('nfs-share-alert');
   alertEl.classList.add('hidden');
   const nfsEnabledEl = document.getElementById('nfs-enabled');
+  const clients = _nfsGetClients();
+  const squash  = _nfsSquash;
+  const num = id => { const v = document.getElementById(id).value.trim(); return v === '' ? undefined : Number(v); };
   const body = {
     path:             document.getElementById('nfs-path').value.trim(),
-    client:           document.getElementById('nfs-client').value.trim() || '*',
+    clients,
+    client:           clients.map(c => c.host).join(' '),
     comment:          document.getElementById('nfs-comment').value.trim(),
-    read_only:        document.getElementById('nfs-readonly').checked,
+    read_only:        clients.length > 0 && clients.every(c => c.read_only),
     sync:             document.getElementById('nfs-sync').checked,
     no_subtree_check: document.getElementById('nfs-nosubtree').checked,
-    no_root_squash:   document.getElementById('nfs-norootsquash').checked,
+    squash,
+    no_root_squash:   squash === 'none',
+    insecure:         document.getElementById('nfs-insecure').checked,
+    crossmnt:         document.getElementById('nfs-crossmnt').checked,
+    anonuid:          num('nfs-anonuid'),
+    anongid:          num('nfs-anongid'),
     disabled:         nfsEditId ? !nfsEnabledEl.checked : false,
   };
+  if (!clients.length) {
+    alertEl.textContent = 'Add at least one client (* for any host).';
+    alertEl.classList.remove('hidden');
+    return;
+  }
   if (!body.path) {
     alertEl.textContent = 'Path is required.';
     alertEl.classList.remove('hidden');

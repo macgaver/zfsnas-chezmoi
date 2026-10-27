@@ -122,6 +122,16 @@ func main() {
 	// configuration. In the background: it waits on systemd and the pool.
 	go system.ReapplyS3AtStartup(&appCfg.MinIO, absConfig)
 
+	// Server-wide NFS settings live in ZNAS's own drop-in; re-apply it at
+	// every start (the appliance's /etc is in RAM, so it is gone after boot).
+	go func() {
+		if changed, err := system.ApplyNFSServerSettings(appCfg.NFSServer); err != nil {
+			log.Printf("[nfs] server settings: %v", err)
+		} else if changed {
+			log.Printf("[nfs] server settings applied (%s)", "/etc/nfs.conf.d/zfsnas.conf")
+		}
+	}()
+
 	// The USB appliance ships MergerFS in its image, so the Install click that
 	// enables the feature on a host never happens there: enable it once, as
 	// that click would ("Datasets & FS" menu + "+ Other" action).

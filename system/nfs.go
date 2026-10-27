@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -17,15 +18,30 @@ const (
 )
 
 // NFSShare represents a single /etc/exports entry.
+// NFSClientRule is one client of an export with its own access level.
+type NFSClientRule struct {
+	Host     string `json:"host"` // "*", IP, CIDR, host name, *.domain, @netgroup
+	ReadOnly bool   `json:"read_only"`
+}
+
 type NFSShare struct {
 	ID             string `json:"id"`
 	Path           string `json:"path"`
-	Client         string `json:"client"` // CIDR or "*"
+	Client         string `json:"client"` // space-separated hosts (kept in sync with Clients)
 	ReadOnly       bool   `json:"read_only"`
 	Sync           bool   `json:"sync"`
 	NoSubtreeCheck bool   `json:"no_subtree_check"`
-	NoRootSquash   bool   `json:"no_root_squash"`
+	NoRootSquash   bool   `json:"no_root_squash"` // kept in sync with Squash == "none"
 	Comment        string `json:"comment"`
+	// v6.10.20 — per-client access and the export options Kubernetes / CSI,
+	// macOS and nested ZFS datasets need. All optional: older shares load
+	// unchanged (Normalize derives the new fields from the old ones).
+	Clients  []NFSClientRule `json:"clients,omitempty"`
+	Squash   string          `json:"squash,omitempty"`  // "root" (default) | "none" | "all"
+	AnonUID  *int            `json:"anonuid,omitempty"` // squashed users map to this uid
+	AnonGID  *int            `json:"anongid,omitempty"`
+	Insecure bool            `json:"insecure,omitempty"` // allow client ports above 1024 (macOS, some containers)
+	CrossMnt bool            `json:"crossmnt,omitempty"` // also export the ZFS datasets mounted below the path
 	// Disabled = true omits the share from /etc/exports so it is not accessible,
 	// without deleting its configuration.
 	Disabled bool `json:"disabled,omitempty"`
@@ -76,14 +92,10 @@ func applyExports(shares []NFSShare) error {
 		if s.Comment != "" {
 			sb.WriteString("# " + s.Comment + "\n")
 		}
-		clients := strings.Fields(s.Client)
-		if len(clients) == 0 {
-			clients = []string{"*"}
-		}
-		opts := nfsOpts(s)
+		s.Normalize()
 		var parts []string
-		for _, c := range clients {
-			parts = append(parts, fmt.Sprintf("%s(%s)", c, opts))
+		for _, c := range s.Clients {
+			parts = append(parts, fmt.Sprintf("%s(%s)", c.Host, nfsOpts(s, c)))
 		}
 		sb.WriteString(fmt.Sprintf("%s %s\n", s.Path, strings.Join(parts, " ")))
 	}
@@ -112,9 +124,87 @@ func applyExports(shares []NFSShare) error {
 	return ExportFS()
 }
 
-func nfsOpts(s NFSShare) string {
+// Normalize fills the v6.10.20 fields from the older ones (and back), so a
+// share saved by any version exports the same way.
+func (s *NFSShare) Normalize() {
+	switch s.Squash {
+	case "root", "none", "all":
+	default:
+		if s.NoRootSquash {
+			s.Squash = "none"
+		} else {
+			s.Squash = "root"
+		}
+	}
+	s.NoRootSquash = s.Squash == "none"
+	if len(s.Clients) == 0 {
+		hosts := strings.Fields(s.Client)
+		if len(hosts) == 0 {
+			hosts = []string{"*"}
+		}
+		for _, h := range hosts {
+			s.Clients = append(s.Clients, NFSClientRule{Host: h, ReadOnly: s.ReadOnly})
+		}
+	}
+	hosts := make([]string, 0, len(s.Clients))
+	allRO := true
+	for i := range s.Clients {
+		s.Clients[i].Host = strings.TrimSpace(s.Clients[i].Host)
+		hosts = append(hosts, s.Clients[i].Host)
+		allRO = allRO && s.Clients[i].ReadOnly
+	}
+	s.Client = strings.Join(hosts, " ")
+	s.ReadOnly = allRO
+}
+
+// nfsHostRe accepts what exports(5) calls a client: "*", an IP or CIDR, a
+// host name or wildcard (*.lan, node?), or an @netgroup. No spaces, commas or
+// parentheses, which would inject options into /etc/exports.
+var nfsHostRe = regexp.MustCompile(`^(\*|@[A-Za-z0-9._-]+|[A-Za-z0-9*?._:\[\]-]+(/[0-9]{1,3})?)$`)
+
+// ValidateNFSShare checks a normalized share before it is written.
+func ValidateNFSShare(s NFSShare) error {
+	if !strings.HasPrefix(s.Path, "/") || strings.ContainsAny(s.Path, " \t\n\"") {
+		return fmt.Errorf("the path must be an absolute path without spaces")
+	}
+	if len(s.Clients) == 0 {
+		return fmt.Errorf("at least one client is required")
+	}
+	seen := map[string]bool{}
+	for _, c := range s.Clients {
+		if !nfsHostRe.MatchString(c.Host) {
+			return fmt.Errorf("invalid client %q: use *, an IP address, a subnet (10.0.0.0/24), a host name or @netgroup", c.Host)
+		}
+		if seen[c.Host] {
+			return fmt.Errorf("client %q is listed twice", c.Host)
+		}
+		seen[c.Host] = true
+	}
+	for name, v := range map[string]*int{"anonuid": s.AnonUID, "anongid": s.AnonGID} {
+		if v != nil && (*v < 0 || *v > 4294967294) {
+			return fmt.Errorf("%s must be between 0 and 4294967294", name)
+		}
+	}
+	return nil
+}
+
+// NFSShareOpenToEveryone reports a share that lets any host act as root:
+// no root squash on a "*" client (the UI warns about it).
+func NFSShareOpenToEveryone(s NFSShare) bool {
+	if s.Squash != "none" {
+		return false
+	}
+	for _, c := range s.Clients {
+		if c.Host == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+func nfsOpts(s NFSShare, c NFSClientRule) string {
 	opts := []string{}
-	if s.ReadOnly {
+	if c.ReadOnly {
 		opts = append(opts, "ro")
 	} else {
 		opts = append(opts, "rw")
@@ -127,8 +217,23 @@ func nfsOpts(s NFSShare) string {
 	if s.NoSubtreeCheck {
 		opts = append(opts, "no_subtree_check")
 	}
-	if s.NoRootSquash {
+	switch s.Squash {
+	case "none":
 		opts = append(opts, "no_root_squash")
+	case "all":
+		opts = append(opts, "all_squash")
+	}
+	if s.AnonUID != nil {
+		opts = append(opts, fmt.Sprintf("anonuid=%d", *s.AnonUID))
+	}
+	if s.AnonGID != nil {
+		opts = append(opts, fmt.Sprintf("anongid=%d", *s.AnonGID))
+	}
+	if s.Insecure {
+		opts = append(opts, "insecure")
+	}
+	if s.CrossMnt {
+		opts = append(opts, "crossmnt")
 	}
 	return strings.Join(opts, ",")
 }

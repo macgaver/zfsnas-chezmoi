@@ -1746,6 +1746,21 @@ func LXDGetStatus(name string) (string, error) {
 	return raw[0].Status, nil
 }
 
+// LXDInstanceMissing reports whether Incus positively answers that the
+// instance does not exist (exact name, default project). Any other failure —
+// Incus stopped, socket error — returns false: callers use this to delete
+// schedules and must never do so on a transient error.
+func LXDInstanceMissing(name string) bool {
+	if !lxdNameRe.MatchString(name) {
+		return false
+	}
+	out, err := exec.Command("incus", "query", "/1.0/instances/"+name).CombinedOutput()
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(string(out)), "not found")
+}
+
 // LXDStart starts a stopped instance.
 func LXDStart(name string) error {
 	if !lxdNameRe.MatchString(name) {

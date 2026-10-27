@@ -46,6 +46,10 @@ dir  system/samba                       /etc/samba
 dir  system/samba-state                 /var/lib/samba
 dir  system/nut                         /etc/nut
 file system/exports                     /etc/exports
+# NFS server settings (Sharing → NFS → Server settings, e.g. manage-gids for
+# Kubernetes fsGroup). Restored before nfs-server starts: the portal's own
+# startup re-apply comes too late for an rpc.mountd already running.
+file system/nfs-zfsnas.conf             /etc/nfs.conf.d/zfsnas.conf
 dir  system/iscsi                       /etc/tgt
 dir  system/incus                       /var/lib/incus
 # dhcpcd's DUID and leases: without these the appliance presents a new client

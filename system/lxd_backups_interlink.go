@@ -29,9 +29,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"zfsnas/internal/config"
 )
 
 // ── /api/lxd/interlink-pool-source ─────────────────────────────────────────
@@ -535,4 +538,103 @@ func InterlinkRemoteHostName(remoteURL string) string {
 		return remoteURL
 	}
 	return u.Hostname()
+}
+
+// ── /api/lxd/interlink-import-schedules ─────────────────────────────────────
+
+// LXDImportSchedulesPayload carries an instance's snapshot and backup
+// schedules to the server it was just pushed to, so they move with it.
+// Instance is the name on the receiving side (the push may rename it).
+type LXDImportSchedulesPayload struct {
+	SourceHost string                    `json:"source_host"`
+	Instance   string                    `json:"instance"`
+	Snapshot   *config.LXDSnapshotPolicy `json:"snapshot,omitempty"`
+	Backup     *config.LXDBackupPolicy   `json:"backup,omitempty"`
+	// For a backup to an InterLink server: that server's URL (the receiver
+	// maps it to its own InterLink entry), and whether it is the receiver
+	// itself (a VM that now lives where its backups go).
+	BackupDestURL    string `json:"backup_dest_url,omitempty"`
+	BackupDestIsPeer bool   `json:"backup_dest_is_peer,omitempty"`
+}
+
+// LXDImportSchedulesRequest is the HMAC-signed envelope. The HMAC covers the
+// SHA-256 of the exact payload bytes.
+type LXDImportSchedulesRequest struct {
+	Timestamp int64           `json:"timestamp"`
+	Nonce     string          `json:"nonce"`
+	Payload   json.RawMessage `json:"payload"`
+	HMAC      string          `json:"hmac"`
+}
+
+// LXDImportSchedulesResponse says what the receiver did with each schedule:
+// "imported", "imported-disabled" (with Note) or "" (none sent).
+type LXDImportSchedulesResponse struct {
+	Snapshot string `json:"snapshot"`
+	Backup   string `json:"backup"`
+	Note     string `json:"note,omitempty"`
+}
+
+// LXDImportSchedulesHMAC signs an import-schedules request.
+func LXDImportSchedulesHMAC(sharedSecret string, timestamp int64, nonce string, payload []byte) string {
+	key, _ := hex.DecodeString(sharedSecret)
+	if len(key) == 0 {
+		key = []byte(sharedSecret)
+	}
+	sum := sha256.Sum256(payload)
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte("lxd-import-schedules|" + strconv.FormatInt(timestamp, 10) + "|" + nonce + "|" + hex.EncodeToString(sum[:])))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// InterlinkImportSchedules sends an instance's schedules to a peer.
+func InterlinkImportSchedules(remoteURL, sharedSecret, tlsFP string, p LXDImportSchedulesPayload) (*LXDImportSchedulesResponse, error) {
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, 8)
+	rand.Read(nonce) //nolint:errcheck
+	ts := time.Now().Unix()
+	nh := hex.EncodeToString(nonce)
+	body, _ := json.Marshal(LXDImportSchedulesRequest{
+		Timestamp: ts, Nonce: nh, Payload: payload,
+		HMAC: LXDImportSchedulesHMAC(sharedSecret, ts, nh, payload),
+	})
+	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/incus/interlink-import-schedules", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		return nil, fmt.Errorf("the destination runs an older ZNAS that cannot receive schedules — recreate them there")
+	}
+	if resp.StatusCode != http.StatusOK {
+		var r struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&r)
+		if r.Error != "" {
+			return nil, fmt.Errorf("%s", r.Error)
+		}
+		return nil, fmt.Errorf("interlink-import-schedules returned status %d", resp.StatusCode)
+	}
+	var out LXDImportSchedulesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SameInterlinkHost reports whether two InterLink URLs point at the same host.
+func SameInterlinkHost(a, b string) bool {
+	ha, hb := extractHost(a), extractHost(b)
+	return ha != "" && strings.EqualFold(ha, hb)
+}
+
+// ZPoolExists reports whether a ZFS pool of that name is imported here.
+func ZPoolExists(name string) bool {
+	if name == "" {
+		return false
+	}
+	return exec.Command("zpool", "list", "-H", "-o", "name", name).Run() == nil
 }

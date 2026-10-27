@@ -333,6 +333,32 @@ done
 
 systemctl enable ssh zfsnas zfsnas-firstboot
 
+# ---- NFS-exportable root overlay ------------------------------------------
+# casper mounts the RAM root overlay without nfs_export, so the kernel NFS
+# server cannot hand out file handles for "/": the NFSv4 pseudo-root fails
+# ("Cannot export /, possibly unsupported filesystem or fsid= required") and
+# every NFSv4 mount gets "No such file or directory" — clients silently fell
+# back to NFSv3. index=on,nfs_export=on (squashfs lower + tmpfs upper both
+# support file handles) fixes it; the old options stay as a fallback so a
+# kernel that refuses them still boots.
+CS=/usr/share/initramfs-tools/scripts/casper
+ovl_old='mount -t overlay -o "upperdir=/cow/upper,lowerdir=$mounts,workdir=/cow/work" "/cow" "$rootmnt" || panic "overlay mount failed"'
+ovl_new='mount -t overlay -o "upperdir=/cow/upper,lowerdir=$mounts,workdir=/cow/work,index=on,nfs_export=on" "/cow" "$rootmnt" || mount -t overlay -o "upperdir=/cow/upper,lowerdir=$mounts,workdir=/cow/work" "/cow" "$rootmnt" || panic "overlay mount failed"'
+if grep -qF "$ovl_new" "$CS"; then
+    :
+elif grep -qF "$ovl_old" "$CS"; then
+    OVL_OLD="$ovl_old" OVL_NEW="$ovl_new" python3 - "$CS" <<'PY'
+import os, sys
+p = sys.argv[1]
+s = open(p).read()
+open(p, "w").write(s.replace(os.environ["OVL_OLD"], os.environ["OVL_NEW"], 1))
+PY
+    grep -qF "$ovl_new" "$CS" || { echo "ERROR: casper overlay patch failed" >&2; exit 1; }
+else
+    echo "ERROR: casper's overlay mount line changed; update the nfs_export patch" >&2
+    exit 1
+fi
+
 update-initramfs -u -k all
 apt-get clean
 rm -rf /var/lib/apt/lists/*

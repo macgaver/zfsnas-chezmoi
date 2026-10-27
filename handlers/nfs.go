@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"os"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -71,8 +73,15 @@ func HandleCreateNFSShare(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "path is required")
 		return
 	}
-	if req.Client == "" {
-		req.Client = "*"
+	req.Normalize()
+	if err := system.ValidateNFSShare(req); err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// exportfs refuses a missing path, but only after the share was saved.
+	if fi, err := os.Stat(req.Path); err != nil || !fi.IsDir() {
+		jsonErr(w, http.StatusBadRequest, "the path "+req.Path+" does not exist or is not a folder")
+		return
 	}
 	req.ID = newID()
 
@@ -123,8 +132,15 @@ func HandleUpdateNFSShare(w http.ResponseWriter, r *http.Request) {
 	req.ID = id
 	req.Path = strings.TrimSpace(req.Path)
 	req.Client = strings.TrimSpace(req.Client)
-	if req.Client == "" {
-		req.Client = "*"
+	req.Normalize()
+	if err := system.ValidateNFSShare(req); err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// exportfs refuses a missing path, but only after the share was saved.
+	if fi, err := os.Stat(req.Path); err != nil || !fi.IsDir() {
+		jsonErr(w, http.StatusBadRequest, "the path "+req.Path+" does not exist or is not a folder")
+		return
 	}
 
 	shares, err := system.ListNFSShares(config.Dir())
@@ -211,4 +227,55 @@ func HandleDeleteNFSShare(w http.ResponseWriter, r *http.Request) {
 		"NFS export '"+target+"' was deleted by "+sess.Username+".",
 	)
 	jsonOK(w, map[string]string{"message": "NFS share removed"})
+}
+
+// HandleGetNFSServer returns the server-wide NFS settings and what the
+// server actually uses. GET /api/nfs/server
+func HandleGetNFSServer(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jsonOK(w, map[string]any{
+			"settings":  appCfg.NFSServer,
+			"effective": system.GetNFSEffective(),
+		})
+	}
+}
+
+// HandleSetNFSServer saves and applies the server-wide NFS settings.
+// PUT /api/nfs/server
+func HandleSetNFSServer(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req config.NFSServerConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if req.Threads < 0 || req.Threads > 256 {
+			jsonErr(w, http.StatusBadRequest, "threads must be between 1 and 256 (0 = default)")
+			return
+		}
+		if req.DisableV3 && system.GetNFSEffective().V4RootBroken {
+			jsonErr(w, http.StatusBadRequest, "NFSv4 cannot work on this system (its root filesystem is not NFS-exportable), so NFSv3 cannot be turned off: clients would lose every share. Upgrade the USB appliance image first.")
+			return
+		}
+		appCfg.NFSServer = req
+		if err := config.SaveAppConfig(appCfg); err != nil {
+			jsonErr(w, http.StatusInternalServerError, "save config: "+err.Error())
+			return
+		}
+		changed, err := system.ApplyNFSServerSettings(req)
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		sess := MustSession(r)
+		audit.Log(audit.Entry{
+			User: sess.Username, Role: sess.Role, Action: audit.ActionUpdateNFSShare,
+			Target: "NFS server settings", Result: audit.ResultOK,
+			Details: fmt.Sprintf("trust client groups %s, threads %s, NFSv3 %s",
+				map[bool]string{true: "on", false: "off"}[req.TrustClientGroups],
+				map[bool]string{true: fmt.Sprint(req.Threads), false: "default"}[req.Threads > 0],
+				map[bool]string{true: "off", false: "on"}[req.DisableV3]),
+		})
+		jsonOK(w, map[string]any{"changed": changed, "effective": system.GetNFSEffective()})
+	}
 }

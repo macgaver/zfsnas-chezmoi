@@ -556,6 +556,10 @@ func tickLXDBackupPolicies(now time.Time, appCfg *config.AppConfig) {
 			continue
 		}
 		_, err := startBackupJob(appCfg, p, "system", "system")
+		if err != nil && lxdInstanceGone(p.Instance, err) {
+			dropOrphanSchedules(appCfg, p.Instance, "lxd-backup-sched")
+			continue
+		}
 		if err != nil {
 			log.Printf("[lxd-backup-sched] %s: %v", p.Instance, err)
 		}

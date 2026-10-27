@@ -609,7 +609,13 @@ func HandleLXDSetConfig(w http.ResponseWriter, r *http.Request) {
 
 // HandleLXDDelete deletes an instance.
 // DELETE /api/lxd/instances/{name}
-func HandleLXDDelete(w http.ResponseWriter, r *http.Request) {
+func HandleLXDDelete(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handleLXDDelete(appCfg, w, r)
+	}
+}
+
+func handleLXDDelete(appCfg *config.AppConfig, w http.ResponseWriter, r *http.Request) {
 	name := mux.Vars(r)["name"]
 	sess := MustSession(r)
 	var req struct {
@@ -626,6 +632,12 @@ func HandleLXDDelete(w http.ResponseWriter, r *http.Request) {
 	// history must never block instance deletion itself.
 	if err := system.DeleteLXDInstanceMetrics(name); err != nil {
 		log.Printf("delete metrics history for %q: %v", name, err)
+	}
+	// Its schedules go with it — otherwise they keep firing against a ghost
+	// (typically after the instance was pushed to another server).
+	if removed := RemoveLXDInstanceSchedules(appCfg, name); len(removed) > 0 {
+		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionDeleteSchedule, Target: name, Result: audit.ResultOK,
+			Details: "removed with the instance: " + strings.Join(removed, " + ") + " schedule(s)"})
 	}
 	jsonOK(w, map[string]string{"ok": "deleted"})
 }

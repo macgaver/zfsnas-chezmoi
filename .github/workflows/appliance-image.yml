@@ -1,14 +1,12 @@
 # USB appliance image: build, sign and publish to macgaver/znas-usb-appliance.
 #
-# ── TO SHIP A NEW APPLIANCE IMAGE, EDIT THE VALUES BELOW AND PUSH. ──
-# A push that changes this file (or anything under usbimage/) builds an image
-# only when there is something new to ship, so any other edit is a no-op:
-#   - release v<APPLIANCE_UBUNTU_VERSION>-<APPLIANCE_BUILD> does not exist yet
-#     on the appliance repo, or
-#   - APPLIANCE_INCUS_VERSION differs from the Incus version recorded in the
-#     newest release for this Ubuntu version: the next free build number is
-#     then built automatically (26.04.1-3 -> 26.04.1-4), no need to bump
-#     APPLIANCE_BUILD by hand.
+# ── TO SHIP A NEW APPLIANCE IMAGE: SET A NEW APPLIANCE_BUILD (OR A NEW ──
+# ── APPLIANCE_UBUNTU_VERSION) BELOW AND PUSH.                            ──
+# An image is built ONLY when release v<APPLIANCE_UBUNTU_VERSION>-<APPLIANCE_BUILD>
+# does not exist yet on the appliance repo. Every other push — code, usbimage/
+# scripts, even other edits of this file — builds nothing, so the code can be
+# pushed freely. (A build that failed before publishing is retried by the next
+# push of this file, or from the Actions tab: "Run workflow".)
 #
 #   APPLIANCE_UBUNTU_VERSION  Ubuntu point release the image is built from.
 #                             Ubuntu's archive only serves the CURRENT point
@@ -20,8 +18,6 @@
 #   APPLIANCE_BUILD           Our build number (the last digit). Bump it to
 #                             ship a new image on the same Ubuntu release;
 #                             reset it to 1 when the Ubuntu version changes.
-#                             It is a minimum: an Incus change may build a
-#                             higher number (see above).
 #   APPLIANCE_INCUS_VERSION   Incus release baked into the image (x.y or
 #                             x.y.z, e.g. 7.5.1), installed at exactly that
 #                             version from the Incus project's own packages
@@ -29,9 +25,8 @@
 #                             archive, which stays on the 6.0 line for the
 #                             life of the release. The check job fails early
 #                             when Zabbly does not publish that version for
-#                             the image's Ubuntu codename. Each release's
-#                             notes record the Incus version it shipped —
-#                             that line is what the comparison reads.
+#                             the image's Ubuntu codename. Changing it ships
+#                             nothing by itself: bump APPLIANCE_BUILD too.
 #                             CAUTION: Incus upgrades its database on first
 #                             start and an older Incus cannot read it back, so
 #                             only ever move this value forward.
@@ -60,9 +55,6 @@ on:
     branches: [main]
     paths:
       - .github/workflows/appliance-image.yml
-      # A fix to the image build retries a release that failed to publish;
-      # once the release exists the check job turns any push into a no-op.
-      - usbimage/**
   workflow_dispatch:   # manual retry of a failed build (same skip rule applies)
 
 permissions:
@@ -116,27 +108,12 @@ jobs:
             exit 1
           fi
 
-          # Newest release already published for this Ubuntu version, and the
-          # Incus version its notes recorded ("" when it predates the record:
-          # those images carried Ubuntu's Incus, so they count as different).
-          prefix="v${APPLIANCE_UBUNTU_VERSION}-"
-          last=$(gh release list --repo "$APPLIANCE_REPO" --limit 100 --json tagName --jq '.[].tagName' \
-            | sed -n "s/^${prefix//./\\.}\([0-9][0-9]*\)$/\1/p" | sort -n | tail -n1)
           build="$APPLIANCE_BUILD"
-          if [ -n "$last" ]; then
-            shipped=$(gh release view "${prefix}${last}" --repo "$APPLIANCE_REPO" --json body --jq .body \
-              | sed -n 's/.*Incus \*\*\([0-9][0-9.]*\)\*\*.*/\1/p' | head -n1)
-            if [ "$shipped" != "$APPLIANCE_INCUS_VERSION" ] && [ "$build" -le "$last" ]; then
-              build=$((last + 1))
-              echo "::notice::Incus ${shipped:-from the Ubuntu archive} in ${prefix}${last} -> $APPLIANCE_INCUS_VERSION: building build $build"
-            fi
-          fi
-
           v="${APPLIANCE_UBUNTU_VERSION}-${build}"
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "appliance_build=$build" >> "$GITHUB_OUTPUT"
           if gh release view "v$v" --repo "$APPLIANCE_REPO" >/dev/null 2>&1; then
-            echo "::notice::release v$v already exists on $APPLIANCE_REPO with Incus $APPLIANCE_INCUS_VERSION — nothing to build"
+            echo "::notice::release v$v already exists on $APPLIANCE_REPO — nothing to build (set a new APPLIANCE_BUILD to ship an image)"
             echo "build=false" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::building appliance image v$v (Incus $APPLIANCE_INCUS_VERSION)"

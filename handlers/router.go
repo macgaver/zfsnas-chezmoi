@@ -617,6 +617,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_nfs")(http.HandlerFunc(HandleUpdateNFSShare)))).Methods("PUT")
 	r.Handle("/api/nfs/shares/{id}",
 		RequireAuth(RequirePermission("manage_nfs")(http.HandlerFunc(HandleDeleteNFSShare)))).Methods("DELETE")
+	r.Handle("/api/nfs/server",
+		RequireAuth(http.HandlerFunc(HandleGetNFSServer(appCfg)))).Methods("GET")
+	r.Handle("/api/nfs/server",
+		RequireAuth(RequirePermission("manage_nfs")(http.HandlerFunc(HandleSetNFSServer(appCfg))))).Methods("PUT")
 	r.Handle("/api/nfs/sessions",
 		RequireAuth(http.HandlerFunc(HandleGetNFSSessions))).Methods("GET")
 
@@ -1001,7 +1005,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/lxd/instances/{name}/config",
 		RequireAuth(RequireInstancePerm("edit_instances")(http.HandlerFunc(HandleLXDSetConfig)))).Methods("PUT")
 	r.Handle("/api/lxd/instances/{name}",
-		RequireAuth(RequireInstancePerm("delete_instances")(http.HandlerFunc(HandleLXDDelete)))).Methods("DELETE")
+		RequireAuth(RequireInstancePerm("delete_instances")(HandleLXDDelete(appCfg)))).Methods("DELETE")
 	r.Handle("/api/lxd/vms",
 		RequireAuth(RequirePermission("create_vm")(http.HandlerFunc(HandleCreateVM)))).Methods("POST")
 	r.Handle("/api/lxd/containers",
@@ -1297,6 +1301,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.HandleFunc("/api/lxd/interlink-prep-workload", HandleInterlinkPrepWorkload(appCfg)).Methods("POST")
 	r.HandleFunc("/api/lxd/interlink-prep-chain", HandleInterlinkPrepChain(appCfg)).Methods("POST")
 	r.HandleFunc("/api/lxd/interlink-prune-retention", HandleInterlinkPruneRetention(appCfg)).Methods("POST")
+	r.HandleFunc("/api/lxd/interlink-import-schedules", HandleInterlinkImportSchedules(appCfg)).Methods("POST")
 	// Syncoid install entry (admin-only; reused by Prerequisites page).
 	r.Handle("/api/prerequisites/install-syncoid",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleInstallSyncoid)))).Methods("POST")

@@ -448,6 +448,7 @@ type AppConfig struct {
 	ComposeUpdatePolicies   []ComposeUpdatePolicy `json:"compose_update_policies,omitempty"` // per-stack scheduled auto-updates
 	LXDBackupPolicies       []LXDBackupPolicy     `json:"lxd_backup_policies,omitempty"`     // v6.5.19 — per-instance scheduled syncoid backups
 	ExternalStorages        []ExternalStorage     `json:"external_storages,omitempty"`       // v6.7.7 — Filesystem rsync external storage targets
+	NFSServer               NFSServerConfig       `json:"nfs_server,omitempty"`              // v6.10.20 — server-wide NFS settings (/etc/nfs.conf.d/zfsnas.conf)
 	MergerFS                MergerFSConfig        `json:"mergerfs,omitempty"`                // v6.7.13 — optional MergerFS union-filesystem support
 	MergerFSSnapshotPolicies []MergerFSSnapshotPolicy `json:"mergerfs_snapshot_policies,omitempty"` // v6.7.13 — per-mergerfs coordinated ZFS snapshot schedules
 
@@ -504,6 +505,18 @@ type MergerFSPool struct {
 }
 
 // MergerFSConfig holds all persistent MergerFS settings.
+// NFSServerConfig holds server-wide NFS settings. ZNAS writes them to its own
+// drop-in, /etc/nfs.conf.d/zfsnas.conf (never the distro's nfs.conf), and
+// re-applies it at every start — on the USB appliance /etc lives in RAM.
+type NFSServerConfig struct {
+	// TrustClientGroups = mountd manage-gids=n: use the groups the client
+	// sends instead of looking the uid up on the NAS. Kubernetes fsGroup
+	// (a supplementary group) only works with it. Off = distro default.
+	TrustClientGroups bool `json:"trust_client_groups,omitempty"`
+	Threads           int  `json:"threads,omitempty"`     // nfsd threads; 0 = default
+	DisableV3         bool `json:"disable_v3,omitempty"` // serve NFSv4 only
+}
+
 type MergerFSConfig struct {
 	Enabled bool           `json:"enabled"`
 	HideNav bool           `json:"hide_nav"`

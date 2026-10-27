@@ -302,6 +302,10 @@ func runLXDSnapshotPolicy(p config.LXDSnapshotPolicy, appCfg *config.AppConfig) 
 	snapName := system.LXDSnapshotName(p.NamePrefix, now)
 
 	err := system.CreateLXDSnapshot(p.Instance, snapName, false)
+	if err != nil && lxdInstanceGone(p.Instance, err) {
+		dropOrphanSchedules(appCfg, p.Instance, "lxd-snap-sched")
+		return
+	}
 	updateSnapPolicyStatus(appCfg, p.Instance, now, snapName, err)
 	if err != nil {
 		log.Printf("[lxd-snap-sched] %s/%s: %v", p.Instance, snapName, err)
