@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"zfsnas/internal/alerts"
+	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/internal/geoip"
 	"zfsnas/internal/ids"
@@ -129,6 +130,58 @@ func HandleSDNIDSAlerts(appCfg *config.AppConfig) http.HandlerFunc {
 			out = append(out, v)
 		}
 		jsonOK(w, out)
+	}
+}
+
+// sdnIDSSuppressedBy: does a suppress entry silence this alert group? An
+// entry for one address matches either side, as Suricata's by_either does.
+func sdnIDSSuppressedBy(list []sdn.IDSSuppress, g ids.Group) bool {
+	for _, s := range list {
+		if s.SID == g.SID && (s.IP == "" || s.IP == g.Src || s.IP == g.Dst) {
+			return true
+		}
+	}
+	return false
+}
+
+// HandleSDNIDSClearAlerts — DELETE /api/sdn/ids/alerts?scope=suppressed|all:
+// forget the alerts of the suppressed signatures (running configuration and
+// draft), or the whole alert history.
+func HandleSDNIDSClearAlerts(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		scope := r.URL.Query().Get("scope")
+		var drop func(ids.Group) bool
+		switch scope {
+		case "all":
+			drop = func(ids.Group) bool { return true }
+		case "suppressed":
+			var list []sdn.IDSSuppress
+			st := sdnStoreFor(appCfg)
+			if c, err := st.LoadConfirmed(); err == nil && c != nil {
+				list = append(list, c.IDS.Suppressed...)
+			}
+			if d, err := st.LoadDraft(); err == nil && d != nil && d.Config != nil {
+				list = append(list, d.Config.IDS.Suppressed...)
+			}
+			drop = func(g ids.Group) bool { return sdnIDSSuppressedBy(list, g) }
+		default:
+			jsonErr(w, http.StatusBadRequest, "scope must be suppressed or all")
+			return
+		}
+		store := system.SDNIDSStore()
+		n := store.Delete(drop)
+		if err := store.Save(); err != nil {
+			jsonErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		sess := MustSession(r)
+		what := "alerts of suppressed signatures"
+		if scope == "all" {
+			what = "all IDS alerts"
+		}
+		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionSDNIDSClear, Target: "ids",
+			Result: audit.ResultOK, Details: fmt.Sprintf("deleted %s (%d groups)", what, n)})
+		jsonOK(w, map[string]int{"deleted": n})
 	}
 }
 

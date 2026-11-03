@@ -102,7 +102,12 @@
     if (rerender) rerender();
   }
   const COL = { in: 'var(--fw-in)', out: 'var(--fw-out)', blk: 'var(--fw-blk)' };
-  const HEX = { in: '#64d2ff', out: '#bf5af2', blk: '#ff453a' };
+  // Line colours by theme: the dark ones fade on a light map (the cyan was
+  // close to the street map's water), so light themes get deeper hues.
+  const HEX_DARK = { in: '#64d2ff', out: '#bf5af2', blk: '#ff453a' };
+  const HEX_LIGHT = { in: '#0a5fd6', out: '#9b3fd1', blk: '#d92d20' };
+  const lightTheme = () => document.body.classList.contains('light') || document.body.classList.contains('dawn');
+  const HEX = new Proxy({}, { get: (_, k) => (lightTheme() ? HEX_LIGHT : HEX_DARK)[k] });
 
   const TABLE_MAX = 2000, PAGE_SIZE = 20;
   async function loadTraffic() {
@@ -579,6 +584,7 @@
         ${seg('range', [['1h', '1h'], ['24h', '24h'], ['7d', '7d'], ['30d', '30d'], ['1y', '1y'], ['5y', '5y']], T.range)}
         ${seg('group', [['ip', 'By IP'], ['country', 'By country'], ['city', 'By city']], T.group)}
         <input class="fw-search" id="fwt-q" placeholder="Filter: IP, country, city, network, inside host, port…" value="${E(T.q)}">
+        ${isAdmin() ? `<div class="fw-dd" id="fwt-geo-dd"><button class="fw-btn" id="fwt-geo-more" title="Location database">${icon('more-vertical', 14)}</button></div>` : ''}
       </div>
       ${mapHTML()}
       <div id="fwt-tables" class="fw-contents">${tablesHTML()}</div>
@@ -674,13 +680,116 @@
       toast(r.ok ? 'Location database installed' : ((r.data && r.data.error) || 'Download failed'), r.ok ? 'success' : 'error');
       refresh(true);
     };
+    wireGeoMenu(root);
     wireZoom(root);
     drawTiles();
     drawArcs();
     if (T.sel) select(T.sel);
   }
 
+  // ── location database choice (⋮ at the end of the filter row) ──────────
+  const geoMenuOpen = () => !!document.querySelector('#fwt-geo-dd .fw-menu');
+  const jsonPut = (url, body, method) => api(url, { method: method || 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  function wireGeoMenu(root) {
+    const btn = root.querySelector('#fwt-geo-more');
+    if (!btn) return;
+    btn.onclick = async e => {
+      e.stopPropagation();
+      const dd = btn.closest('.fw-dd');
+      if (dd.querySelector('.fw-menu')) { dd.querySelector('.fw-menu').remove(); return; }
+      const r = await api('/api/sdn/geodb/provider');
+      if (!r.ok) { toast((r.data && r.data.error) || 'Not available', 'error'); return; }
+      const g = r.data, mm = g.provider === 'maxmind';
+      const f = (g.files || []).find(x => x.present);
+      const chk = on => `<span style="width:16px;display:inline-flex;justify-content:center;color:var(--accent-3)">${on ? icon('check', 14) : ''}</span>`;
+      const src = g.in_use === 'maxmind' ? 'MaxMind GeoLite2' : 'DB-IP Lite';
+      let info = g.job && g.job.running ? `Downloading ${mm ? 'MaxMind GeoLite2' : 'DB-IP Lite'}…`
+        : `In use: ${src}${f && f.updated ? ' · updated ' + ago(f.updated) : ' · not downloaded yet'}`;
+      if (mm && g.in_use !== 'maxmind' && !(g.job && g.job.running)) info = 'MaxMind GeoLite2 not downloaded yet: DB-IP Lite answers meanwhile';
+      const m = document.createElement('div');
+      m.className = 'fw-menu';
+      m.style.minWidth = '330px'; m.style.whiteSpace = 'nowrap';
+      m.innerHTML = `<div class="fw-menu-item" data-m="dbip">${chk(!mm)}Use Free DB-IP Lite Country Database</div>
+        <div class="fw-menu-item" data-m="maxmind" title="${g.configured ? 'Change the MaxMind account or license key' : 'Use your MaxMind license key for the GeoLite2 databases'}">${chk(mm)}MaxMind GeoLite2${g.configured && !mm ? ' <span style="color:var(--text-3);font-size:11.5px">(configured)</span>' : ''}…</div>
+        <div class="fw-menu-sep"></div>
+        <div style="padding:4px 10px 6px 35px;font-size:11.5px;color:${g.job && g.job.error ? 'var(--fw-blk)' : 'var(--text-3)'};white-space:normal;max-width:330px">${E(g.job && g.job.error ? 'Last download failed: ' + g.job.error : info)}</div>`;
+      dd.appendChild(m);
+      m.onclick = ev => ev.stopPropagation();
+      const close = () => { m.remove(); document.removeEventListener('click', close); };
+      m.querySelectorAll('[data-m]').forEach(it => it.onclick = async () => {
+        close();
+        if (it.dataset.m === 'maxmind') { maxmindDialog(g); return; }
+        if (!mm) return;
+        const res = await jsonPut('/api/sdn/geodb/provider', { provider: 'dbip' });
+        if (!res.ok) { toast((res.data && res.data.error) || 'Not saved', 'error'); return; }
+        toast('Now using the free DB-IP Lite databases', 'success');
+        watchGeoJob();
+      });
+      setTimeout(() => document.addEventListener('click', close), 0);
+    };
+  }
+
+  function maxmindDialog(g) {
+    const box = document.createElement('div');
+    box.innerHTML = `<p style="margin-top:0">GeoLite2 is MaxMind's free database, updated twice a week. It needs a free MaxMind account: <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener noreferrer">sign up</a>, then create a license key under <a href="https://www.maxmind.com/en/accounts/current/license-key" target="_blank" rel="noopener noreferrer">Manage license keys</a>.</p>
+      <div class="fw-field" style="margin-top:12px"><label>Account ID</label><input type="text" id="fwm-acc" autocomplete="off" inputmode="numeric" value="${E(g.account_id || '')}" placeholder="e.g. 1234567"></div>
+      <div class="fw-field" style="margin-top:12px"><label>License key</label><input type="password" id="fwm-key" autocomplete="new-password" placeholder="${g.key_set ? 'Saved: leave empty to keep it' : 'The 40-character key MaxMind shows once'}"></div>
+      <div id="fwm-res" style="min-height:18px;font-size:12.5px;margin-top:4px"></div>
+      <p style="color:var(--text-3);font-size:12px;margin-bottom:0">About 70 MB is downloaded to the statistics pool. DB-IP Lite keeps answering until GeoLite2 is in place.</p>`;
+    const res = box.querySelector('#fwm-res');
+    const body = () => ({ provider: 'maxmind', account_id: box.querySelector('#fwm-acc').value.trim(), license_key: box.querySelector('#fwm-key').value.trim() });
+    const show = (ok, msg) => { res.style.color = ok ? 'var(--accent-3)' : 'var(--fw-blk)'; res.textContent = msg; };
+    const missing = b => !b.account_id ? 'Enter the account ID' : (!b.license_key && !g.key_set ? 'Enter the license key' : '');
+    window.sdnModal({ title: 'MaxMind GeoLite2', body: box, buttons: [
+      { label: 'Cancel' },
+      { label: 'Test', onClick: async (close, b) => {
+        const v = body(), miss = missing(v);
+        if (miss) { show(false, miss); return; }
+        b.disabled = true; show(true, 'Asking MaxMind…'); res.style.color = 'var(--text-3)';
+        const r = await jsonPut('/api/sdn/geodb/maxmind/test', v, 'POST');
+        b.disabled = false;
+        show(r.ok, r.ok ? '✓ MaxMind accepted this account ID and license key' : ((r.data && r.data.error) || 'Test failed'));
+      } },
+      { label: 'Save', cls: 'btn-primary', onClick: async (close, b) => {
+        const v = body(), miss = missing(v);
+        if (miss) { show(false, miss); return; }
+        b.disabled = true; res.style.color = 'var(--text-3)'; res.textContent = 'Checking with MaxMind…';
+        const r = await jsonPut('/api/sdn/geodb/provider', v);
+        b.disabled = false;
+        if (!r.ok) { show(false, (r.data && r.data.error) || 'Not saved'); return; }
+        close();
+        toast(r.data && r.data.in_use === 'maxmind' ? 'Now using MaxMind GeoLite2' : 'MaxMind GeoLite2 saved: downloading the databases', 'success');
+        watchGeoJob();
+      } }] });
+    setTimeout(() => box.querySelector(g.account_id ? '#fwm-key' : '#fwm-acc').focus(), 50);
+  }
+
+  // Follows the background download, then reloads the page's locations.
+  let geoWatch = null;
+  function watchGeoJob() {
+    clearInterval(geoWatch);
+    let n = 0;
+    geoWatch = setInterval(async () => {
+      const r = await api('/api/sdn/geodb/provider');
+      if (++n > 120 || (r.ok && r.data && !(r.data.job && r.data.job.running))) {
+        clearInterval(geoWatch);
+        const g = r.data || {}, err = g.job && g.job.error;
+        if (err) toast('Location database: ' + err, 'error');
+        else if (g.provider === 'maxmind' && g.in_use === 'maxmind') toast('MaxMind GeoLite2 is in use', 'success');
+        refresh(true);
+      }
+    }, 3000);
+  }
+
   let rerender = null;
+  // A theme change recolours the map lines at once, not at the next poll.
+  let wasLight = null;
+  new MutationObserver(() => {
+    const l = lightTheme();
+    if (l === wasLight) return;
+    wasLight = l;
+    if (rerender && document.getElementById('fwt-map') && !geoMenuOpen() && !filterFocused()) rerender();
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   async function refresh(reload) {
     if (reload) await loadTraffic();
     if (rerender) rerender();
@@ -788,7 +897,7 @@
     if (typeof window.sdnRegisterPage !== 'function') { setTimeout(register, 200); return; }
     window.sdnRegisterPage('fw-traffic', {
       load: async rr => { rerender = rr; await loadTraffic(); },
-      render: trafficHTML, wire: wireTraffic, busy: filterFocused, pollMs: 60000, poll: async () => { if (filterFocused()) return false; await loadTraffic(); },
+      render: trafficHTML, wire: wireTraffic, busy: () => filterFocused() || geoMenuOpen(), pollMs: 60000, poll: async () => { if (filterFocused()) return false; await loadTraffic(); },
     });
     window.sdnRegisterPage('fw-live', {
       load: async rr => { rerenderLive = rr; await loadLive(); },

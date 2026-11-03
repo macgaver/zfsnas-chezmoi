@@ -63,9 +63,13 @@
   window.setHeaderMode = function (m) {
     applyMode(m);
     try { localStorage.setItem(LS_MODE, mode); } catch (_) {}
+    if (typeof window._onHeaderModeSet === 'function') window._onHeaderModeSet(mode);
     if (typeof window.closeUserMenu === 'function') window.closeUserMenu();
   };
   window.getHeaderMode = () => mode;
+  // Per-server header (user settings): switches without touching this
+  // device's saved default.
+  window.applyHeaderMode = function (m) { if (MODES.includes(m) && m !== mode) applyMode(m); };
 
   function savedMode() {
     try {

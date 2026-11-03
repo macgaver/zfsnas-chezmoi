@@ -231,6 +231,8 @@
     const n = sv => base.filter(a => a.severity === sv).reduce((t, a) => t + a.count, 0);
     const closed = alerts.filter(a => a.open === false && (dirF === 'all' || a.dir === dirF)).length;
     const suppressed = sid => s.suppressed.some(x => x.sid === sid);
+    // this group is silenced (for everyone, or for one of its two addresses)
+    const silenced = a => s.suppressed.some(x => x.sid === a.sid && (!x.ip || x.ip === a.src || x.ip === a.dst));
     const blocked = ip => F.cfg().rules.some(r => r.action !== 'allow' && !r.interface && r.source && r.source.type === 'cidr' && (r.source.value === ip || r.source.value === ip + '/32'));
     const flag = cc => cc ? `<span class="fw-flag" title="${F.E(F.ccName(cc))}">${F.flagOf(cc)}</span>` : '';
     // Behind NAT: the inside host replaces our public address.
@@ -241,7 +243,7 @@
       const [sl, sc] = SEV[a.severity] || ['?', 'none'];
       const i = ifaceById(a.interface);
       return `<tr><td data-v="${a.severity}"><span class="fw-sevb ${sc}">${sl}</span></td>
-        <td style="white-space:normal;min-width:220px;max-width:340px"><div style="color:var(--text)">${F.E(a.signature)}</div><small style="color:var(--text-3)">${F.E(a.category || '')} · sid ${F.E(a.sid)}</small></td>
+        <td style="white-space:normal;min-width:220px;max-width:340px"><div style="color:var(--text)">${F.E(a.signature)}</div><small style="color:var(--text-3)">${F.E(a.category || '')} · sid ${F.E(a.sid)}</small>${silenced(a) ? ' <span class="fw-badge none" title="This signature is suppressed: no new alert once the suppression is applied. Those seen before stay in the history.">suppressed</span>' : ''}</td>
         <td class="fw-mono fw-ipcell" data-v="${F.E(a.src_inside || a.src)}" data-ipcard="${k}"><div>${flag(a.src_cc)}${host(a.src, a.src_inside)} ${a.dir === 'internal' ? '<span class="fw-dir" style="margin-left:4px;background:var(--surface2);color:var(--text-3)">internal</span>' : `<span class="fw-dir ${a.incoming ? 'in' : 'out'}" style="margin-left:4px">${a.incoming ? '→ in' : 'out →'}</span>`}${a.dir === 'in' && a.open === false ? ' <span class="fw-badge none" title="No forward or allow rule opens this port: the firewall dropped it">closed port</span>' : ''}</div>
           <div style="margin-top:3px">${flag(a.dst_cc)}${host(a.dst, a.dst_inside)}${a.port_count > 1
           ? ` <small title="${F.E((a.ports || []).join(', ') + (a.port_count > (a.ports || []).length ? ', …' : ''))}" style="color:var(--accent-warn)">${F.E(a.port_count)} ports</small>`
@@ -263,7 +265,8 @@
       </div>
       <div class="fw-tcard"><div class="fw-tch"><h3>Alerts</h3><span class="fw-sub">grouped by signature, source and destination</span><span style="flex:1"></span>
         <div id="fw-ids-sevf"></div><div id="fw-ids-range"></div>
-        <input class="fw-search" id="fw-ids-q" placeholder="Search signature, address…" value="${F.E(search)}" style="max-width:220px"></div>
+        <input class="fw-search" id="fw-ids-q" placeholder="Search signature, address…" value="${F.E(search)}" style="max-width:220px">
+        ${admin ? `<div class="fw-dd" id="fw-ids-dd"><button class="fw-btn" id="fw-ids-more" title="More">${F.icon('more-vertical', 14)}</button></div>` : ''}</div>
         <div class="fw-tscroll"><table class="fw-table" data-sort="ids"><thead><tr><th data-asc>Severity</th><th>Signature</th><th>Source → destination</th><th>Interface</th><th>Count</th><th>Last seen</th><th></th></tr></thead>
         <tbody>${rows || `<tr><td colspan="7" style="color:var(--text-3)">${alerts.length ? 'Nothing matches the filters.' : 'No alert in this period.'}</td></tr>`}</tbody></table></div></div>`;
   }
@@ -286,6 +289,7 @@
     qi.oninput = () => { search = qi.value; const pos = qi.selectionStart; F.rerender(); const n = document.getElementById('fw-ids-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
     const list = visible();
     wireCards(root, list);
+    wireClear(root);
     root.querySelectorAll('[data-block]').forEach(b => b.onclick = () => {
       const a = list[Number(b.dataset.block)];
       // The outside party: for a response alert (a LAN client fetched
@@ -313,12 +317,55 @@
     });
   }
 
+  // ── ⋮ on the table title: forget alerts ────────────────────────────────
+  function wireClear(root) {
+    const btn = root.querySelector('#fw-ids-more');
+    if (!btn) return;
+    btn.onclick = e => {
+      e.stopPropagation();
+      const dd = btn.closest('.fw-dd');
+      if (dd.querySelector('.fw-menu')) { dd.querySelector('.fw-menu').remove(); return; }
+      const nSup = ids().suppressed.length;
+      const m = document.createElement('div');
+      m.className = 'fw-menu';
+      m.style.minWidth = '330px'; m.style.whiteSpace = 'nowrap';
+      m.innerHTML = `<div class="fw-menu-item${nSup ? '' : ' fw-off'}" data-m="suppressed" ${nSup ? '' : 'title="No signature is suppressed"'}>${F.icon('eye-off')}Delete the alerts of suppressed signatures</div>
+        <div class="fw-menu-sep"></div>
+        <div class="fw-menu-item fw-danger" data-m="all">${F.icon('trash')}Delete all IDS alert history</div>`;
+      dd.appendChild(m);
+      m.onclick = ev => ev.stopPropagation();
+      m.querySelectorAll('[data-m]').forEach(it => it.onclick = () => {
+        if (it.classList.contains('fw-off')) return;
+        m.remove();
+        confirmClear(it.dataset.m);
+      });
+      setTimeout(() => document.addEventListener('click', function off() { m.remove(); document.removeEventListener('click', off); }), 0);
+    };
+  }
+  function confirmClear(scope) {
+    const all = scope === 'all';
+    F.modal({ title: all ? 'Delete all IDS alert history?' : 'Delete the alerts of suppressed signatures?',
+      body: all
+        ? '<p>Every alert recorded on this server, over the last 30 days, is deleted. New alerts keep coming in. This cannot be undone.</p>'
+        : `<p>The alerts of the ${F.E(ids().suppressed.length)} suppressed signature${ids().suppressed.length > 1 ? 's' : ''} are deleted from the history, over the last 30 days. A suppression for one address only deletes that address's alerts.</p><p>Suppressions still in the draft count too: they stop new alerts only once applied.</p>`,
+      buttons: [{ label: 'Cancel' }, { label: 'Delete', cls: 'btn-danger', onClick: async (close, b) => {
+        b.disabled = true;
+        const r = await F.api('DELETE', '/api/sdn/ids/alerts?scope=' + scope);
+        b.disabled = false;
+        if (!r.ok) { F.toast((r.data && r.data.error) || 'Not deleted', 'error'); return; }
+        close();
+        const n = (r.data && r.data.deleted) || 0;
+        F.toast(n ? `${F.fmtCount(n)} alert group${n > 1 ? 's' : ''} deleted` : 'Nothing to delete', 'success');
+        await loadAlerts(); F.rerender();
+      } }] });
+  }
+
   function register() {
     if (typeof window.sdnRegisterPage !== 'function' || !window.sdnFW || !window.sdnFW.ifaceChips) { setTimeout(register, 200); return; }
     F = window.sdnFW;
     window.sdnRegisterPage('fw-suricata', { load: loadStatus, render: settingsHTML, wire: wireSettings, pollMs: 8000, poll: loadStatus });
     window.sdnRegisterPage('fw-ids', { load: async () => { await Promise.all([loadAlerts(), F.loadCountries()]); }, render: alertsHTML, wire: wireAlerts, pollMs: 15000,
-      poll: async () => { if (document.querySelector('#fw-ids-netf .fw-picker-pop')) return false; await loadAlerts(); } }); // network menu open: don't redraw under it
+      poll: async () => { if (document.querySelector('#fw-ids-netf .fw-picker-pop, #fw-ids-dd .fw-menu')) return false; await loadAlerts(); } }); // a menu open: don't redraw under it
   }
   register();
 })();

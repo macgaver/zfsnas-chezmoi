@@ -6,7 +6,7 @@
  */
 (function () {
   'use strict';
-  let F = null, T = null, failed = '', q = '', view = 'all', ro = null;
+  let F = null, T = null, failed = '', q = '', view = 'online', ro = null;
   const E = s => F.E(s);
   const icon = (n, s) => F.icon(n, s || 13);
 

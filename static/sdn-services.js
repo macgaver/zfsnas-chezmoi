@@ -169,14 +169,27 @@
     const used = c.dns.enabled || c.dhcp.some(d => d.enabled);
     const nets = lanIfaces();
     const running = svc && svc.dns_running;
+    // An Incus network that is also a Firewall interface: one card, the
+    // Firewall's, tagged Incus (and warned when Incus serves DHCP there too).
+    const incusOf = i => incusNets.find(n => n.name === i.device || n.name === ('br-' + i.device).slice(0, 15));
+    const runsOf = n => [n.dhcp && 'DHCP', n.dns && 'DNS', n.nat && 'NAT'].filter(Boolean);
+    const incusTag = n => {
+      const r = runsOf(n), what = r.length ? `Incus runs ${r.join(', ')} on this network` : 'Also an Incus network (Incus runs no DHCP, DNS or NAT on it)';
+      return admin
+        ? `<button type="button" class="fw-badge none fw-incus-link" data-incus-net="${F.E(n.name)}" title="${F.E(what)}. Click to edit ${F.E(n.name)} under Infrastructure, Networking.">Incus</button>`
+        : `<span class="fw-badge none" title="${F.E(what)}. It is changed under Infrastructure, Networking.">Incus</span>`;
+    };
+    const merged = new Set();
     const cards = nets.map(i => {
+      const inc = incusOf(i);
+      if (inc) merged.add(inc.name);
       const d = c.dhcp.find(x => x.interface === i.id);
       const on = d && d.enabled;
       const n = leases.filter(l => l.interface === i.id).length;
       const dnsHere = dns.enabled && dns.interfaces.includes(i.id);
       return `<div class="fw-card">
         <div class="fw-stripe" style="background:${F.C(i.color)}"></div>
-        <div class="fw-card-h"><span class="fw-name">${F.E(i.name)}</span>
+        <div class="fw-card-h"><span class="fw-name">${F.E(i.name)}</span>${inc ? ' ' + incusTag(inc) : ''}
           <span class="fw-gwstate ${on ? 'up' : 'none'}">${on ? 'DHCP on' : 'DHCP off'}</span>
           ${dhcpDown(i.id) ? `<span class="fw-badge" style="background:rgba(255,69,58,.14);color:var(--fw-blk);margin-left:6px" title="${F.E(dhcpDown(i.id))}">not running</span>` : ''}</div>
         <div class="fw-kv"><span>Network</span><span class="fw-mono">${F.E(i.ipv4)}</span>
@@ -187,8 +200,11 @@
           <span>DNS given</span><span class="fw-mono">${on ? F.E(d.dns_servers.length ? d.dns_servers.join(', ') : (dnsHere ? ipOf(i.ipv4) + ' (this router)' : '—')) : '—'}</span>
           ${on && (d.ntp_servers || []).length ? `<span>NTP given</span><span class="fw-mono">${F.E(d.ntp_servers.join(', '))}</span>` : ''}
           ${on && (d.routes || []).length ? `<span>Routes</span><span class="fw-mono">${d.routes.map(r => F.E(r.network + ' via ' + r.via)).join('<br>')}</span>` : ''}
-          <span>Reserved</span><span>${d ? d.reservations.length : 0} address${d && d.reservations.length === 1 ? '' : 'es'} · ${n} lease${n === 1 ? '' : 's'}</span></div>
-        ${admin ? `<div class="fw-card-actions"><button class="fw-icon-btn" data-dhcp="${F.E(i.id)}">${F.icon('pencil', 12)}${d ? 'Edit' : 'Set up DHCP'}</button></div>` : ''}
+          <span>Reserved</span><span>${d ? d.reservations.length : 0} address${d && d.reservations.length === 1 ? '' : 'es'} · ${n} lease${n === 1 ? '' : 's'}</span>
+          ${inc && inc.dhcp ? `<span>Incus DHCP</span><span style="color:#ff9f0a">on${(inc.dhcp_ranges || []).length ? ', ' + F.E(inc.dhcp_ranges.map(x => x.replace('-', ' – ')).join(', ')) : ''} · ${inc.leases.length} lease${inc.leases.length === 1 ? '' : 's'}</span>` : ''}</div>
+        ${inc && inc.dhcp && !on ? `<div class="fw-note" style="margin:8px 0 0">Incus serves DHCP here. Turn it off in the bridge settings (Incus tag) before setting up the Firewall's: one DHCP server per network.</div>` : ''}
+        ${inc && inc.dhcp && on ? `<div class="fw-note" style="margin:8px 0 0;color:#ff9f0a">Two DHCP servers on this network: the Firewall's and Incus's. Turn off Incus's in the bridge settings (Incus tag).</div>` : ''}
+        ${admin && !(inc && inc.dhcp && !d) ? `<div class="fw-card-actions"><button class="fw-icon-btn" data-dhcp="${F.E(i.id)}">${F.icon('pencil', 12)}${d ? 'Edit' : 'Set up DHCP'}</button></div>` : ''}
       </div>`;
     }).join('');
     const leaseRows = leases.slice().sort((a, b) => (a.interface || '').localeCompare(b.interface || '') || ip2n(a.ip) - ip2n(b.ip)).map(l => {
@@ -201,11 +217,8 @@
         <td>${reserved ? '<span class="fw-badge lan">reserved</span>' : (admin && d ? `<button class="fw-icon-btn" data-static="${F.E(l.mac)}" data-ip="${F.E(l.ip)}" data-host="${F.E(l.hostname || '')}" data-if="${F.E(l.interface)}">${F.icon('pin', 12)}Make static</button>` : '')}</td></tr>`;
     }).join('');
     // Incus networks (host-nat): Incus' own dnsmasq serves them; shown, not changed here.
-    const incusTag = n => admin
-      ? `<button type="button" class="fw-badge none fw-incus-link" data-incus-net="${F.E(n.name)}" title="Incus runs DHCP and DNS on this network. Click to edit ${F.E(n.name)} under Infrastructure, Networking.">Incus</button>`
-      : `<span class="fw-badge none" title="Incus runs DHCP and DNS on this network. It is changed under Infrastructure, Networking.">Incus</span>`;
     const incusPill = n => `<span class="fw-pillx">${dot(null)}${F.E(n.name)}</span> ${incusTag(n)}`;
-    const incusCards = incusNets.map(n => `<div class="fw-card fw-incus-card">
+    const incusCards = incusNets.filter(n => !merged.has(n.name)).map(n => `<div class="fw-card fw-incus-card">
         <div class="fw-stripe" style="background:var(--text-3)"></div>
         <div class="fw-card-h"><span class="fw-name">${F.E(n.name)}</span>
           ${incusTag(n)}

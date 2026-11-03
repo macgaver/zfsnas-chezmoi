@@ -11,9 +11,9 @@
   --fw-block: #ff453a;
   --fw-reject: #ff9f0a;
 }
-body.light {
-  --fw-in: #0a84ff;
-  --fw-out: #8e44ad;
+body.light, body.dawn {
+  --fw-in: #0a5fd6;
+  --fw-out: #9b3fd1;
   --fw-allow: #1a9e3f;
   --fw-reject: #c46a00;
 }
@@ -38,6 +38,9 @@ body.light {
   color: var(--text-2); font-size: 13px; }
 .fw-menu-item:hover { background: var(--surface2); color: var(--text); }
 .fw-menu-item.fw-warn, .fw-menu-item.fw-warn:hover { color: #ff9f0a; }
+.fw-menu-item.fw-danger, .fw-menu-item.fw-danger:hover { color: var(--accent-danger, #ff453a); }
+.fw-menu-item.fw-off { opacity: .45; cursor: default; }
+.fw-menu-item.fw-off:hover { background: none; color: var(--text-2); }
 .fw-menu-sep { height: 1px; background: var(--border); margin: 5px 4px; }
 .fw-hist { width: 400px; max-height: 70vh; overflow: auto; }
 .fw-hrow { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; padding: 8px 10px; border-radius: 8px;
@@ -211,20 +214,20 @@ button.fw-incus-link:hover, button.fw-incus-link:focus-visible { color: var(--te
 .fw-ttb .fw-seg button { display: inline-flex; align-items: center; gap: 6px; }
 .fw-search { flex: 1; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; color: var(--text); font-size: 12.5px; }
 .fw-mapcard { background: radial-gradient(ellipse at 50% 40%, #151a24 0%, #0f1015 70%); border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; }
-body.light .fw-mapcard { background: radial-gradient(ellipse at 50% 40%, #eef3fb 0%, #e3e9f3 70%); }
+body.light .fw-mapcard, body.dawn .fw-mapcard { background: radial-gradient(ellipse at 50% 40%, #eef3fb 0%, #e3e9f3 70%); }
 .fw-mapcard #fwt-map { display: block; width: 100%; height: auto; max-height: 68vh; } /* leaves the tables below in view */
 .fw-zoombar svg { display: block; }
 .fw-land { fill: #1d2230; stroke: #2a3142; stroke-width: .5; }
-body.light .fw-land { fill: #c9d3e2; stroke: #b3bfd1; }
+body.light .fw-land, body.dawn .fw-land { fill: #c9d3e2; stroke: #b3bfd1; }
 .fw-grat { fill: none; stroke: rgba(255,255,255,.035); }
-body.light .fw-grat { stroke: rgba(0,0,0,.05); }
+body.light .fw-grat, body.dawn .fw-grat { stroke: rgba(0,0,0,.05); }
 .fw-land, .fw-grat { vector-effect: non-scaling-stroke; }
 .fw-arcg { opacity: .85; transition: opacity .2s; pointer-events: none; }
 .fw-arc { fill: none; stroke-linecap: round; }
 .fw-arc.fw-flow { stroke-dasharray: 3 9; animation: fwflow 1.1s linear infinite; }
 @keyframes fwflow { to { stroke-dashoffset: -12; } }
 .fw-arrow-m { stroke: rgba(13,13,15,.55); stroke-width: .8px; vector-effect: non-scaling-stroke; }
-body.light .fw-arrow-m { stroke: rgba(255,255,255,.7); }
+body.light .fw-arrow-m, body.dawn .fw-arrow-m { stroke: rgba(255,255,255,.7); }
 .fw-arcg.fw-dim { opacity: .12; }
 .fw-arcg.fw-sel, .fw-arcg.fw-hover { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
 .fw-hit { fill: transparent; stroke: transparent; stroke-width: 14px; stroke-linecap: round; cursor: pointer; pointer-events: all; }
@@ -233,7 +236,7 @@ path.fw-hit { fill: none; pointer-events: stroke; }
 #fwt-map.fw-panning, #fwt-map.fw-panning .fw-hit { cursor: grabbing; }
 .fw-zoombar { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
   background: rgba(13,13,15,.7); }
-body.light .fw-zoombar { background: rgba(255,255,255,.85); }
+body.light .fw-zoombar, body.dawn .fw-zoombar { background: rgba(255,255,255,.85); }
 .fw-zoombar button { width: 32px; height: 30px; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--text-2); cursor: pointer; padding: 0; }
 .fw-zoombar button + button { border-top: 1px solid var(--border); }
 .fw-zoombar button:hover:not(:disabled) { color: var(--text); background: rgba(127,127,127,.15); }
@@ -255,10 +258,10 @@ body.light .fw-zoombar { background: rgba(255,255,255,.85); }
 /* Street map: OpenStreetMap has no dark tiles (the free OSM-based dark
    styles all need an API key now) — dim and invert them on dark themes. */
 .fw-mapcard.fw-osm { background: #aad3df; }
-body:not(.light) .fw-mapcard.fw-osm { background: #1b2229; }
-body:not(.light) .fw-tile { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.6); }
-body:not(.light) .fw-osm-attr { background: rgba(20,20,22,.8); color: #bbb; }
-body:not(.light) .fw-osm-attr a { color: #64d2ff; }
+body:not(.light):not(.dawn) .fw-mapcard.fw-osm { background: #1b2229; }
+body:not(.light):not(.dawn) .fw-tile { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.6); }
+body:not(.light):not(.dawn) .fw-osm-attr { background: rgba(20,20,22,.8); color: #bbb; }
+body:not(.light):not(.dawn) .fw-osm-attr a { color: #64d2ff; }
 .fw-osm-attr { position: absolute; right: 0; bottom: 0; font-size: 10.5px; padding: 2px 7px; border-top-left-radius: 7px; background: rgba(255,255,255,.8); color: #333; }
 .fw-osm-attr a { color: #0b61c4; }
 .fw-home-pulse { fill: none; stroke: #32d74b; animation: fwpulse 2.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
@@ -266,7 +269,7 @@ body:not(.light) .fw-osm-attr a { color: #64d2ff; }
 .fw-home-label { fill: var(--text-2); font-size: 10px; }
 .fw-maplegend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-2);
   background: rgba(13,13,15,.7); padding: 7px 11px; border-radius: 9px; border: 1px solid var(--border); }
-body.light .fw-maplegend { background: rgba(255,255,255,.85); }
+body.light .fw-maplegend, body.dawn .fw-maplegend { background: rgba(255,255,255,.85); }
 .fw-maplegend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .fw-tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px;
   font-size: 12px; box-shadow: var(--shadow-lg); display: none; min-width: 220px; z-index: 5; }
@@ -469,7 +472,7 @@ input.fw-search.fw-search-sm { flex: 0 1 300px; min-width: 160px; height: 34px; 
   --fw-c1: #3987e5; --fw-c2: #d95926; --fw-c3: #199e70; --fw-c4: #c98500;
   --fw-c5: #d55181; --fw-c6: #008300; --fw-c7: #9085e9; --fw-c8: #e66767;
 }
-body.light {
+body.light, body.dawn {
   --fw-c1: #2a78d6; --fw-c2: #eb6834; --fw-c3: #1baf7a; --fw-c4: #eda100;
   --fw-c5: #e87ba4; --fw-c6: #008300; --fw-c7: #6250d6; --fw-c8: #e34948;
 }
@@ -610,7 +613,7 @@ body.light {
 
 /* ── Monitor → Local Topo ─────────────────────────────────────────────── */
 .tp-root { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; --tp-on: #30d158; --tp-idle: #ffd60a; --tp-off: #ff453a; }
-body.light .tp-root { --tp-on: #1a9e3f; --tp-idle: #b58900; --tp-off: #d70015; }
+body.light .tp-root, body.dawn .tp-root { --tp-on: #1a9e3f; --tp-idle: #b58900; --tp-off: #d70015; }
 .tp-dim { color: var(--text-3); }
 .tp-sp { flex: 1; }
 .tp-kpis { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 8px; }

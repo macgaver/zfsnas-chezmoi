@@ -158,3 +158,28 @@ func TestStore_KeepsInsideHostBehindNAT(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreDelete(t *testing.T) {
+	s := NewStore(filepath.Join(t.TempDir(), "a.json.gz"))
+	now := time.Now()
+	s.Add(Event{Time: now, SID: 1, Src: "1.1.1.1", Dst: "10.0.0.2", Proto: "TCP"})
+	s.Add(Event{Time: now, SID: 2, Src: "2.2.2.2", Dst: "10.0.0.2", Proto: "TCP", SrcInside: "10.0.0.9"})
+	s.Add(Event{Time: now, SID: 2, Src: "3.3.3.3", Dst: "10.0.0.2", Proto: "TCP"})
+	if n := s.Delete(func(g Group) bool { return g.SID == 2 }); n != 2 {
+		t.Fatalf("deleted %d, want 2", n)
+	}
+	if l := s.List(time.Time{}); len(l) != 1 || l[0].SID != 1 {
+		t.Fatalf("left %+v", l)
+	}
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if l := NewStore(s.Path()).List(time.Time{}); len(l) != 1 {
+		t.Fatalf("after reload %d groups", len(l))
+	}
+	// the NAT link went with its group: a new alert makes a fresh one
+	s.Add(Event{Time: now, SID: 2, Src: "2.2.2.2", Dst: "10.0.0.2", Proto: "TCP"})
+	if l := s.List(time.Time{}); len(l) != 2 {
+		t.Fatalf("re-add: %d groups", len(l))
+	}
+}

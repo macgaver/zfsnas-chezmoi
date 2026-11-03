@@ -67,3 +67,22 @@ func TestSDNIDSClassify(t *testing.T) {
 		}
 	}
 }
+
+func TestSDNIDSSuppressedBy(t *testing.T) {
+	list := []sdn.IDSSuppress{{SID: 10}, {SID: 20, IP: "5.5.5.5"}}
+	cases := []struct {
+		g    ids.Group
+		want bool
+	}{
+		{ids.Group{SID: 10, Src: "1.1.1.1", Dst: "2.2.2.2"}, true},
+		{ids.Group{SID: 20, Src: "5.5.5.5", Dst: "2.2.2.2"}, true},
+		{ids.Group{SID: 20, Src: "2.2.2.2", Dst: "5.5.5.5"}, true},
+		{ids.Group{SID: 20, Src: "1.1.1.1", Dst: "2.2.2.2"}, false},
+		{ids.Group{SID: 30, Src: "5.5.5.5"}, false},
+	}
+	for i, c := range cases {
+		if got := sdnIDSSuppressedBy(list, c.g); got != c.want {
+			t.Errorf("case %d: got %v", i, got)
+		}
+	}
+}

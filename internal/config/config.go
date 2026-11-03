@@ -672,6 +672,13 @@ type UserPreferences struct {
 	GuideHideAtLogin bool `json:"guide_hide_at_login,omitempty"`
 	// Firewall GeoMap base map: "" = built-in outline, "osm" = OpenStreetMap.
 	FWMapStyle string `json:"fw_map_style,omitempty"`
+	// Per-server look. ThemePerServer: each server viewed (directly or in
+	// relay mode) gets back the theme last picked there on this device (kept
+	// in the browser). HeaderPerServer: each server gets back the top header
+	// last used there by this user, kept here keyed by server hostname.
+	ThemePerServer     bool              `json:"theme_per_server,omitempty"`
+	HeaderPerServer    bool              `json:"header_per_server,omitempty"`
+	HeaderModeByServer map[string]string `json:"header_mode_by_server,omitempty"`
 }
 
 // User represents a portal or SMB-only user.

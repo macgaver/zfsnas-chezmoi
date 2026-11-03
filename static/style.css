@@ -3759,6 +3759,8 @@ body.is-phone .lxd-table-card thead th { position: static; }
   box-shadow: 0 3px 10px rgba(0,0,0,.28);
 }
 .sidebar-mode-btn:hover::after { opacity: 1; }
+/* the last icon has the longest label: open it leftward so it stays in the sidebar */
+#mode-btn-firewall::after { left: auto; right: -16px; transform: none; }
 
 /* Service rows in the left nav — mirrors .nav-compute-instance. */
 .nav-service-row { display: flex; align-items: center; gap: 7px; width: 100%; }

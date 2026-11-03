@@ -34,7 +34,25 @@ func SDNGeoDir(statsDir string) string { return filepath.Join(statsDir, "geo") }
 // monthly; the current month may not be out yet early in the month, so the
 // previous one is tried too). Each file is checked to open as a database
 // before it replaces the old one. Returns the first error but keeps going.
+//
+// With MaxMind GeoLite2 chosen, GeoLite2 is updated instead; DB-IP is then
+// only fetched when GeoLite2 fails and no DB-IP copy is there to fall back on.
 func SDNUpdateGeoDB(dir string, now time.Time) error {
+	sdnGeoUpdMu.Lock()
+	defer sdnGeoUpdMu.Unlock()
+	if p := SDNGeoProviderLoad(); p.UseMaxMind() {
+		err := sdnUpdateMaxMind(dir, p, now, false)
+		if err != nil && !fileExists(filepath.Join(dir, geoip.CountryFile)) {
+			if e := sdnUpdateDBIP(dir, now); e != nil {
+				err = errors.Join(err, e)
+			}
+		}
+		return err
+	}
+	return sdnUpdateDBIP(dir, now)
+}
+
+func sdnUpdateDBIP(dir string, now time.Time) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -107,11 +125,13 @@ type SDNGeoStatus struct {
 	Updated time.Time `json:"updated,omitempty"`
 }
 
+// SDNGeoDBStatus describes the databases of the source in use.
 func SDNGeoDBStatus(dir string) []SDNGeoStatus {
 	var out []SDNGeoStatus
-	for _, f := range sdnGeoFiles {
-		s := SDNGeoStatus{File: f.file}
-		if fi, err := os.Stat(filepath.Join(dir, f.file)); err == nil {
+	c, ci, a, _ := sdnGeoActive(dir)
+	for _, f := range []string{c, ci, a} {
+		s := SDNGeoStatus{File: filepath.Base(f)}
+		if fi, err := os.Stat(f); err == nil {
 			s.Present, s.Updated = true, fi.ModTime()
 		}
 		out = append(out, s)
@@ -129,9 +149,12 @@ var (
 
 // SDNSetGeoDir (re)opens the databases in dir.
 func SDNSetGeoDir(dir string) {
+	country, city, asn, _ := sdnGeoActive(dir)
 	stamp := dir
-	if fi, err := os.Stat(filepath.Join(dir, geoip.CountryFile)); err == nil {
-		stamp += "@" + fi.ModTime().String()
+	for _, f := range []string{country, city, asn} {
+		if fi, err := os.Stat(f); err == nil {
+			stamp += "|" + f + "@" + fi.ModTime().String()
+		}
 	}
 	sdnGeoMu.Lock()
 	if sdnGeo != nil && stamp == sdnGeoStamp {
@@ -139,7 +162,7 @@ func SDNSetGeoDir(dir string) {
 		return // same databases: callers may be using the open ones
 	}
 	sdnGeoMu.Unlock()
-	r := geoip.NewResolver(dir)
+	r := geoip.NewResolverFiles(country, city, asn)
 	sdnGeoMu.Lock()
 	old := sdnGeo
 	if r.HasCountry() {

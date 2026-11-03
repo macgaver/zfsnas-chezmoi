@@ -730,10 +730,10 @@
       <button class="sidebar-mode-btn" id="mode-btn-compute" onclick="switchSidebarMode('compute')" data-label="Compute" aria-label="Compute">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14A2.5 2.5 0 0 1 11.5 14v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>
       </button>
-      <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Infrastructure" aria-label="Infrastructure">
+      <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Virtual Infra" aria-label="Virtual Infra">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm9 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM6 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm4-6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/><path fill-rule="evenodd" d="M3 3.5A.5.5 0 0 1 3.5 3h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 3.5zm-1 5A.5.5 0 0 1 2.5 8h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8.5zm1 5A.5.5 0 0 1 3.5 13h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5z"/></svg>
       </button>
-      <button class="sidebar-mode-btn" id="mode-btn-firewall" onclick="switchSidebarMode('firewall')" data-label="Firewall" aria-label="Firewall" style="display:none;">
+      <button class="sidebar-mode-btn" id="mode-btn-firewall" onclick="switchSidebarMode('firewall')" data-label="Software Defined Networking" aria-label="Software Defined Networking" style="display:none;">
         <span data-icon="shield" data-icon-size="14" style="display:inline-flex;"></span>
       </button>
     </div>
@@ -4841,6 +4841,17 @@
                 </select>
               </div>
             </div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin:4px 0 8px;">Per Server</div>
+            <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;cursor:pointer;">
+              <input type="checkbox" id="us-theme-per-server" style="margin-top:2px;">
+              <span><span style="font-size:13px;">A different theme on each server</span>
+                <span style="display:block;font-size:11px;color:var(--text-3);margin-top:2px;">Each server, including one you view through InterLink, comes back with the theme you last picked there on this device.</span></span>
+            </label>
+            <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:16px;cursor:pointer;">
+              <input type="checkbox" id="us-header-per-server" style="margin-top:2px;">
+              <span><span style="font-size:13px;">A different top header on each server</span>
+                <span style="display:block;font-size:11px;color:var(--text-3);margin-top:2px;">Each server comes back with the top header you last used there, directly or through InterLink.</span></span>
+            </label>
           </div>
           <div class="modal-footer">
             <button class="btn btn-ghost" onclick="document.getElementById('modal-user-settings').classList.add('hidden')">Cancel</button>
@@ -13418,6 +13429,7 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
     if (d.hostname) {
       window._serverHostname = d.hostname;
       _localHostnameFallback = d.hostname; // used by hostname dropdown in relay mode
+      _applyPerServerLook();
       document.title = 'ZNAS - ' + d.hostname.toUpperCase();
       const hl = document.getElementById('sidebar-hostname-label');
       if (hl) hl.textContent = d.hostname;
@@ -38571,10 +38583,54 @@ function applyTheme(theme) {
   }
 }
 
+// ── Per-server look (User Settings) ──────────────────────────────────────────
+// The server being viewed: this one, or the InterLink peer in relay mode
+// (_softRelayRefresh updates _serverHostname). The theme is kept per device
+// (browser storage, by user and server); the top header in the user's prefs.
+function _themeSrvKey() {
+  const h = window._serverHostname || '';
+  return h && currentUser ? `znas_theme_srv:${currentUser.username}:${h}` : '';
+}
+function _rememberServerTheme(theme) {
+  const k = _themeSrvKey();
+  if (k) { try { localStorage.setItem(k, theme); } catch (_) {} }
+}
+function _rememberServerHeader(mode) {
+  const p = currentUser && currentUser.preferences, h = window._serverHostname || '';
+  if (!p || !h || !mode) return;
+  p.header_mode_by_server = Object.assign({}, p.header_mode_by_server || {}, { [h]: mode });
+  fetch('/api/prefs', { method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ header_mode_by_server: { [h]: mode } }) }).catch(() => {});
+}
+window._onHeaderModeSet = function (mode) {
+  const p = currentUser && currentUser.preferences;
+  if (p && p.header_per_server) _rememberServerHeader(mode);
+};
+// Called once the viewed server is known: at boot and after each relay switch.
+function _applyPerServerLook() {
+  const p = (currentUser && currentUser.preferences) || {};
+  if (p.theme_per_server) {
+    let t = '';
+    try { t = localStorage.getItem(_themeSrvKey()) || ''; } catch (_) {}
+    t = t || p.theme || '';
+    const cur = localStorage.getItem('theme') || 'dark';
+    if (t && t !== cur) {
+      localStorage.setItem('theme', t);
+      applyTheme(t);
+      _themeChangedRedraw();
+    }
+  }
+  if (p.header_per_server && typeof window.applyHeaderMode === 'function') {
+    const m = (p.header_mode_by_server || {})[window._serverHostname || ''];
+    if (m) window.applyHeaderMode(m);
+  }
+}
+
 function setTheme(theme) {
   localStorage.setItem('theme', theme);
   applyTheme(theme);
   closeThemeDropdown();
+  if (currentUser && currentUser.preferences && currentUser.preferences.theme_per_server) _rememberServerTheme(theme);
   // Persist theme in user preferences so it follows the user across servers.
   if (currentUser) {
     if (!currentUser.preferences) currentUser.preferences = {};
@@ -38582,7 +38638,11 @@ function setTheme(theme) {
     fetch('/api/prefs', { method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(currentUser.preferences) }).catch(() => {});
   }
-  // Rebuild charts so axis/grid/tooltip colours match the new theme
+  _themeChangedRedraw();
+}
+
+// Rebuild charts so axis/grid/tooltip colours match the new theme.
+function _themeChangedRedraw() {
   resetIOCharts();
   if (_ioPollTimer) { _fetchDiskIO(); }
   Object.values(_dashCharts).forEach(c => { try { c && c.destroy(); } catch(_){} });
@@ -59991,6 +60051,7 @@ async function _softRelayRefresh() {
           window._serverHostname = d.hostname;
           const hl = document.getElementById('sidebar-hostname-label');
           if (hl) hl.textContent = d.hostname;
+          _applyPerServerLook();
         }
         // The version badge is per-server too — show the version of the server
         // we're now viewing, not the local one captured at boot.
@@ -63466,6 +63527,9 @@ function openUserSettingsModal() {
   }
   if (td) td.value = prefs.theme_day || '';
   if (tn) tn.value = prefs.theme_night || '';
+  const tps = document.getElementById('us-theme-per-server'), hps = document.getElementById('us-header-per-server');
+  if (tps) tps.checked = !!prefs.theme_per_server;
+  if (hps) hps.checked = !!prefs.header_per_server;
   // Grouping dropdown — only meaningful when virtualization is available.
   const gg = document.getElementById('us-grouping-group');
   const gs = document.getElementById('us-lxd-grouping');
@@ -63491,7 +63555,10 @@ async function saveUserSettings() {
     landing_page:  lp ? lp.value : '',
     theme_day:     td ? td.value : '',
     theme_night:   tn ? tn.value : '',
+    theme_per_server:  !!(document.getElementById('us-theme-per-server') || {}).checked,
+    header_per_server: !!(document.getElementById('us-header-per-server') || {}).checked,
   });
+  const old = (currentUser && currentUser.preferences) || {};
   try {
     const resp = await fetch('/api/prefs', {
       method: 'PUT', headers: {'Content-Type':'application/json'},
@@ -63499,6 +63566,9 @@ async function saveUserSettings() {
     });
     if (!resp.ok) throw new Error(await resp.text());
     if (currentUser) currentUser.preferences = prefs;
+    // Just turned on: what is shown now becomes this server's choice.
+    if (prefs.theme_per_server && !old.theme_per_server) _rememberServerTheme(localStorage.getItem('theme') || 'dark');
+    if (prefs.header_per_server && !old.header_per_server && typeof window.getHeaderMode === 'function') _rememberServerHeader(window.getHeaderMode());
     // Re-apply theme in case day/night changed and current theme is auto.
     const curTheme = localStorage.getItem('theme') || 'dark';
     if (curTheme === 'auto') applyTheme('auto');

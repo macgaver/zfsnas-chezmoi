@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"zfsnas/internal/geoip"
 )
 
 // Tiers and retention (owner): 5-minute precision for 2 weeks, hourly for
@@ -341,6 +343,11 @@ type Query struct {
 	Inside   string // only this inside host (exact address)
 	Limit    int
 	Offset   int
+	// Locate, when set, places each remote again with the database in use
+	// now: a line keeps the location found when it was recorded, so after a
+	// database change (DB-IP → GeoLite2, a monthly update) old lines would
+	// otherwise show the old answer. false: keep what was recorded.
+	Locate func(remote string) (geoip.Info, bool)
 }
 
 type Row struct {
@@ -487,12 +494,29 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 	remotes := map[string]map[string]bool{}
 	countries := map[string]map[string]uint64{}
 	span := q.To.Sub(q.From)
+	located := map[string]*geoip.Info{} // remote → current answer (nil: keep the recorded one)
+	relocate := func(r *Rec) {
+		if q.Locate == nil || r.Remote == "" {
+			return
+		}
+		g, seen := located[r.Remote]
+		if !seen {
+			if in, ok := q.Locate(r.Remote); ok && in.CountryCode != "" {
+				g = &in
+			}
+			located[r.Remote] = g
+		}
+		if g != nil {
+			r.geo(*g)
+		}
+	}
 	res.Tier = s.collect(q, open, now, func(b Bucket) {
 		slot := int(b.Start.Sub(q.From) * 24 / maxDur(span, time.Second))
 		if slot > 23 {
 			slot = 23
 		}
 		for _, r := range b.Recs {
+			relocate(&r)
 			k := res.KPI[r.Dir]
 			k.Bytes += r.BytesIn + r.BytesOut
 			k.Sessions += r.Sessions

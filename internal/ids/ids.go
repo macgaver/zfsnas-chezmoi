@@ -215,6 +215,25 @@ func (s *Store) List(since time.Time) []Group {
 	return out
 }
 
+// Delete removes the groups drop says yes to and returns how many went.
+// The caller saves.
+func (s *Store) Delete(drop func(Group) bool) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k, g := range s.groups {
+		if !drop(*g) {
+			continue
+		}
+		delete(s.groups, k)
+		if s.inside[g.baseKey()] == k {
+			delete(s.inside, g.baseKey())
+		}
+		n++
+	}
+	return n
+}
+
 // Save prunes (older than the retention, then the oldest beyond max) and
 // writes the store.
 func (s *Store) Save() error {

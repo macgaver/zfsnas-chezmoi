@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"zfsnas/internal/geoip"
 )
 
 func rec(dir, remote, cc string, bytes uint64, sessions uint64, at time.Time) Rec {
@@ -119,5 +121,39 @@ func TestStore_QueryOutgoingKeepsPorts(t *testing.T) {
 	}
 	if len(r.Points) != 1 || len(r.Points[0].Ports) != 3 {
 		t.Fatalf("map points must carry the ports too: %+v", r.Points)
+	}
+}
+
+// After a location database change, old lines show the current database's
+// answer (table and map); an address it does not know keeps the recorded one.
+func TestStore_QueryLocatesAgain(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	old := rec("in", "24.50.76.243", "CA", 100, 1, day)
+	old.City, old.Lat, old.Lon = "Trois-Rivières", 46.34, -72.62
+	_ = s.Write([]Bucket{bucket(day, old, rec("in", "89.160.20.112", "SE", 10, 1, day))})
+	asked := 0
+	q := Query{From: day, To: day.Add(time.Hour), Dir: "in", Group: "ip", Locate: func(ip string) (geoip.Info, bool) {
+		asked++
+		if ip == "24.50.76.243" {
+			return geoip.Info{CountryCode: "CA", Country: "Canada", City: "Roberval", Lat: 48.52, Lon: -72.24}, true
+		}
+		return geoip.Info{}, true // not in the new database
+	}}
+	r := s.Query(q, nil, day.Add(time.Hour))
+	got := map[string]Row{}
+	for _, row := range r.Rows {
+		got[row.Remote] = row
+	}
+	if g := got["24.50.76.243"]; g.City != "Roberval" || g.Lat != 48.52 {
+		t.Fatalf("not located again: %+v", g)
+	}
+	if g := got["89.160.20.112"]; g.City != "SE-city" {
+		t.Fatalf("unknown address lost its recorded place: %+v", g)
+	}
+	c := s.Query(Query{From: q.From, To: q.To, Dir: "in", Group: "city", Locate: q.Locate}, nil, day.Add(time.Hour))
+	for _, row := range c.Rows {
+		if row.City == "Trois-Rivières" {
+			t.Fatalf("city view still shows the old place: %+v", c.Rows)
+		}
 	}
 }

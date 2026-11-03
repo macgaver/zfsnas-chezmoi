@@ -37,10 +37,16 @@ type Resolver struct {
 }
 
 func NewResolver(dir string) *Resolver {
+	return NewResolverFiles(filepath.Join(dir, CountryFile), filepath.Join(dir, CityFile), filepath.Join(dir, ASNFile))
+}
+
+// NewResolverFiles opens databases by path: DB-IP Lite and MaxMind GeoLite2
+// share the same record layout.
+func NewResolverFiles(country, city, asn string) *Resolver {
 	r := &Resolver{cache: map[netip.Addr]Info{}}
-	r.country, _ = Open(filepath.Join(dir, CountryFile))
-	r.city, _ = Open(filepath.Join(dir, CityFile))
-	r.asn, _ = Open(filepath.Join(dir, ASNFile))
+	r.country, _ = Open(country)
+	r.city, _ = Open(city)
+	r.asn, _ = Open(asn)
 	return r
 }
 
@@ -102,6 +108,9 @@ func (r *Resolver) Lookup(ip netip.Addr) Info {
 	if r.city != nil {
 		if rec, ok, _ := r.city.Lookup(ip); ok {
 			in.CountryCode, in.Country = str(rec, "country", "iso_code"), str(rec, "country", "names", "en")
+			if in.CountryCode == "" { // GeoLite2 leaves some networks (anycast, satellite) to their registered country
+				in.CountryCode, in.Country = str(rec, "registered_country", "iso_code"), str(rec, "registered_country", "names", "en")
+			}
 			in.City = str(rec, "city", "names", "en")
 			in.Lat, in.Lon = num(rec, "location", "latitude"), num(rec, "location", "longitude")
 		}
@@ -109,6 +118,9 @@ func (r *Resolver) Lookup(ip netip.Addr) Info {
 	if in.CountryCode == "" && r.country != nil {
 		if rec, ok, _ := r.country.Lookup(ip); ok {
 			in.CountryCode, in.Country = str(rec, "country", "iso_code"), str(rec, "country", "names", "en")
+			if in.CountryCode == "" {
+				in.CountryCode, in.Country = str(rec, "registered_country", "iso_code"), str(rec, "registered_country", "names", "en")
+			}
 		}
 	}
 	if r.asn != nil {

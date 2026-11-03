@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"zfsnas/internal/audit"
@@ -50,7 +51,11 @@ func sdnTrafficLimit(n int) int {
 // HandleSDNTrafficStatus — GET /api/sdn/traffic/status
 func HandleSDNTrafficStatus(w http.ResponseWriter, r *http.Request) {
 	st := system.SDNTrafficStatusNow()
-	resp := map[string]any{"status": st, "attribution": "IP geolocation by DB-IP.com (CC BY 4.0)"}
+	att := "IP geolocation by DB-IP.com (CC BY 4.0)"
+	if st.StatsDir != "" {
+		att = system.SDNGeoAttribution(system.SDNGeoDir(st.StatsDir))
+	}
+	resp := map[string]any{"status": st, "attribution": att}
 	if g := system.SDNGeo(); g != nil {
 		if h := sdnHomeGuess(); h != nil {
 			resp["home"] = h
@@ -139,6 +144,90 @@ func HandleSDNGeoUpdate(appCfg *config.AppConfig) http.HandlerFunc {
 		}
 		jsonOK(w, system.SDNGeoDBStatus(dir))
 	}
+}
+
+// sdnGeoProviderView is the location database choice without the key.
+func sdnGeoProviderView() map[string]any {
+	p := system.SDNGeoProviderLoad()
+	st := system.SDNTrafficStatusNow()
+	out := map[string]any{"provider": p.Provider, "account_id": p.AccountID, "key_set": p.LicenseKey != "",
+		"configured": p.MaxMindConfigured(), "job": system.SDNGeoJobNow(), "in_use": "dbip"}
+	if st.StatsDir != "" {
+		dir := system.SDNGeoDir(st.StatsDir)
+		out["in_use"], out["files"] = system.SDNGeoSource(dir), system.SDNGeoDBStatus(dir)
+	}
+	return out
+}
+
+// HandleSDNGeoProviderGet — GET /api/sdn/geodb/provider
+func HandleSDNGeoProviderGet(w http.ResponseWriter, r *http.Request) {
+	jsonOK(w, sdnGeoProviderView())
+}
+
+type sdnGeoProviderBody struct {
+	Provider   string `json:"provider"`
+	AccountID  string `json:"account_id"`
+	LicenseKey string `json:"license_key"` // empty: keep the saved one
+}
+
+// sdnGeoCreds merges what was typed with what is saved.
+func sdnGeoCreds(b sdnGeoProviderBody) system.SDNGeoProvider {
+	p := system.SDNGeoProviderLoad()
+	p.AccountID = strings.TrimSpace(b.AccountID)
+	if k := strings.TrimSpace(b.LicenseKey); k != "" {
+		p.LicenseKey = k
+	}
+	return p
+}
+
+// HandleSDNGeoMaxMindTest — POST /api/sdn/geodb/maxmind/test {account_id, license_key}
+func HandleSDNGeoMaxMindTest(w http.ResponseWriter, r *http.Request) {
+	var b sdnGeoProviderBody
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := system.SDNMaxMindTest(sdnGeoCreds(b)); err != nil {
+		jsonErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	jsonOK(w, map[string]bool{"ok": true})
+}
+
+// HandleSDNGeoProviderSet — PUT /api/sdn/geodb/provider {provider, account_id?, license_key?}
+// Choosing MaxMind checks the credentials first, then downloads GeoLite2 in
+// the background; DB-IP answers until it is in place.
+func HandleSDNGeoProviderSet(w http.ResponseWriter, r *http.Request) {
+	var b sdnGeoProviderBody
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || (b.Provider != "dbip" && b.Provider != "maxmind") {
+		jsonErr(w, http.StatusBadRequest, "choose dbip or maxmind")
+		return
+	}
+	p := system.SDNGeoProviderLoad()
+	if b.Provider == "maxmind" {
+		if b.AccountID != "" || b.LicenseKey != "" {
+			p = sdnGeoCreds(b)
+		}
+		if err := system.SDNMaxMindTest(p); err != nil {
+			jsonErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	}
+	p.Provider = b.Provider
+	if err := system.SDNGeoProviderSave(p); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if st := system.SDNTrafficStatusNow(); st.StatsDir != "" {
+		dir := system.SDNGeoDir(st.StatsDir)
+		system.SDNSetGeoDir(dir)      // back to DB-IP at once, or GeoLite2 if already there
+		system.SDNGeoUpdateAsync(dir) // fetch what the choice lacks
+	}
+	sess := MustSession(r)
+	name := map[string]string{"dbip": "DB-IP Lite", "maxmind": "MaxMind GeoLite2"}[b.Provider]
+	audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionSDNGeoProvider, Target: "geolocation",
+		Result: audit.ResultOK, Details: "location database: " + name})
+	jsonOK(w, sdnGeoProviderView())
 }
 
 // HandleSDNStatsLocation — POST /api/sdn/traffic/location {pool}: keep the

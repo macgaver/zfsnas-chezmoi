@@ -433,16 +433,16 @@
       ${status && status.safe_mode_reason ? `<div class="fw-safemode">${icon('shield-check', 18)}<div><b>Firewall in SAFE MODE</b> — the saved configuration could not be loaded at boot: ${E(status.safe_mode_reason)}. Only the management interface is reachable.</div><span class="fw-sp" style="flex:1"></span><button class="fw-btn" data-act="history">Restore a previous change</button></div>` : ''}
       <div class="fw-topbar">
         <h2>${E(title)}</h2><span class="fw-sp"></span>
-        <div class="fw-dd" id="fw-hist-dd">
+        <div class="fw-dd" data-dd="history">
           <button class="fw-btn" data-act="history" title="Last 15 applied changes — click one to go back to it">${icon('clock', 14)}${lc ? 'Last Change ' + E(fmtTime(lc.at)) : 'No changes yet'} <span style="opacity:.6;display:inline-flex">${icon('chevron-down', 13)}</span></button>
         </div>
         ${admin ? `<button class="fw-btn fw-apply${n ? '' : ' fw-idle'}" data-act="apply" ${n ? '' : 'disabled'} title="${E((draft && draft.summary) || '')}">Apply${n ? ` <span class="fw-pill">${n}</span>` : ''}</button>
-        <div class="fw-dd" id="fw-more-dd"><button class="fw-btn" data-act="more" title="More">${icon('more-vertical', 14)}</button></div>` : ''}
+        <div class="fw-dd" data-dd="more"><button class="fw-btn" data-act="more" title="More">${icon('more-vertical', 14)}</button></div>` : ''}
       </div>`;
   }
 
   function wireTopbar(root) {
-    root.querySelectorAll('[data-act="history"]').forEach(b => b.onclick = e => { e.stopPropagation(); openHistory(); });
+    root.querySelectorAll('[data-act="history"]').forEach(b => b.onclick = e => { e.stopPropagation(); openHistory(root); });
     const ap = root.querySelector('[data-act="apply"]');
     if (ap) ap.onclick = openApply;
     const pk = root.querySelector('[data-act="pkgs"]');
@@ -456,7 +456,8 @@
     const more = root.querySelector('[data-act="more"]');
     if (more) more.onclick = e => {
       e.stopPropagation();
-      const dd = document.getElementById('fw-more-dd');
+      // Every Firewall page keeps its own top bar: open in this one.
+      const dd = more.closest('.fw-dd');
       if (dd.querySelector('.fw-menu')) { dd.querySelector('.fw-menu').remove(); return; }
       const m = document.createElement('div');
       m.className = 'fw-menu';
@@ -499,8 +500,11 @@
   }
 
   // ── history ("Last Change …") ──────────────────────────────────────────
-  async function openHistory() {
-    const dd = document.getElementById('fw-hist-dd');
+  async function openHistory(root) {
+    // Every Firewall page keeps its own top bar (the safe-mode banner's button
+    // too): open in the one on screen.
+    const host = root || document.querySelector('#page-' + page + ' .fw-page');
+    const dd = host && host.querySelector('.fw-dd[data-dd="history"]');
     if (!dd) return;
     if (dd.querySelector('.fw-menu')) { dd.querySelector('.fw-menu').remove(); return; }
     const r = await api('GET', '/api/sdn/history');
@@ -641,6 +645,8 @@
     let body;
     const reg = registered[page];
     if (reg && reg.busy && reg.busy()) return; // the user is typing: redraw later
+    if (host.querySelector('.fw-topbar .fw-menu')) return; // a top-bar menu is open: redraw at the next refresh
+    if (document.querySelector('.fw-menu.fw-incus-menu')) return; // the Incus tag menu is open
     if (reg) body = reg.render();
     else if (def.soon) body = soon(def);
     else if (!draft) body = '<div class="fw-empty">Loading…</div>';
@@ -731,6 +737,80 @@
     return c.rules.filter(r => r.interface === id || [r.source, r.destination].some(e => (e.type === 'iface_net' || e.type === 'iface_addr') && e.value === id)).length;
   }
 
+  // The Incus network behind a Firewall interface (a managed bridge the
+  // Firewall also manages): shown on its card, not as a second card.
+  const incusOf = i => incusNets.find(n => n.name === l3(i) || n.name === i.device);
+  const incusRuns = n => [n.dhcp && 'DHCP', n.dns && 'DNS', n.nat && 'NAT'].filter(Boolean);
+  function incusBadge(n, i) {
+    const runs = incusRuns(n);
+    if (i && i.kind === 'incus' && !i.incus_keep) // migrated in the draft: the Firewall takes it over on Apply
+      return `<span class="fw-badge none" style="color:#ff9f0a" title="The Firewall takes over ${E(n.name)} when you apply. Discard the change to keep it in Incus.">Incus → SDN on apply</span>`;
+    const tip = `Also an Incus network: Incus ${runs.length ? 'runs its ' + runs.join(', ') : 'holds its address only (no DHCP, DNS or NAT)'}.`;
+    return isAdmin()
+      ? `<span class="fw-dd" style="display:inline-flex"><button type="button" class="fw-badge none fw-incus-link" data-incus-net="${E(n.name)}" data-incus-if="${E(i ? i.id : '')}" title="${E(tip)} Click for options.">Incus ▾</button></span>`
+      : `<span class="fw-badge none" title="${E(tip)} It is changed under Infrastructure, Networking.">Incus</span>`;
+  }
+
+  // The Incus tag menu: edit the network in Incus, or hand it to the Firewall.
+  function openIncusMenu(btn) {
+    const old = document.querySelector('.fw-menu.fw-incus-menu');
+    if (old) { const same = old.dataset.net === btn.dataset.incusNet; old.remove(); if (same) return; }
+    const net = btn.dataset.incusNet;
+    const it = cfg().interfaces.find(x => x.id === btn.dataset.incusIf);
+    const canEdit = typeof window.openBridgeEditorFromFirewall === 'function';
+    const canMigrate = it && it.kind === 'incus' && it.incus_keep;
+    const m = document.createElement('div');
+    m.className = 'fw-menu fw-incus-menu';
+    m.dataset.net = net;
+    const r = btn.getBoundingClientRect();
+    Object.assign(m.style, { position: 'fixed', top: (r.bottom + 6) + 'px', left: Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px', right: 'auto', minWidth: '280px', whiteSpace: 'nowrap' });
+    m.innerHTML = `<div class="fw-menu-item${canEdit ? '' : ' fw-off'}" data-m="edit">${icon('pencil')}Edit from Incus</div>
+      ${canMigrate ? `<div class="fw-menu-item" data-m="migrate" title="The Firewall takes over the address, DHCP and DNS of ${E(net)}, like a network it created">${icon('shield-check')}Migrate to SDN Networking…</div>` : ''}`;
+    document.body.appendChild(m);
+    m.onclick = ev => ev.stopPropagation();
+    const close = () => { m.remove(); document.removeEventListener('click', close); window.removeEventListener('scroll', close, true); };
+    m.querySelectorAll('[data-m]').forEach(el => el.onclick = () => {
+      if (el.classList.contains('fw-off')) return;
+      close();
+      if (el.dataset.m === 'edit') window.openBridgeEditorFromFirewall(net);
+      else migrateIncus(it, net);
+    });
+    setTimeout(() => { document.addEventListener('click', close); window.addEventListener('scroll', close, true); }, 0);
+  }
+
+  function migrateIncus(it, net) {
+    const n = incusNets.find(x => x.name === net) || {};
+    const blocking = [n.dhcp && 'DHCP', n.nat && 'NAT'].filter(Boolean);
+    const canEdit = typeof window.openBridgeEditorFromFirewall === 'function';
+    if (blocking.length) {
+      modal({ title: `Turn off Incus ${blocking.join(' and ')} first`,
+        body: `<p>Incus still runs <b>${E(blocking.join(' and '))}</b> on ${E(net)}. Migrating now would cut that service off for its instances without warning.</p>
+          <p>Edit ${E(net)} with the Incus editor and turn off ${blocking.length > 1 ? 'both' : 'it'} (IPv4 DHCP${n.nat ? ', IPv4 NAT' : ''}). Then migrate again: the Firewall can then serve DHCP and NAT there itself.</p>`,
+        buttons: [{ label: 'Close' }].concat(canEdit ? [{ label: 'Edit from Incus', cls: 'btn-primary', onClick: close => { close(); window.openBridgeEditorFromFirewall(net); } }] : []) });
+      return;
+    }
+    modal({ title: `Migrate ${net} to SDN Networking?`,
+      body: `<p>The Firewall takes over <b>${E(net)}</b>, like the networks it created. Its address stays <span class="fw-mono">${E(it.ipv4 || n.address || '')}</span> and its instances stay connected.</p>
+        <ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">
+          <li>Its address is then changed here, on the Interfaces page.</li>
+          <li>Incus' own DNS${n.dns ? ' (on now)' : ''}, IPv6 and firewall rules are turned off there. DHCP and DNS can be set up on the DHCP &amp; DNS page.</li>
+          <li>If the Firewall is turned off later, ${E(net)} goes back to Incus without an address.</li>
+        </ul>
+        <p style="margin-top:10px">This is a draft change: nothing happens until you apply.</p>`,
+      buttons: [{ label: 'Cancel' }, { label: 'Migrate', cls: 'btn-primary', onClick: async close => {
+        const ok = await saveDraft(c => {
+          const x = c.interfaces.find(y => y.id === it.id);
+          if (!x) return false;
+          x.incus_keep = false; x.incus_dhcp = false; x.incus_dns = false;
+          x.ipv4_mode = 'static'; x.ipv4 = x.ipv4 || n.address;
+        });
+        if (ok === false) return;
+        close();
+        toast(`${net} moves to SDN Networking when you apply`, 'success');
+        renderPage();
+      } }] });
+  }
+
   function interfacesHTML() {
     const c = cfg();
     const mode = (c.settings && c.settings.mode) || 'monitor';
@@ -743,14 +823,17 @@
       const ip = own.length ? own.join(', ') : (i.ipv4_mode === 'static' ? i.ipv4 + (i.disabled ? '' : ' (pending)') : ({ dhcp: 'DHCP', pppoe: 'from the provider (not connected)' }[i.ipv4_mode] || '—'));
       const kind = { physical: 'Network port', vlan: `VLAN ${i.vlan_tag} on ${i.parent}`, bridge: 'Bridge', incus: 'VM network (Incus)', pppoe: `PPPoE on ${i.parent}`, wireguard: `WireGuard tunnel · UDP ${i.wg_listen_port}` }[i.kind] || i.kind;
       const n = usedBy(i.id);
+      const inc = incusOf(i), incRuns = inc ? incusRuns(inc) : [];
       return `<div class="fw-card${i.disabled ? ' fw-card-off' : ''}" data-id="${E(i.id)}">
         <div class="fw-stripe" style="background:${C(i.color)}"></div>
         <div class="fw-card-h"><span class="fw-state ${L.state === 'up' ? 'up' : 'down'}" title="${E(L.state || 'not created yet')}"></span>
           <span class="fw-name">${E(i.name)}</span>
           ${i.disabled ? '<span class="fw-badge none" title="Its settings are kept, but it is not in use. Edit it to enable it again.">Disabled</span>' : ''}
           ${mgmt ? `<span class="fw-badge lock" title="The anti-lockout rule protects portal and SSH access on this interface">${icon('lock', 11)}Mgmt</span>` : ''}
+          ${inc ? incusBadge(inc, i) : ''}
           <span class="fw-badge ${role}">${role === 'none' ? 'unassigned' : role.toUpperCase()}</span></div>
-        <div class="fw-kv"><span>Type</span><span>${E(kind)}${i.allow_vms ? ' · VMs allowed' : ''}</span>
+        <div class="fw-kv"><span>Type</span><span>${E(kind)}${i.allow_vms ? ' · VMs allowed' : ''}${inc ? ` · ${i.kind === 'incus' ? '' : 'Incus network, '}${inc.instances} instance${inc.instances === 1 ? '' : 's'}` : ''}</span>
+          ${incRuns.length ? `<span>Incus runs</span><span style="color:#ff9f0a" title="Incus serves this network itself, next to the Firewall. Turn it off in the bridge settings (Incus tag) unless you want it.">${E(incRuns.join(', '))}</span>` : ''}
           <span>Device</span><span class="fw-mono">${E(l3(i))}</span>
           <span>IPv4</span><span class="fw-mono">${E(ip)}</span>
           <span>Link</span><span>${L.speed_mbps ? E(L.speed_mbps + ' Mb/s') : (L.state ? E(L.state) : (i.disabled ? 'disabled' : 'not created yet'))}${L.mac ? ` · <span class="fw-mono">${E(L.mac)}</span>` : ''}</span>
@@ -780,7 +863,8 @@
   // address, DHCP, DNS and NAT, so the Firewall leaves them alone and only
   // shows them.
   function incusCardsHTML() {
-    return incusNets.map(n => {
+    const fwDevs = new Set(cfg().interfaces.flatMap(i => [l3(i), i.device]));
+    return incusNets.filter(n => !fwDevs.has(n.name)).map(n => { // a Firewall interface: on its own card
       const L = liveOf(n.name) || {};
       const runs = [n.dhcp && 'DHCP', n.dns && 'DNS', n.nat && 'NAT'].filter(Boolean).join(', ');
       const open = isAdmin() && typeof window.openBridgeDetail === 'function';
@@ -802,6 +886,7 @@
 
   function wireInterfaces(root) {
     const c = cfg();
+    root.querySelectorAll('[data-incus-net]').forEach(b => b.onclick = e => { e.stopPropagation(); openIncusMenu(b); });
     root.querySelectorAll('[data-incusopen]').forEach(b => b.onclick = () => {
       if (typeof window.switchSidebarMode === 'function') window.switchSidebarMode('networking');
       window.openBridgeDetail(b.dataset.incusopen);

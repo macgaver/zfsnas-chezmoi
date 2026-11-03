@@ -343,6 +343,15 @@ func SDNTrafficQuery(q traffic.Query) traffic.Result {
 	if store == nil || c.agg == nil {
 		return traffic.Result{KPI: map[string]traffic.KPI{}}
 	}
+	if g := SDNGeo(); g != nil {
+		q.Locate = func(remote string) (geoip.Info, bool) {
+			a, err := netip.ParseAddr(remote)
+			if err != nil {
+				return geoip.Info{}, false
+			}
+			return g.Lookup(a), true
+		}
+	}
 	return store.Query(q, c.agg.Snapshot(), time.Now())
 }
 
