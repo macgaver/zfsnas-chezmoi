@@ -134,6 +134,7 @@ apt-get install -y \
     pciutils usbutils targetcli-fb sshpass ntfs-3g chrony \
     smartmontools hdparm rsync sanoid pv \
     ifupdown bridge-utils \
+    nftables conntrack iputils-ping iputils-arping ppp dnsmasq-base wireguard-tools suricata suricata-update ddclient \
     gdisk parted dosfstools e2fsprogs zstd \
     python3 jq net-tools ethtool lsof nvme-cli lsscsi
 
@@ -289,6 +290,137 @@ systemctl enable networking.service 2>/dev/null || true
 systemctl enable zfsnas-netgen.service zfsnas-netfallback.service
 systemctl enable zfsnas-authsync.path
 systemctl enable zfsnas-hostnat.service
+
+# SDN / Firewall boot unit (PLANS/spec-sdn-firewall.md). Pre-installed and
+# enabled, but inert: ConditionPathExists only holds once the owner enables
+# the feature from Optional Features (the confirmed config lives in the
+# persisted config dir). -sdn-boot then regenerates the ruleset and sysctls
+# from that config at every boot — nothing under /etc needs persisting.
+# Keep in sync with system.sdnUnitText.
+cat > /etc/systemd/system/znas-sdn.service <<'SDNUNIT'
+[Unit]
+Description=ZNAS SDN — load the confirmed firewall/routing state
+DefaultDependencies=no
+Before=network-pre.target
+Wants=network-pre.target
+After=local-fs.target systemd-modules-load.service nftables.service
+ConditionPathExists=/opt/zfsnas/config/sdn/config.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/zfsnas/zfsnas -config /opt/zfsnas/config -sdn-boot
+
+[Install]
+WantedBy=multi-user.target
+SDNUNIT
+# Gateway monitor / failover daemon (system/sdn_gwmon.go), same condition.
+# Keep in sync with system.sdnGWUnitText.
+cat > /etc/systemd/system/znas-sdn-gw.service <<'SDNGWUNIT'
+[Unit]
+Description=ZNAS SDN — gateway monitor and failover
+After=znas-sdn.service network.target
+ConditionPathExists=/opt/zfsnas/config/sdn/config.json
+
+[Service]
+Type=simple
+ExecStart=/opt/zfsnas/zfsnas -config /opt/zfsnas/config -sdn-gwmon
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+SDNGWUNIT
+# DNS (system/sdn_services.go): inert until -sdn-boot writes the DNS config
+# at boot. Keep in sync with system.sdnDNSUnitText.
+cat > /etc/systemd/system/znas-sdn-dns.service <<'SDNDNSUNIT'
+[Unit]
+Description=ZNAS Firewall — DNS (dnsmasq)
+After=znas-sdn.service network.target
+ConditionPathExists=/etc/znas-sdn/dnsmasq.conf
+
+[Service]
+Type=simple
+RuntimeDirectory=znas-sdn-dns znas-sdn-dns/hosts.d
+RuntimeDirectoryPreserve=yes
+ExecStartPre=/usr/sbin/dnsmasq --test --conf-file=/etc/znas-sdn/dnsmasq.conf
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/znas-sdn/dnsmasq.conf --pid-file=/run/znas-sdn-dns/dnsmasq.pid
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+SDNDNSUNIT
+# DHCP supervisor (system/sdn_dhcpd.go): one dnsmasq per network, from the
+# configs -sdn-boot writes in /etc/znas-sdn/dhcp.d; idle until there is one.
+# Keep in sync with system.sdnDHCPUnitText.
+cat > /etc/systemd/system/znas-sdn-dhcp.service <<'SDNDHCPUNIT'
+[Unit]
+Description=ZNAS Firewall — DHCP (one dnsmasq per network)
+After=znas-sdn.service network.target
+
+[Service]
+Type=simple
+RuntimeDirectory=znas-sdn-dns znas-sdn-dns/hosts.d
+RuntimeDirectoryPreserve=yes
+ExecStart=/opt/zfsnas/zfsnas -sdn-dhcp
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+SDNDHCPUNIT
+# Intrusion detection (system/sdn_ids.go): inert until the Firewall writes
+# the Suricata config. Keep in sync with system.sdnIDSUnitText.
+cat > /etc/systemd/system/znas-sdn-ids.service <<'SDNIDSUNIT'
+[Unit]
+Description=ZNAS Firewall — intrusion detection (Suricata)
+After=znas-sdn.service network-online.target zfs-mount.service
+ConditionPathExists=/etc/znas-sdn/suricata.yaml
+
+[Service]
+Type=simple
+RuntimeDirectory=znas-sdn-ids
+ExecStart=/usr/bin/suricata -c /etc/znas-sdn/suricata.yaml --af-packet --pidfile /run/znas-sdn-ids/suricata.pid
+ExecReload=/bin/kill -USR2 $MAINPID
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
+SDNIDSUNIT
+# Dynamic DNS (system/sdn_ddns.go): inert until the Firewall writes the
+# ddclient config. Keep in sync with system.sdnDDNSUnitText.
+cat > /etc/systemd/system/znas-sdn-ddns.service <<'SDNDDNSUNIT'
+[Unit]
+Description=ZNAS Firewall — dynamic DNS (ddclient)
+After=znas-sdn.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/znas-sdn/ddclient.conf
+
+[Service]
+Type=simple
+CacheDirectory=znas-sdn
+ExecStart=/usr/bin/ddclient -foreground -daemon 300 -file /etc/znas-sdn/ddclient.conf -cache /var/cache/znas-sdn/ddclient.cache
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+SDNDDNSUNIT
+# The suricata package enables its own service (sniffs every interface with
+# the stock rules) and rule timer: off, the Firewall runs its own unit. Same
+# for ddclient's (placeholder config).
+systemctl disable suricata.service suricata-update.timer 2>/dev/null || true
+systemctl mask suricata.service 2>/dev/null || true
+systemctl disable ddclient.service 2>/dev/null || true
+systemctl enable znas-sdn.service znas-sdn-gw.service znas-sdn-dns.service znas-sdn-dhcp.service znas-sdn-ids.service znas-sdn-ddns.service
+# nftables.service would load /etc/nftables.conf (a flush-everything ruleset)
+# at boot and wipe Incus' and our tables: keep it off.
+systemctl disable nftables.service 2>/dev/null || true
 
 # dhcpcd: no 169.254 link-local fallback (a bridge is slow to forward right
 # after boot, so early DHCP attempts can fail and APIPA would stick), and no

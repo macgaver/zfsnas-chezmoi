@@ -59,6 +59,14 @@ const (
 	ActionHostBridgeEdit = "host_bridge_edit"
 	// Renaming the server from Settings → General.
 	ActionHostnameChange = "hostname_change"
+	// SDN / Firewall (spec-sdn-firewall).
+	ActionSDNEnable     = "sdn_enable"
+	ActionSDNDisable    = "sdn_disable"
+	ActionSDNApply      = "sdn_apply"
+	ActionSDNConfirm    = "sdn_confirm"
+	ActionSDNAutoRevert = "sdn_auto_revert"
+	ActionSDNRestore    = "sdn_restore"
+	ActionSDNImport     = "sdn_import"
 	ActionApplyUpdates   = "apply_updates"
 	ActionGrowPool       = "grow_pool"
 	ActionExportPool     = "export_pool"
@@ -295,6 +303,18 @@ func Log(e Entry) {
 // Read loads all audit entries from the log file. Each entry's System
 // field is stamped with the local hostname so callers (the multi-host
 // aggregate handler in particular) can attribute it correctly.
+// Stamp identifies the log's current content without reading it: it changes
+// whenever an entry is written.
+func Stamp() (size, modNanos int64, ok bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	st, err := os.Stat(logPath)
+	if err != nil {
+		return 0, 0, false
+	}
+	return st.Size(), st.ModTime().UnixNano(), true
+}
+
 func Read() ([]Entry, error) {
 	mu.Lock()
 	defer mu.Unlock()

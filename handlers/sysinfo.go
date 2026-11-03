@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"net/http"
+
+	"zfsnas/internal/config"
+	"zfsnas/internal/sdn"
 	"zfsnas/system"
 )
 
@@ -13,6 +16,26 @@ func HandleGetDiskIO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, snap)
+}
+
+// HandleGetGatewayNet returns the gateway's live traffic (Network Focus
+// top headers), named as the admin named its Firewall interface.
+func HandleGetGatewayNet(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var c *sdn.Config
+		st := sdnStoreFor(appCfg)
+		if s, _ := st.LoadState(); s.Enabled {
+			c, _ = st.LoadConfirmed()
+		}
+		jsonOK(w, gatewayNetNamed(system.GetGatewayNet(), c))
+	}
+}
+
+func gatewayNetNamed(g system.GatewayNet, c *sdn.Config) system.GatewayNet {
+	if c != nil {
+		g.Name = c.InterfaceNameByDevice(g.Iface)
+	}
+	return g
 }
 
 // HandleGetCpuProcs returns the latest per-process CPU usage snapshot.

@@ -22,6 +22,7 @@ import (
 	"zfsnas/internal/config"
 	"zfsnas/internal/keystore"
 	"zfsnas/internal/scheduler"
+	"zfsnas/internal/sdn"
 	"zfsnas/internal/session"
 	"zfsnas/internal/termsessions"
 	"zfsnas/internal/version"
@@ -52,11 +53,28 @@ func main() {
 	setHTTPSPort := flag.Int("set-https-port", 0, "Persist a new HTTPS port to config and use it this run (1–65535)")
 	experimentalMode := flag.Bool("experimental", false, "Enable experimental features (e.g. LXD VM/container management)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
+	sdnBoot := flag.Bool("sdn-boot", false, "One-shot (boot unit): load the confirmed SDN firewall/routing state and exit")
+	sdnRevert := flag.String("sdn-revert", "", "One-shot (revert service): restore the change waiting for confirmation and exit")
+	sdnRevertDelay := flag.Int("sdn-revert-delay", 0, "With -sdn-revert: seconds to wait first (the confirmation countdown)")
+	sdnGWMon := flag.Bool("sdn-gwmon", false, "Daemon (znas-sdn-gw.service): monitor the SDN gateways and fail over between them")
+	sdnDHCP := flag.Bool("sdn-dhcp", false, "Daemon (znas-sdn-dhcp.service): run one DHCP server per Firewall network")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println(version.Version)
 		os.Exit(0)
+	}
+
+	// SDN one-shot modes run from systemd (boot unit, revert timer): no HTTP
+	// server, no schedulers — forwarding must never depend on the portal.
+	if *sdnBoot || *sdnRevert != "" {
+		os.Exit(runSDNOneShot(*configDir, *sdnBoot, *sdnRevert, *sdnRevertDelay))
+	}
+	if *sdnGWMon {
+		os.Exit(runSDNGatewayMonitor(*configDir))
+	}
+	if *sdnDHCP {
+		system.SDNDHCPSupervise()
 	}
 
 	// ===== Sudo check =====
@@ -121,6 +139,67 @@ func main() {
 	// the USB appliance, whose root lives in RAM — is rebuilt from the saved
 	// configuration. In the background: it waits on systemd and the pool.
 	go system.ReapplyS3AtStartup(&appCfg.MinIO, absConfig)
+
+	// SDN rule hit sparklines (Firewall → Rules); no-op without the table.
+	system.StartSDNCounterSampler()
+	// Firewall traffic statistics (idles while the feature is disabled).
+	system.StartSDNTraffic(absConfig)
+	// Reload the firewall from the confirmed config: this version may
+	// compile safer rules than those loaded at boot.
+	go func() {
+		st := sdn.Store{Dir: absConfig}
+		if c, err := st.LoadConfirmed(); err == nil && c.Settings.StatsDir != "" {
+			system.SDNSetGeoDir(system.SDNGeoDir(c.Settings.StatsDir))
+		}
+		// Units written by an older version lack the gateway monitor or the
+		// DHCP supervisor, and running daemons still run the previous binary:
+		// reinstall/restart — before the refresh, whose service files they run.
+		state, _ := st.LoadState()
+		if state.Enabled {
+			if exe, err := os.Executable(); err == nil {
+				if err := system.SDNInstallUnit(exe, absConfig); err != nil {
+					log.Printf("[sdn] installing the boot units: %v", err)
+				}
+			}
+		}
+		if err := system.SDNRefreshRuleset(st, system.SDNEnvFor(appCfg.Port, appCfg.BindPort443, absConfig)); err != nil {
+			log.Printf("[sdn] refreshing the firewall rules: %v", err)
+		}
+		if state.Enabled {
+			// Proxy devices left by an interrupted enable confirmation.
+			if system.IncusUsable() {
+				system.SDNDropProxyForwards()
+			}
+		}
+	}()
+	handlers.StartSDNEventWatcher(appCfg)
+	// Intrusion detection: alert socket + store, daily rule updates, notifications.
+	sdnConfirmed := func() *sdn.Config {
+		st := sdn.Store{Dir: absConfig}
+		if s, _ := st.LoadState(); !s.Enabled {
+			return nil
+		}
+		c, err := st.LoadConfirmed()
+		if err != nil {
+			return nil
+		}
+		return c
+	}
+	// DNS reports (advanced metrics) and DNS blocklists.
+	system.StartSDNDNSStats(sdnConfirmed)
+	system.StartSDNBlocklists(absConfig, sdnConfirmed)
+	system.StartSDNIDSIngest(func() string {
+		if c := sdnConfirmed(); c != nil {
+			return c.Settings.StatsDir
+		}
+		return ""
+	})
+	system.StartSDNIDSUpdater(sdnConfirmed)
+	system.StartSDNVIPKeeper(sdn.Store{Dir: absConfig}, sdnConfirmed)
+	handlers.StartSDNIDSAlerts(appCfg)
+	// Instance port forwards owned by the Firewall: follow address changes.
+	system.SDNSetRuntimeEnv(system.SDNEnvFor(appCfg.Port, appCfg.BindPort443, absConfig))
+	system.StartSDNInstanceTargetWatcher()
 
 	// Server-wide NFS settings live in ZNAS's own drop-in; re-apply it at
 	// every start (the appliance's /etc is in RAM, so it is gone after boot).
@@ -216,6 +295,7 @@ func main() {
 
 	// ===== Disk I/O poller (5-second samples for live charts) =====
 	system.StartDiskIOPoller()
+	system.StartGatewayNetSampler()
 
 	// ===== Per-process CPU poller (3-second samples for top-bar gauge) =====
 	system.StartCpuProcsPoller()
@@ -582,12 +662,16 @@ func main() {
 
 	<-stop
 	log.Println("Shutting down…")
+	// Firewall traffic statistics: write what is still in memory.
+	system.SDNTrafficFlush()
+	system.SDNIDSFlush()
 	// Flush the latest session activity heartbeats to disk before exit so
 	// a clean restart doesn't lose the LastActivityAt timestamps the
 	// inactivity-timeout enforcement depends on.
 	session.Default.FlushNow()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	system.SDNDNSStatsSave()
 	srv.Shutdown(ctx)
 	if srv443 != nil {
 		srv443.Shutdown(ctx)

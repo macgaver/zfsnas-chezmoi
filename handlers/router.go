@@ -6,11 +6,28 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 	"zfsnas/internal/config"
 
 	"github.com/gorilla/mux"
 )
+
+// staticAssets serves /static with the same revalidation policy as the SPA
+// HTML: the embedded files carry no date, so without this a browser can keep
+// old scripts after a binary update. A file's ETag is its content hash, which
+// http.FileServer honours with a 304.
+func staticAssets(files fs.FS) http.Handler {
+	h := http.FileServer(http.FS(files))
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		if data, err := fs.ReadFile(files, strings.TrimPrefix(path.Clean("/"+req.URL.Path), "/")); err == nil {
+			sum := sha256.Sum256(data)
+			w.Header().Set("ETag", `"`+hex.EncodeToString(sum[:16])+`"`)
+		}
+		h.ServeHTTP(w, req)
+	})
+}
 
 // serveSPAHTML writes the single-page-app HTML with a revalidation policy so a
 // freshly deployed binary is never masked by a stale browser cache. The SPA is
@@ -96,7 +113,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 
 	// --- Static assets ---
 	r.PathPrefix("/static/").Handler(
-		http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))),
+		http.StripPrefix("/static/", staticAssets(staticFS)),
 	)
 
 	// --- iOS / PWA home-screen icon (no auth needed — iOS fetches before login) ---
@@ -165,6 +182,7 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// HMAC-authenticated peer endpoint — invoked by other ZNAS servers
 	// when they aggregate; not for browser use.
 	r.HandleFunc("/api/audit/peer-list", HandleAuditPeerList(appCfg)).Methods("POST")
+	r.HandleFunc("/api/lxd/interlink-mac-owner", HandleInterlinkMACOwner(appCfg)).Methods("POST")
 
 	// --- System journal viewer (Activity & Events > journal tabs) -----------
 	// Availability probe is auth-only (returns available=false for non-admins);
@@ -624,6 +642,64 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/nfs/sessions",
 		RequireAuth(http.HandlerFunc(HandleGetNFSSessions))).Methods("GET")
 
+	// --- SDN / Firewall (PLANS/spec-sdn-firewall.md) ---
+	// Reads: admin + read-only, standard users with view_firewall.
+	// Everything that changes the router: admin only.
+	fwView := func(h http.Handler) http.Handler { return RequireAuth(RequireFirewallView(h)) }
+	fwAdmin := func(h http.Handler) http.Handler { return RequireAuth(RequireAdmin(h)) }
+	r.Handle("/api/sdn/status", fwView(HandleSDNStatus(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/config", fwView(HandleSDNGetConfig(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/draft", fwView(HandleSDNGetDraft(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/draft", fwAdmin(HandleSDNPutDraft(appCfg))).Methods("PUT")
+	r.Handle("/api/sdn/draft", fwAdmin(HandleSDNDiscardDraft(appCfg))).Methods("DELETE")
+	r.Handle("/api/sdn/validate", fwAdmin(http.HandlerFunc(HandleSDNValidate))).Methods("POST")
+	r.Handle("/api/sdn/apply", fwAdmin(HandleSDNApply(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/confirm", fwAdmin(HandleSDNConfirm(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/revert-now", fwAdmin(HandleSDNRevertNow(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/pending", fwView(HandleSDNPending(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/history", fwView(HandleSDNHistory(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/history/{id}/restore", fwAdmin(HandleSDNRestore(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/enable", fwAdmin(HandleSDNEnable(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/disable", fwAdmin(HandleSDNDisable(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/interfaces/live", fwView(http.HandlerFunc(HandleSDNLiveInterfaces))).Methods("GET")
+	r.Handle("/api/sdn/counters", fwView(http.HandlerFunc(HandleSDNCounters))).Methods("GET")
+	r.Handle("/api/sdn/export", fwAdmin(HandleSDNExport(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/import/inspect", fwAdmin(HandleSDNImportInspect(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/import/apply", fwAdmin(HandleSDNImportApply(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/traffic", fwView(http.HandlerFunc(HandleSDNTraffic))).Methods("GET")
+	r.Handle("/api/sdn/traffic/status", fwView(http.HandlerFunc(HandleSDNTrafficStatus))).Methods("GET")
+	r.Handle("/api/sdn/traffic/location", fwAdmin(HandleSDNStatsLocation(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/connections", fwView(http.HandlerFunc(HandleSDNConnections))).Methods("GET")
+	r.Handle("/api/sdn/top-talkers", fwView(HandleSDNTopTalkers(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/connections/kill", fwAdmin(http.HandlerFunc(HandleSDNKillConnection))).Methods("POST")
+	r.Handle("/api/sdn/geodb/update", fwAdmin(HandleSDNGeoUpdate(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/countries", fwView(http.HandlerFunc(HandleSDNCountries))).Methods("GET")
+	r.Handle("/api/sdn/gateways", fwView(http.HandlerFunc(HandleSDNGateways))).Methods("GET")
+	r.Handle("/api/sdn/gateways/test", fwAdmin(HandleSDNGatewayTest(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/routes", fwView(http.HandlerFunc(HandleSDNRoutes))).Methods("GET")
+	r.Handle("/api/sdn/services", fwView(http.HandlerFunc(HandleSDNServices))).Methods("GET")
+	r.Handle("/api/sdn/dhcp/leases", fwView(HandleSDNLeases(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/ddns/status", fwView(HandleSDNDDNSStatus(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/incus-networks", fwView(http.HandlerFunc(HandleSDNIncusNetworks))).Methods("GET")
+	r.Handle("/api/sdn/ifnames", RequireAuth(HandleSDNIfNames(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/dns/report", fwView(HandleSDNDNSReport(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/dns/queries", fwView(HandleSDNDNSQueries(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/dns/blocklists", fwView(http.HandlerFunc(HandleSDNBlocklists))).Methods("GET")
+	r.Handle("/api/sdn/dns/blocklists/update", fwAdmin(http.HandlerFunc(HandleSDNBlocklistsUpdate))).Methods("POST")
+	r.Handle("/api/sdn/wireguard/status", fwView(HandleSDNWireGuardStatus(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/wireguard/keys", fwAdmin(http.HandlerFunc(HandleSDNWireGuardKeys))).Methods("POST")
+	r.Handle("/api/sdn/ids/status", fwView(http.HandlerFunc(HandleSDNIDSStatus))).Methods("GET")
+	r.Handle("/api/sdn/ids/update", fwAdmin(HandleSDNIDSUpdate(appCfg))).Methods("POST")
+	r.Handle("/api/sdn/ids/alerts", fwView(HandleSDNIDSAlerts(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/ids/names", fwView(HandleSDNHostNames(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/hostinfo", fwView(HandleSDNHostInfo(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/hostinfo/owner", fwView(HandleSDNHostOwner(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/topology", fwView(HandleSDNTopology(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/unnamed-hosts", fwView(HandleSDNUnnamedHosts(appCfg))).Methods("GET")
+	// VM/CT editor: where an instance's port forwards can be published.
+	r.Handle("/api/sdn/forward-interfaces",
+		RequireAuth(RequirePermission("view_virtualization")(HandleSDNForwardInterfaces(appCfg)))).Methods("GET")
+
 	// --- Alerts ---
 	// GET is admin-only: the alert config (recipients, server URLs, event
 	// subscriptions) is administrative, the editor UI is admin-only, and the
@@ -660,6 +736,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	// --- Disk I/O metrics ---
 	r.Handle("/api/sysinfo/diskio",
 		RequireAuth(http.HandlerFunc(HandleGetDiskIO))).Methods("GET")
+	r.Handle("/api/sysinfo/gatewaynet",
+		RequireAuth(HandleGetGatewayNet(appCfg))).Methods("GET")
 
 	// --- Per-process CPU metrics ---
 	r.Handle("/api/sysinfo/cpu-procs",
@@ -800,6 +878,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.HandleFunc("/api/interlink/push-ssh-key", HandleInterlinkPushSSHKey(appCfg)).Methods("POST")
 	r.HandleFunc("/api/interlink/check-zfs-access", HandleInterlinkCheckZFSAccess(appCfg)).Methods("POST")
 	r.HandleFunc("/api/interlink/grant-zfs-access", HandleInterlinkGrantZFSAccess(appCfg)).Methods("POST")
+	r.HandleFunc("/api/interlink/peer-health", HandleInterlinkPeerHealth(appCfg)).Methods("POST")
+	r.HandleFunc("/api/interlink/accept-account", HandleInterlinkAcceptAccount).Methods("POST")
 	r.HandleFunc("/interlink-login", HandleInterlinkLogin(appCfg)).Methods("GET")
 	// Authenticated endpoints — called by the local portal UI.
 	r.Handle("/api/interlink/servers/fast",
@@ -816,6 +896,20 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleInterlinkGetRelayMode(appCfg)))).Methods("GET")
 	r.Handle("/api/interlink/relay-mode",
 		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkSetRelayMode(appCfg))))).Methods("PUT")
+	r.Handle("/api/interlink/health",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkHealth(appCfg))))).Methods("GET")
+	r.Handle("/api/interlink/{id}/repair-link",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkRepairLink(appCfg))))).Methods("POST")
+	r.Handle("/api/interlink/{id}/repair-peer",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkRepairPeer(appCfg))))).Methods("POST")
+	r.Handle("/api/interlink/{id}/accept-cert",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkAcceptCert(appCfg))))).Methods("POST")
+	r.Handle("/api/interlink/{id}/repair-access",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkRepairAccess(appCfg))))).Methods("POST")
+	r.Handle("/api/interlink/{id}/create-account",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkCreateAccount(appCfg))))).Methods("POST")
+	r.Handle("/api/interlink/{id}/link-peer",
+		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkLinkPeer(appCfg))))).Methods("POST")
 	r.Handle("/api/interlink/{id}",
 		RequireAuth(RequirePermission("manage_interlink")(http.HandlerFunc(HandleInterlinkUnlink(appCfg))))).Methods("DELETE")
 	r.Handle("/api/interlink/remote-pools/{server_id}",

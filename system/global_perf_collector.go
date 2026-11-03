@@ -83,10 +83,12 @@ func StartGlobalPerfCollector(configDir string) {
 				if dtSec > 0 {
 					for iface, cur := range curNet {
 						if prev, ok := prevNet[iface]; ok {
-							rx := float64(cur.rxBytes-prev.rxBytes) * 8 / 1_000_000 / dtSec
-							tx := float64(cur.txBytes-prev.txBytes) * 8 / 1_000_000 / dtSec
-							db.Record("net_"+iface+"_rx", rx, now)
-							db.Record("net_"+iface+"_tx", tx, now)
+							rx, ok1 := netRateMbps(cur.rxBytes, prev.rxBytes, dtSec)
+							tx, ok2 := netRateMbps(cur.txBytes, prev.txBytes, dtSec)
+							if ok1 && ok2 {
+								db.Record("net_"+iface+"_rx", rx, now)
+								db.Record("net_"+iface+"_tx", tx, now)
+							}
 						}
 					}
 				}
@@ -105,15 +107,12 @@ func StartGlobalPerfCollector(configDir string) {
 						count := 0
 						for dev, cur := range curDisk {
 							if prev, ok := prevDiskIO[dev]; ok {
-								readMBps += float64(cur.sectorsRead-prev.sectorsRead) * 512 / 1_048_576 / dtSec
-								writeMBps += float64(cur.sectorsWritten-prev.sectorsWritten) * 512 / 1_048_576 / dtSec
-								dtMS := dtSec * 1000
-								busy := float64(cur.msIO-prev.msIO) / dtMS * 100
-								if busy > 100 {
-									busy = 100
+								if r, w, busy, ok := diskRates(cur, prev, dtSec); ok {
+									readMBps += r
+									writeMBps += w
+									busyTotal += busy
+									count++
 								}
-								busyTotal += busy
-								count++
 							}
 						}
 						db.Record("disk_read", readMBps, now)

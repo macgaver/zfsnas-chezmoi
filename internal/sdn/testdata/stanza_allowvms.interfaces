@@ -1,0 +1,17 @@
+# znas-sdn-start id=if000800 device=enp7s0-v800
+auto enp7s0-v800
+iface enp7s0-v800 inet manual
+    pre-up ip link set enp7s0 up
+    pre-up ip link add link enp7s0 name enp7s0-v800 type vlan id 800
+    post-down ip link del enp7s0-v800
+    mtu 1500
+    post-up sysctl -w net.ipv6.conf.enp7s0-v800.disable_ipv6=1
+auto br-enp7s0-v800
+iface br-enp7s0-v800 inet static
+    bridge_ports enp7s0-v800
+    bridge_stp off
+    bridge_fd 0
+    address 10.128.8.1/24
+    mtu 1500
+    post-up sysctl -w net.ipv6.conf.br-enp7s0-v800.disable_ipv6=1
+# znas-sdn-end

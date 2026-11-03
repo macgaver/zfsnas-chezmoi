@@ -460,13 +460,33 @@ func GetEnableNetConfig() (*EnableNetConfig, error) {
 	}, nil
 }
 
-// netplanIsAuthoritative reports whether netplan (via systemd-networkd) is the
-// host's live network manager — the case on a fresh Ubuntu install. When true,
-// the static-IP apply writes a netplan drop-in; otherwise it edits
+// netplanIsAuthoritative reports whether netplan is the host's live network
+// configuration — rendered by systemd-networkd (fresh Ubuntu server) or by
+// NetworkManager (Ubuntu with 01-network-manager-all.yaml). When true, the
+// static-IP apply writes a netplan drop-in; otherwise it edits
 // /etc/network/interfaces (ifupdown).
 func netplanIsAuthoritative() bool {
 	files, _ := filepath.Glob("/etc/netplan/*.yaml")
-	return len(files) > 0 && systemdNetworkdActive()
+	if len(files) == 0 {
+		return false
+	}
+	if netplanRendersWithNM() {
+		return networkManagerActive()
+	}
+	return systemdNetworkdActive()
+}
+
+// netplanRendersWithNM: the netplan files name NetworkManager as renderer
+// (systemd-networkd may still be running there, rendering nothing).
+func netplanRendersWithNM() bool {
+	scan, err := scanNetplanYAMLs()
+	return err == nil && strings.EqualFold(scan.Renderer, "NetworkManager")
+}
+
+// networkManagerActive reports whether NetworkManager is running.
+func networkManagerActive() bool {
+	out, err := exec.Command("/usr/bin/systemctl", "is-active", "NetworkManager").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "active"
 }
 
 // SetEnableStaticIP reconfigures the host's primary interface to a static
@@ -548,9 +568,29 @@ func writeNetworkdStaticAndApply(iface, addrCIDR, gateway string, dns []string) 
 // interface to a static address (overriding the installer's dhcp4: true for the
 // same device) and runs `netplan apply`.
 func writeNetplanStaticAndApply(iface, addrCIDR, gateway string, dns []string) error {
+	const path = "/etc/netplan/90-znas-static.yaml"
+	if err := writeInterfacesFile(path, []byte(netplanStaticYAML(iface, addrCIDR, gateway, dns, !netplanRendersWithNM()))); err != nil {
+		return fmt.Errorf("write netplan: %w", err)
+	}
+	// netplan ≥ 24.04 refuses to apply a world-readable config.
+	exec.Command("sudo", "chmod", "600", path).Run() //nolint:errcheck
+	if out, err := exec.Command("sudo", "netplan", "apply").CombinedOutput(); err != nil {
+		return fmt.Errorf("netplan apply: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// netplanStaticYAML is the drop-in pinning iface to a static address. The
+// networkd renderer is named only when networkd runs the host; otherwise the
+// drop-in inherits the renderer (NetworkManager) from the other files.
+func netplanStaticYAML(iface, addrCIDR, gateway string, dns []string, networkd bool) string {
 	var y strings.Builder
 	y.WriteString("# Written by ZNAS — static IP for " + iface + " (set before enabling virtualization).\n")
-	y.WriteString("network:\n  version: 2\n  renderer: networkd\n  ethernets:\n")
+	y.WriteString("network:\n  version: 2\n")
+	if networkd {
+		y.WriteString("  renderer: networkd\n")
+	}
+	y.WriteString("  ethernets:\n")
 	y.WriteString("    " + iface + ":\n")
 	y.WriteString("      dhcp4: false\n      dhcp6: false\n")
 	y.WriteString("      addresses:\n        - " + addrCIDR + "\n")
@@ -563,21 +603,17 @@ func writeNetplanStaticAndApply(iface, addrCIDR, gateway string, dns []string) e
 			y.WriteString("          - " + d + "\n")
 		}
 	}
-	const path = "/etc/netplan/90-znas-static.yaml"
-	if err := writeInterfacesFile(path, []byte(y.String())); err != nil {
-		return fmt.Errorf("write netplan: %w", err)
-	}
-	// netplan ≥ 24.04 refuses to apply a world-readable config.
-	exec.Command("sudo", "chmod", "600", path).Run() //nolint:errcheck
-	if out, err := exec.Command("sudo", "netplan", "apply").CombinedOutput(); err != nil {
-		return fmt.Errorf("netplan apply: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
+	return y.String()
 }
 
 // writeIfupdownStaticAndApply rewrites the interface's stanza in
 // /etc/network/interfaces to a static configuration and restarts networking.
 func writeIfupdownStaticAndApply(iface, addrCIDR, gateway string, dns []string) error {
+	// Nothing would apply the file, and on a NetworkManager host its stanza
+	// makes the NIC "unmanaged" at the next restart: refuse first.
+	if !ifupdownInstalled() {
+		return fmt.Errorf("cannot set the address: this server's network is not managed by ifupdown, netplan or systemd-networkd (ifupdown is not installed)")
+	}
 	const path = "/etc/network/interfaces"
 	existing, _ := readPossiblyRoot(path)
 	updated := rewriteIfaceStanzaStatic(string(existing), iface, addrCIDR, gateway, dns)
@@ -589,6 +625,9 @@ func writeIfupdownStaticAndApply(iface, addrCIDR, gateway string, dns []string) 
 	}
 	return nil
 }
+
+// ifupdownInstalled: a var so tests can force it.
+var ifupdownInstalled = func() bool { return pkgInstalled("ifupdown") }
 
 // rewriteIfaceStanzaStatic replaces (or appends) the `iface <name> inet ...`
 // stanza in an /etc/network/interfaces file with a static configuration,

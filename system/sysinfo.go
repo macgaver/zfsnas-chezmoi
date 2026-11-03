@@ -64,18 +64,11 @@ func StartDiskIOPoller() {
 				prev, hasPrev := diskIOPrev[dev]
 				if hasPrev {
 					dtSec := cur.ts.Sub(prev.ts).Seconds()
-					if dtSec > 0 {
-						readKBps := float64(cur.sectorsRead-prev.sectorsRead) * 512 / 1024 / dtSec
-						writeKBps := float64(cur.sectorsWritten-prev.sectorsWritten) * 512 / 1024 / dtSec
-						dtMS := dtSec * 1000
-						busyPct := float64(cur.msIO-prev.msIO) / dtMS * 100
-						if busyPct > 100 {
-							busyPct = 100
-						}
+					if r, w, busy, ok := diskRates(cur, prev, dtSec); ok {
 						snap.Devices[dev] = DiskIOSample{
-							ReadKBps:  readKBps,
-							WriteKBps: writeKBps,
-							BusyPct:   busyPct,
+							ReadKBps:  r * 1024,
+							WriteKBps: w * 1024,
+							BusyPct:   busy,
 						}
 					}
 				}

@@ -49,6 +49,10 @@ const (
 	EventComposeUpdateFailure EventKey = "compose_update_failure"
 	EventInterlinkUnreachable EventKey = "interlink_unreachable"
 	EventUPSPowerChanged      EventKey = "ups_power_changed"
+	// Firewall (SDN): gateway down/up/failover, auto-revert, safe mode.
+	EventFirewall EventKey = "firewall_events"
+	// Firewall intrusion detection: Suricata alerts at or above the chosen severity.
+	EventIDS EventKey = "ids_alerts"
 	EventTest            EventKey = "test" // always passes filter
 )
 
@@ -79,6 +83,8 @@ func matchesEvent(key EventKey, ev EventConfig) bool {
 	case EventVMHostSaturation:  return ev.VMHostSaturation
 	case EventComposeUpdateFailure: return ev.ComposeUpdateFailure
 	case EventInterlinkUnreachable: return ev.InterlinkUnreachable
+	case EventFirewall:             return ev.FirewallEvents
+	case EventIDS:                  return ev.IDSAlerts
 	case EventUPSPowerChanged:      return ev.UPSPowerChanged
 	}
 	return false
@@ -125,6 +131,8 @@ type EventConfig struct {
 	PoolActions          bool `json:"pool_actions"`
 	InterlinkUnreachable bool `json:"interlink_unreachable"`
 	UPSPowerChanged      bool `json:"ups_power_changed"`
+	FirewallEvents       bool `json:"firewall_events"`
+	IDSAlerts            bool `json:"ids_alerts"`
 
 	// Virtualization events — only meaningful when the optional LXD/Incus
 	// feature is installed. Hidden in the UI on servers without it but kept
@@ -239,6 +247,8 @@ func defaultEventConfig() EventConfig {
 		SnapshotFailure:      true,
 		ReplicationFailure:   true,
 		InterlinkUnreachable: true,
+		FirewallEvents:       true,
+		IDSAlerts:            true,
 	}
 }
 

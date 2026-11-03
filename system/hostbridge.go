@@ -52,11 +52,21 @@ var ifaceStanzaRe = regexp.MustCompile(`^\s*iface\s+(\S+)\s+inet\s+(\S+)`)
 
 // GetHostBridgeConfig parses one bridge's stanza out of the interfaces file.
 func GetHostBridgeConfig(name string) (HostBridgeConfig, error) {
-	cfg := HostBridgeConfig{Name: name, Mode: "manual"}
 	data, err := os.ReadFile(hostInterfacesPath)
 	if err != nil {
-		return cfg, err
+		return HostBridgeConfig{Name: name, Mode: "manual"}, err
 	}
+	cfg := parseHostBridgeConfig(data, name)
+	if cfg.Exists {
+		cfg.Pending = hostBridgePending(cfg)
+	}
+	return cfg, nil
+}
+
+// parseHostBridgeConfig reads one interface's addressing out of an
+// interfaces file's content (no live-state check).
+func parseHostBridgeConfig(data []byte, name string) HostBridgeConfig {
+	cfg := HostBridgeConfig{Name: name, Mode: "manual"}
 	inStanza := false
 	for _, line := range strings.Split(string(data), "\n") {
 		if m := ifaceStanzaRe.FindStringSubmatch(line); m != nil {
@@ -97,10 +107,7 @@ func GetHostBridgeConfig(name string) (HostBridgeConfig, error) {
 			inStanza = false
 		}
 	}
-	if cfg.Exists {
-		cfg.Pending = hostBridgePending(cfg)
-	}
-	return cfg, nil
+	return cfg
 }
 
 // hostBridgePending reports whether the saved stanza differs from what the

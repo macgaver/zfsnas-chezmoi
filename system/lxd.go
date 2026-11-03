@@ -451,6 +451,9 @@ type NICPortForward struct {
 	// discovery in ensureNICStaticIPv4 can't find it. Empty = auto (VM: the
 	// NIC's pinned/leased address; container: 127.0.0.1).
 	TargetAddr string `json:"target_addr,omitempty"`
+	// Interfaces (Firewall enabled only): Firewall interface ids the forward
+	// is published on; none = paused.
+	Interfaces []string `json:"interfaces,omitempty"`
 }
 
 // LXDUSBDevice is a USB device to pass through to a VM.
@@ -1851,7 +1854,11 @@ func LXDDelete(name string, deleteVolumes bool) error {
 	_ = LXDStop(name, true)
 	// Always pass --force so deletion succeeds even when the instance is in ERROR state
 	// or when lxc considers it still running after a failed stop.
-	return exec.Command("incus", "delete", "--force", name).Run()
+	if err := exec.Command("incus", "delete", "--force", name).Run(); err != nil {
+		return err
+	}
+	SDNForgetInstance(name)
+	return nil
 }
 
 // LXDNICConfig describes a network interface device on an instance.
@@ -1864,6 +1871,9 @@ type LXDNICConfig struct {
 	FromProfile bool   `json:"from_profile,omitempty"`
 	MAC         string `json:"mac,omitempty"`        // volatile.<name>.hwaddr
 	CurrentIP   string `json:"current_ip,omitempty"` // live IPv4 from instance state
+	// IPSource: "" the guest reports it, "host" seen by this host (DHCP lease
+	// or neighbour table) because the guest reports nothing for this card.
+	IPSource string `json:"ip_source,omitempty"`
 	IPv4Mode    string `json:"ipv4_mode,omitempty"`  // "dhcp" | "static" | "none"
 	IPv4Addr    string `json:"ipv4_addr,omitempty"`  // e.g. "10.0.0.10/24"
 	IPv4GW      string `json:"ipv4_gw,omitempty"`    // gateway IP
@@ -3197,6 +3207,11 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 		}
 	}
 
+	// With the Firewall enabled, forwards live in its config, not in
+	// proxy devices.
+	if SDNInstanceForwardsActive() {
+		nicForwards = SDNInstanceForwards(name)
+	}
 	// Attach the proxy-device-derived port forwards to their NICs.
 	if len(nicForwards) > 0 {
 		for i := range cfg.NICs {
@@ -3210,9 +3225,11 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 	stateOut, err := exec.Command("incus", "query", "/1.0/instances/"+name+"/state").Output()
 	if err == nil {
 		var state struct {
+			Status  string                     `json:"status"`
 			Network map[string]lxdStateNetwork `json:"network"`
 		}
-		if json.Unmarshal(stateOut, &state) == nil && state.Network != nil {
+		_ = json.Unmarshal(stateOut, &state)
+		if state.Network != nil {
 			// Pass 1: exact device-name match (works reliably for containers).
 			// Also syncs Connected to the actual OS link state so that a NIC brought
 			// down via ip-link-set is correctly reflected when the edit modal re-reads.
@@ -3229,28 +3246,25 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 					}
 				}
 			}
-			// Pass 2: MAC-based match using volatile expanded_config entries.
-			// Required for VMs where the OS renames the NIC (e.g. eth0 → enp5s0).
+			// Pass 2: by MAC, the card's own (Required for VMs where the OS renames
+			// the NIC, eth0 → enp5s0, and imported VMs that fix it in the device).
+			// Every interface holding that MAC counts: the address is often on a
+			// VLAN or a bridge on top of the card (eth0.800, vmbr0), not the card.
 			for i, nic := range cfg.NICs {
-				if cfg.NICs[i].CurrentIP != "" {
-					continue
-				}
-				devMAC := raw.ExpandedConfig["volatile."+nic.Name+".hwaddr"]
-				if devMAC == "" {
-					continue
-				}
-				for _, iface := range state.Network {
-					if strings.EqualFold(iface.HWAddr, devMAC) {
-						for _, addr := range iface.Addresses {
-							if addr.Family == "inet" && addr.Scope == "global" {
-								cfg.NICs[i].CurrentIP = addr.Address
-								break
-							}
-						}
-						break
-					}
+				if cfg.NICs[i].CurrentIP == "" {
+					cfg.NICs[i].CurrentIP = lxdGuestIPByMAC(state.Network, nic.MAC)
 				}
 			}
+			// Pass 3: one card and a guest that reports addresses: the same best
+			// guess as the instance list.
+			if len(cfg.NICs) == 1 && cfg.NICs[0].CurrentIP == "" {
+				cfg.NICs[0].CurrentIP = lxdPickBestIP(raw.ExpandedDevices, raw.ExpandedConfig, state.Network)
+			}
+		}
+		// Pass 4: the guest says nothing (no agent, or the address is out of its
+		// reported set): what this host's DHCP and network have seen for the MAC.
+		if state.Status == "Running" {
+			lxdFillHostSeenIPs(cfg.NICs)
 		}
 	}
 
@@ -5354,7 +5368,7 @@ func LXDCreateVM(req LXDCreateVMRequest, logCh chan<- string) error {
 		// listen address + static ipv4.address pin on the NIC).
 		if len(nic.PortForwards) > 0 {
 			log(fmt.Sprintf("Adding %d port forward(s) on %s…", len(nic.PortForwards), devName))
-			if err := applyNICPortForwards(req.Name, devName, nic.PortForwards); err != nil {
+			if err := applyNewInstanceForwards(req.Name, devName, nic.PortForwards); err != nil {
 				log("WARNING: " + err.Error())
 			}
 		}
@@ -5711,7 +5725,7 @@ func LXDCreateContainer(req LXDCreateContainerRequest, logCh chan<- string) erro
 		// to the user as a warning instead of failing the whole create.
 		if len(nic.PortForwards) > 0 {
 			log(fmt.Sprintf("Adding %d port forward(s) on %s…", len(nic.PortForwards), devName))
-			if err := applyNICPortForwards(req.Name, devName, nic.PortForwards); err != nil {
+			if err := applyNewInstanceForwards(req.Name, devName, nic.PortForwards); err != nil {
 				log("WARNING: " + err.Error())
 			}
 		}
@@ -6226,13 +6240,21 @@ func syncNICPortForwards(instance, nicName string, desired []NICPortForward, exp
 		return err
 	}
 	prefix := "fwd-" + nicName + "-"
+	firewall := SDNInstanceForwardsActive()
+	if firewall {
+		// The Firewall owns forwards: save them first (a refusal, e.g. a
+		// change waiting for confirmation, leaves the devices untouched).
+		if err := SDNSetInstanceForwards(instance, nicName, desired, "VMs & Containers editor"); err != nil {
+			return err
+		}
+	}
 	for devName, devCfg := range expandedDevices {
 		if devCfg["type"] != "proxy" || !strings.HasPrefix(devName, prefix) {
 			continue
 		}
 		exec.Command("incus", "config", "device", "remove", instance, devName).Run() //nolint:errcheck
 	}
-	if len(desired) > 0 {
+	if len(desired) > 0 && !firewall {
 		return applyNICPortForwards(instance, nicName, desired)
 	}
 	return nil

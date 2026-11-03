@@ -144,6 +144,7 @@ func permEnabled(p *config.StandardPermissions, perm string) bool {
 	case "delete_instances":        return p.DeleteInstances
 	case "manage_instance_backups": return p.ManageInstanceBackups
 	case "view_networking":         return p.ViewNetworking
+	case "view_firewall":           return p.ViewFirewall
 	case "view_services":           return p.ViewServices
 	case "manage_services":         return p.ManageServices
 	}
@@ -325,7 +326,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 					"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
 					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
 					"font-src 'self' https://fonts.gstatic.com; "+
-					"img-src 'self' data: blob:; "+
+					"img-src 'self' data: blob: https://tile.openstreetmap.org; "+ // Firewall GeoMap street map
 					"media-src 'self' blob:; "+
 					"connect-src 'self'; "+
 					// v6.8.1 — the Services panel frames proxied apps. Normally

@@ -140,12 +140,9 @@ func StartPoolPerfCollector(configDir string) {
 							if !hasCur || !hasPrev {
 								continue
 							}
-							readMBps  := float64(cur.sectorsRead-prev.sectorsRead)       * 512 / 1_048_576 / dtSec
-							writeMBps := float64(cur.sectorsWritten-prev.sectorsWritten) * 512 / 1_048_576 / dtSec
-							dtMS := dtSec * 1000
-							busy := float64(cur.msIO-prev.msIO) / dtMS * 100
-							if busy > 100 {
-								busy = 100
+							readMBps, writeMBps, busy, ok := diskRates(cur, prev, dtSec)
+							if !ok {
+								continue
 							}
 							db.Record("read:"+pool+":"+dev,  readMBps,  now)
 							db.Record("write:"+pool+":"+dev, writeMBps, now)

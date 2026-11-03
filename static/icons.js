@@ -118,6 +118,7 @@
     'hdd-stack': '<rect width="20" height="7" x="2" y="3" rx="2"/><rect width="20" height="7" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6.5" y2="6.5"/><line x1="6" x2="6.01" y1="17.5" y2="17.5"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     'chevron-up': '<path d="m18 15-6-6-6 6"/>',
+    'chevrons-up-down': '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
     'arrow-up': '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
     'arrow-down': '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
     'arrow-right': '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',

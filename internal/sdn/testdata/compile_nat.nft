@@ -1,0 +1,148 @@
+table ip znas_sdn
+delete table ip znas_sdn
+table ip znas_sdn {
+	set managed {
+		type ifname
+		elements = { "enp1s0", "enp2s0-v400", "enp2s0-v500", "enp2s0-v700", "br-enp2s0-v800", "ppp-ifpppoe1" }
+	}
+	set g_g0000001 {
+		type ipv4_addr
+		flags interval
+		auto-merge
+		elements = { 10.0.0.0/8, 192.168.0.0/16 }
+	}
+	set p_g0000002 {
+		type inet_service
+		flags interval
+		auto-merge
+		elements = { 16261-16263 }
+	}
+	set c_ca {
+		type ipv4_addr
+		flags interval
+		auto-merge
+		elements = { 24.48.0.0/16 }
+	}
+	set blk {
+		type ipv4_addr . inet_proto . inet_service . ifname . mark
+		flags dynamic,timeout
+		timeout 15m
+		size 65536
+		counter
+	}
+	chain input {
+		type filter hook input priority filter; policy accept;
+		iifname != @managed accept
+		ct state established,related accept
+		ct state invalid drop
+		ct status dnat accept
+		iifname "enp1s0" tcp dport { 22, 8443 } accept comment "anti-lockout"
+		jump any_in
+		iifname "enp1s0" jump in_if000001
+		iifname "enp2s0-v400" jump in_if000400
+		iifname "enp2s0-v500" jump in_if000500
+		iifname "enp2s0-v700" jump in_if000700
+		iifname "br-enp2s0-v800" jump in_if000800
+		iifname "ppp-ifpppoe1" jump in_ifpppoe1
+		meta l4proto { tcp, udp } update @blk { ip saddr . meta l4proto . th dport . iifname . 0x0 }
+		meta l4proto != { tcp, udp } update @blk { ip saddr . meta l4proto . 0 . iifname . 0x0 }
+		counter drop comment "default-deny"
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		iifname != @managed accept
+		ct state established,related accept
+		ct state invalid drop
+		ct status dnat accept
+		jump any_fw
+		iifname "enp1s0" jump fw_if000001
+		iifname "enp2s0-v400" jump fw_if000400
+		iifname "enp2s0-v500" jump fw_if000500
+		iifname "enp2s0-v700" jump fw_if000700
+		iifname "br-enp2s0-v800" jump fw_if000800
+		iifname "ppp-ifpppoe1" jump fw_ifpppoe1
+		meta l4proto { tcp, udp } update @blk { ip saddr . meta l4proto . th dport . iifname . 0x0 }
+		meta l4proto != { tcp, udp } update @blk { ip saddr . meta l4proto . 0 . iifname . 0x0 }
+		counter drop comment "default-deny"
+	}
+	chain any_in {
+	}
+	chain any_fw {
+	}
+	chain in_if000001 {
+	}
+	chain fw_if000001 {
+	}
+	chain in_if000400 {
+	}
+	chain fw_if000400 {
+	}
+	chain in_if000500 {
+		counter accept comment "r:rgw00001"
+	}
+	chain fw_if000500 {
+		counter accept comment "r:rgw00001"
+	}
+	chain in_if000700 {
+		meta l4proto tcp ip saddr 10.128.7.0/24 ip daddr 10.128.8.4 th dport 3008 counter accept comment "r:r0000001"
+		meta l4proto { tcp, udp } update @blk { ip saddr . meta l4proto . th dport . iifname . 0x1 }
+		meta l4proto != { tcp, udp } update @blk { ip saddr . meta l4proto . 0 . iifname . 0x1 }
+		meta l4proto tcp counter reject with tcp reset comment "r:r0000002"
+		meta l4proto != tcp counter reject with icmp type admin-prohibited comment "r:r0000002"
+	}
+	chain fw_if000700 {
+		meta l4proto tcp ip saddr 10.128.7.0/24 ip daddr 10.128.8.4 th dport 3008 counter accept comment "r:r0000001"
+		meta l4proto { tcp, udp } update @blk { ip saddr . meta l4proto . th dport . iifname . 0x1 }
+		meta l4proto != { tcp, udp } update @blk { ip saddr . meta l4proto . 0 . iifname . 0x1 }
+		meta l4proto tcp counter reject with tcp reset comment "r:r0000002"
+		meta l4proto != tcp counter reject with icmp type admin-prohibited comment "r:r0000002"
+	}
+	chain in_if000800 {
+	}
+	chain fw_if000800 {
+	}
+	chain in_ifpppoe1 {
+	}
+	chain fw_ifpppoe1 {
+	}
+	set private {
+		type ipv4_addr
+		flags interval
+		elements = { 10.0.0.0/8, 100.64.0.0/10, 172.16.0.0/12, 192.168.0.0/16 }
+	}
+	set wan {
+		type ifname
+		elements = { "ppp-ifpppoe1", "enp1s0" }
+	}
+	chain nat_pre {
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname "ppp-ifpppoe1" meta l4proto tcp th dport 52400 dnat to 10.128.8.8:32400 comment "pf:pf000001"
+		iifname "ppp-ifpppoe1" meta l4proto udp ip saddr @c_ca th dport 16261-16263 dnat to 10.128.7.89 comment "pf:pf000002"
+		iifname "ppp-ifpppoe1" meta l4proto tcp th dport 443 dnat to 10.128.7.4:443 comment "pf:pfrefl01"
+		iifname != @wan fib daddr type local meta l4proto tcp th dport 443 dnat to 10.128.7.4:443 comment "pf:pfrefl01"
+	}
+	chain nat_post {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname != @wan ct status dnat ip daddr 10.128.7.4 meta l4proto tcp th dport 443 masquerade comment "pf:pfrefl01"
+		oifname "enp1s0" ip saddr 10.128.5.0/24 masquerade comment "sn:sn000001"
+		oifname "ppp-ifpppoe1" ip daddr != @private masquerade comment "auto"
+		oifname "enp1s0" ip saddr != 192.168.2.0/24 ip daddr != @private masquerade comment "auto"
+	}
+	chain mangle_pre {
+		type filter hook prerouting priority mangle; policy accept;
+		ct mark != 0 meta mark set ct mark
+		iifname "ppp-ifpppoe1" ct state new ip saddr != @private ct mark set 0x300
+		iifname "enp1s0" ct state new ip saddr != @private ct mark set 0x301
+		meta mark 0 iifname "enp2s0-v500" ct state new meta mark set 0x100 ct mark set meta mark comment "r:rgw00001"
+		meta mark 0 ct state new ip saddr 10.128.5.0/24 meta mark set 0x101 ct mark set meta mark comment "sn:sn000001"
+	}
+	chain mangle_out {
+		type route hook output priority mangle; policy accept;
+		ct mark != 0 meta mark set ct mark
+	}
+	chain mss {
+		type filter hook forward priority mangle; policy accept;
+		oifname "ppp-ifpppoe1" tcp flags syn tcp option maxseg size set rt mtu
+		iifname "ppp-ifpppoe1" tcp flags syn tcp option maxseg size set rt mtu
+	}
+}

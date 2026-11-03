@@ -1,0 +1,23 @@
+table ip znas_sdn
+delete table ip znas_sdn
+table ip znas_sdn {
+	set managed {
+		type ifname
+		elements = { "enp1s0", "enp2s0-v700", "br-enp2s0-v800" }
+	}
+	chain input {
+		type filter hook input priority filter; policy accept;
+		iifname != @managed accept
+		ct state established,related accept
+		iifname "enp1s0" tcp dport { 22, 8443 } accept comment "anti-lockout"
+		iifname "enp1s0" icmp type echo-request accept
+		iifname "enp1s0" udp sport 67 udp dport 68 accept
+		counter drop comment "safe-mode"
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		iifname != @managed accept
+		ct state established,related accept
+		counter drop comment "safe-mode"
+	}
+}

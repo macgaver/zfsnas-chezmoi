@@ -5,6 +5,7 @@ package rrd
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -55,11 +56,51 @@ func Open(path string) (*DB, error) {
 		// Corrupt file — start fresh rather than failing.
 		db.data.Series = make(map[string]*series)
 	}
+	db.scrub()
 	return db, nil
+}
+
+// scrub drops the impossible values an earlier version stored.
+func (db *DB) scrub() {
+	for key, s := range db.data.Series {
+		all := s.ordered()
+		kept := all[:0:0]
+		for _, x := range all {
+			if Plausible(key, x.V) {
+				kept = append(kept, x)
+			}
+		}
+		if len(kept) == len(all) {
+			continue
+		}
+		log.Printf("[rrd] %s: dropped %d impossible values", key, len(all)-len(kept))
+		*s = series{Head: len(kept) % MaxSamples, Count: len(kept)}
+		copy(s.Samples[:], kept)
+	}
+}
+
+// ordered returns the samples in write order.
+func (s *series) ordered() []Sample {
+	count := s.Count
+	result := make([]Sample, count)
+	if count < MaxSamples {
+		// Buffer not yet full: slots [0, count) are in write order.
+		copy(result, s.Samples[:count])
+	} else {
+		// Buffer full: oldest sample is at Head, wraps around.
+		n := MaxSamples - s.Head
+		copy(result, s.Samples[s.Head:])
+		copy(result[n:], s.Samples[:s.Head])
+	}
+	return result
 }
 
 // Record adds one sample to the named series at the given time.
 func (db *DB) Record(key string, v float64, now time.Time) {
+	if !Plausible(key, v) {
+		log.Printf("[rrd] %s: refused impossible value %v", key, v)
+		return
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	s, ok := db.data.Series[key]
@@ -83,18 +124,7 @@ func (db *DB) Query(key string) []Sample {
 	if !ok {
 		return []Sample{}
 	}
-	count := s.Count
-	result := make([]Sample, count)
-	if count < MaxSamples {
-		// Buffer not yet full: slots [0, count) are in write order.
-		copy(result, s.Samples[:count])
-	} else {
-		// Buffer full: oldest sample is at Head, wraps around.
-		n := MaxSamples - s.Head
-		copy(result, s.Samples[s.Head:])
-		copy(result[n:], s.Samples[:s.Head])
-	}
-	return result
+	return s.ordered()
 }
 
 // Keys returns the names of all series currently stored in the DB.

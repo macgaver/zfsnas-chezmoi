@@ -14,8 +14,9 @@ package system
 //
 // Scope (locked deliberately small for 6.5.6):
 //   - Plain ethernet devices only.
-//   - networkd renderer only — NetworkManager refuses (desktop install,
-//     out of portal scope).
+//   - networkd or NetworkManager renderer. With NetworkManager, the migrated
+//     NICs (and the VM bridges) are declared unmanaged in a conf.d file;
+//     NetworkManager itself keeps running for anything else (Wi-Fi…).
 //   - No bonds, bridges, vlans, wifis in the netplan YAML — refuse with
 //     a clear error so the user knows their setup needs manual
 //     conversion.
@@ -131,7 +132,8 @@ func parseNetplanYAMLInto(data []byte, res *netplanScanResult, seenSection map[s
 					if deviceIndent == -1 {
 						deviceIndent = ind
 					}
-					if ind == deviceIndent {
+					if ind == deviceIndent && !containsStr(res.Devices, m[2]) {
+						// A device named in several files (installer + drop-in) is one device.
 						res.Devices = append(res.Devices, m[2])
 					}
 				}
@@ -706,8 +708,9 @@ func MigrateNetplanToIfupdown(stream func(string)) error {
 	log(fmt.Sprintf("  Found %d file(s); renderer=%q; ethernets=%v",
 		len(scan.Files), scan.Renderer, scan.Devices))
 
-	if strings.EqualFold(scan.Renderer, "NetworkManager") {
-		return fmt.Errorf("netplan renderer is NetworkManager — automatic migration only supports the networkd renderer. Convert to ifupdown manually")
+	viaNM := strings.EqualFold(scan.Renderer, "NetworkManager")
+	if viaNM && !networkManagerActive() {
+		return fmt.Errorf("netplan renderer is NetworkManager but NetworkManager is not running — fix the network configuration first")
 	}
 	if len(scan.Unsupported) > 0 {
 		return fmt.Errorf("netplan contains unsupported sections (%s); migrate manually before enabling VMs & Containers",
@@ -781,44 +784,25 @@ func MigrateNetplanToIfupdown(stream func(string)) error {
 	// trying to walk away from. We tolerate "not loaded" / "does not
 	// exist" so older releases without one or another socket don't
 	// abort the migration.
-	log("Disabling systemd-networkd (service + activation sockets + wait-online)…")
-	networkdUnits := []string{
-		"systemd-networkd-resolve-hook.socket",
-		"systemd-networkd-varlink.socket",
-		"systemd-networkd.socket",
-		"systemd-networkd.service",
-		// The wait-online unit is the real boot-time troublemaker: it is pulled
-		// in by network-online.target (Wants=) and its Requires=systemd-networkd
-		// RE-ACTIVATES networkd at boot even after we disable it, then blocks
-		// boot for ~2 min waiting for a "routable" interface networkd no longer
-		// manages. Disable it here and mask it below.
-		"systemd-networkd-wait-online.service",
-	}
-	for _, u := range networkdUnits {
-		for _, action := range []string{"disable", "stop"} {
-			out, err := exec.Command("sudo", "/usr/bin/systemctl", action, u).CombinedOutput()
-			if err == nil {
-				continue
-			}
-			msg := strings.TrimSpace(string(out))
-			if !strings.Contains(msg, "not loaded") &&
-				!strings.Contains(msg, "does not exist") &&
-				!strings.Contains(msg, "Failed to disable") {
-				log(fmt.Sprintf("  systemctl %s %s: %s (continuing)", action, u, msg))
-			}
+	if viaNM {
+		// NetworkManager renders netplan here: stop it managing the NICs we
+		// hand to ifupdown (and the VM bridges created later). It keeps
+		// running for anything else. systemd-networkd is not involved.
+		log("Telling NetworkManager to leave " + strings.Join(scan.Devices, ", ") + " to ifupdown → " + nmUnmanagedConfPath)
+		if err := writeRoot(nmUnmanagedConfPath, []byte(nmUnmanagedConf(scan.Devices)), 0o644); err != nil {
+			rollbackInterfaces(targetPath, backupPath)
+			return fmt.Errorf("write %s: %w", nmUnmanagedConfPath, err)
+		}
+		if out, err := exec.Command("sudo", "/usr/bin/systemctl", "reload", "NetworkManager").CombinedOutput(); err != nil {
+			log("  systemctl reload NetworkManager: " + strings.TrimSpace(string(out)) + " (continuing)")
 		}
 	}
-
-	// Mask systemd-networkd and its wait-online unit. Disabling alone is not
-	// enough on Ubuntu 26.04: network-online.target still pulls wait-online,
-	// which Requires= networkd and so brings it back at boot (and hangs boot
-	// ~2 min). Masking severs that chain for good — neither unit can be started
-	// or pulled in. Rollback (rollbackNetworkd) unmasks them.
-	log("Masking systemd-networkd + wait-online so boot can't wait on or revive them…")
-	for _, u := range []string{"systemd-networkd-wait-online.service", "systemd-networkd.service"} {
-		if out, err := exec.Command("sudo", "/usr/bin/systemctl", "mask", u).CombinedOutput(); err != nil {
-			log(fmt.Sprintf("  systemctl mask %s: %s (continuing)", u, strings.TrimSpace(string(out))))
-		}
+	rollbackNet := rollbackNetworkd
+	if viaNM {
+		rollbackNet = func() { rollbackNetworkManager(scan.Files) }
+	}
+	if !viaNM {
+		disableNetworkd(log)
 	}
 
 	// Remove the netplan-generated systemd-networkd runtime configs.
@@ -841,9 +825,17 @@ func MigrateNetplanToIfupdown(stream func(string)) error {
 			// Hard failure — without this rename, a future netplan apply
 			// would clobber our config.
 			rollbackInterfaces(targetPath, backupPath)
-			rollbackNetworkd()
+			rollbackNet()
 			return fmt.Errorf("mv %s: %s", p, strings.TrimSpace(string(out)))
 		}
+	}
+
+	if viaNM {
+		// Drop the NetworkManager profiles netplan generated for them.
+		if out, err := exec.Command("sudo", "/usr/sbin/netplan", "generate").CombinedOutput(); err != nil {
+			log("  netplan generate: " + strings.TrimSpace(string(out)) + " (continuing)")
+		}
+		exec.Command("sudo", "/usr/bin/nmcli", "connection", "reload").Run() //nolint:errcheck
 	}
 
 	// Step 5: drop a cloud-init disable file (if cloud-init is installed)
@@ -957,13 +949,94 @@ func MigrateNetplanToIfupdown(stream func(string)) error {
 		for _, p := range scan.Files {
 			exec.Command("sudo", "/usr/bin/mv", p+".znas-disabled", p).Run() //nolint:errcheck
 		}
-		rollbackNetworkd()
+		rollbackNet()
 		return fmt.Errorf("ifupdown could not bring up %s — original network config restored",
 			strings.Join(bad, ", "))
 	}
 
 	log("✓ Migration complete. /etc/network/interfaces is now authoritative.")
 	return nil
+}
+
+// disableNetworkd stops, disables and masks systemd-networkd, its activation
+// sockets and wait-online (networkd renderer migration).
+func disableNetworkd(log func(string)) {
+	log("Disabling systemd-networkd (service + activation sockets + wait-online)…")
+	networkdUnits := []string{
+		"systemd-networkd-resolve-hook.socket",
+		"systemd-networkd-varlink.socket",
+		"systemd-networkd.socket",
+		"systemd-networkd.service",
+		// The wait-online unit is the real boot-time troublemaker: it is pulled
+		// in by network-online.target (Wants=) and its Requires=systemd-networkd
+		// RE-ACTIVATES networkd at boot even after we disable it, then blocks
+		// boot for ~2 min waiting for a "routable" interface networkd no longer
+		// manages. Disable it here and mask it below.
+		"systemd-networkd-wait-online.service",
+	}
+	for _, u := range networkdUnits {
+		for _, action := range []string{"disable", "stop"} {
+			out, err := exec.Command("sudo", "/usr/bin/systemctl", action, u).CombinedOutput()
+			if err == nil {
+				continue
+			}
+			msg := strings.TrimSpace(string(out))
+			if !strings.Contains(msg, "not loaded") &&
+				!strings.Contains(msg, "does not exist") &&
+				!strings.Contains(msg, "Failed to disable") {
+				log(fmt.Sprintf("  systemctl %s %s: %s (continuing)", action, u, msg))
+			}
+		}
+	}
+
+	// Mask systemd-networkd and its wait-online unit. Disabling alone is not
+	// enough on Ubuntu 26.04: network-online.target still pulls wait-online,
+	// which Requires= networkd and so brings it back at boot (and hangs boot
+	// ~2 min). Masking severs that chain for good — neither unit can be started
+	// or pulled in. Rollback (rollbackNetworkd) unmasks them.
+	log("Masking systemd-networkd + wait-online so boot can't wait on or revive them…")
+	for _, u := range []string{"systemd-networkd-wait-online.service", "systemd-networkd.service"} {
+		if out, err := exec.Command("sudo", "/usr/bin/systemctl", "mask", u).CombinedOutput(); err != nil {
+			log(fmt.Sprintf("  systemctl mask %s: %s (continuing)", u, strings.TrimSpace(string(out))))
+		}
+	}
+}
+
+// undoIfupdownHardening reverts hardenIfupdownBoot.
+func undoIfupdownHardening() {
+	exec.Command("sudo", "/usr/bin/systemctl", "unmask", "ifup@.service").Run() //nolint:errcheck
+	exec.Command("sudo", "/usr/bin/chmod", "+x", resolvedIfupHook).Run()        //nolint:errcheck
+}
+
+// nmUnmanagedConfPath keeps NetworkManager off the NICs handed to ifupdown.
+const nmUnmanagedConfPath = "/etc/NetworkManager/conf.d/99-znas-ifupdown.conf"
+
+// nmUnmanagedConf: the migrated NICs and the VM bridges (vmbr*) are
+// ifupdown's; NetworkManager keeps whatever else it manages.
+func nmUnmanagedConf(devs []string) string {
+	var parts []string
+	for _, d := range devs {
+		parts = append(parts, "interface-name:"+d)
+	}
+	parts = append(parts, "interface-name:vmbr*")
+	return "# Written by ZNAS during the netplan→ifupdown migration: these interfaces\n" +
+		"# are configured in /etc/network/interfaces (ifupdown).\n" +
+		"[keyfile]\nunmanaged-devices=" + strings.Join(parts, ";") + "\n"
+}
+
+// rollbackNetworkManager gives the NICs back to NetworkManager: our conf.d
+// file removed, the netplan files restored and applied.
+func rollbackNetworkManager(files []string) {
+	undoIfupdownHardening()
+	exec.Command("sudo", "/usr/bin/systemctl", "disable", "networking").Run() //nolint:errcheck
+	exec.Command("sudo", "/usr/bin/rm", "-f", nmUnmanagedConfPath).Run()      //nolint:errcheck
+	for _, p := range files {
+		if _, err := os.Stat(p + ".znas-disabled"); err == nil {
+			exec.Command("sudo", "/usr/bin/mv", p+".znas-disabled", p).Run() //nolint:errcheck
+		}
+	}
+	exec.Command("sudo", "/usr/bin/systemctl", "reload", "NetworkManager").Run() //nolint:errcheck
+	exec.Command("sudo", "/usr/sbin/netplan", "apply").Run()                     //nolint:errcheck
 }
 
 // liveManagedEtherDevices returns the names of ether interfaces that carry a
@@ -1236,6 +1309,7 @@ const resolvedIfupHook = "/etc/network/if-up.d/resolved"
 //     deleting a job — non-deterministically dbus.socket — which bricks D-Bus
 //     and makes boot WORSE and flaky (a lucky cycle-break boots fine, an
 //     unlucky one hangs 5 min). This was tried on znas3 and reverted.
+//
 //  2. udev's ifupdown-hotplug starts ifup@<dev>.service in parallel with
 //     networking.service's `ifup -a`; both race for /run/network/ifstate.<dev>.
 //     Mask ifup@.service so networking.service is the single bring-up path.
@@ -1255,9 +1329,7 @@ func hardenIfupdownBoot(log func(string)) {
 }
 
 func rollbackNetworkd() {
-	// Undo the ifupdown boot-hardening (hardenIfupdownBoot).
-	exec.Command("sudo", "/usr/bin/systemctl", "unmask", "ifup@.service").Run() //nolint:errcheck
-	exec.Command("sudo", "/usr/bin/chmod", "+x", resolvedIfupHook).Run()        //nolint:errcheck
+	undoIfupdownHardening()
 
 	// Undo the masks first — a masked unit can't be enabled or started.
 	for _, u := range []string{"systemd-networkd.service", "systemd-networkd-wait-online.service"} {
@@ -1276,4 +1348,13 @@ func rollbackNetworkd() {
 	// the next boot, but do NOT start it now — starting it would block on the
 	// online-wait for up to its timeout during an already-failed migration.
 	exec.Command("sudo", "/usr/bin/systemctl", "enable", "systemd-networkd-wait-online.service").Run() //nolint:errcheck
+}
+
+func containsStr(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }

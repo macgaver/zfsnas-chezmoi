@@ -33,6 +33,15 @@ var experimentalSudoersAliases = map[string]bool{
 // the MergerFS feature is installed (see RequiredSudoersContent).
 var mergerfsSudoersAlias = map[string]bool{"ZFSNAS_MERGERFS": true}
 
+// sdnSudoersAlias is gated on the Firewall (SDN) feature being enabled.
+// Enabling it requires full sudo (like virtualization); once on, a hardened
+// host needs these rules for every apply, revert and service change.
+var sdnSudoersAlias = map[string]bool{"ZFSNAS_SDN": true}
+
+// sdnEnabledForSudoers reports whether the Firewall is on (state file in the
+// portal's config dir). A var so tests can force it.
+var sdnEnabledForSudoers = SDNEnabledOnDisk
+
 // SudoersDiff is the result of comparing the installed sudoers file against
 // the required template.
 type SudoersDiff struct {
@@ -81,6 +90,7 @@ var sudoersSectionInfoMap = map[string]sudoersSectionInfo{
 	"ZFSNAS_SYNCOID":   {Label: "ZFS Replication (syncoid)", Optional: true},
 	"ZFSNAS_MERGERFS":  {Label: "MergerFS Support", Optional: true},
 	"ZFSNAS_RSYNC":     {Label: "External Storage & Filesystem rsync", Optional: true},
+	"ZFSNAS_SDN":       {Label: "Firewall (routing, NAT, DHCP/DNS, WireGuard, IDS)", Optional: true},
 	"ZFSNAS_APT":       {Label: "OS Updates & Installation"},
 	"ZFSNAS_SECURITY":  {Label: "Sudoers Self-Management"},
 }
@@ -163,6 +173,11 @@ func RequiredSudoersContent() string {
 	s := strings.Replace(requiredSudoersTemplate, "{{ZFSNAS_FILES}}", buildFilesAlias(), 1)
 	s = strings.Replace(s, "{{LXD_CAT_LINE}}", lxdConsoleCatLine(), 1)
 	s = applySudoRSSubstitutions(s)
+	return gateSudoersAliases(s)
+}
+
+// gateSudoersAliases drops the blocks of optional features that are not on.
+func gateSudoersAliases(s string) string {
 	// The virtualization aliases (ZFSNAS_INCUS*, ZFSNAS_VMSETUP, ZFSNAS_SYNCOID)
 	// only matter once virtualization is actually installed. As of v6.6.26 the
 	// feature is no longer gated behind --experimental, so the decisive signal is
@@ -180,6 +195,9 @@ func RequiredSudoersContent() string {
 	// than riding the virtualization one.
 	if !MergerFSInstalled() {
 		s = stripSudoersAliasSet(s, mergerfsSudoersAlias)
+	}
+	if !sdnEnabledForSudoers() {
+		s = stripSudoersAliasSet(s, sdnSudoersAlias)
 	}
 	return s
 }
@@ -402,6 +420,9 @@ func widenWildcardsForSudoRS(s string) string {
 		{"/usr/bin/umount /mnt/*", "/usr/bin/umount *"},
 		{"/usr/bin/systemctl enable --now *.mount", "/usr/bin/systemctl enable --now *"},
 		{"/usr/bin/systemctl disable --now *.mount", "/usr/bin/systemctl disable --now *"},
+		// ZFSNAS_SDN (v6.10.29) — the WireGuard key files are root-only 0600;
+		// their name is built in Go from a validated interface id.
+		{"/usr/bin/cat /etc/wireguard/*", "/usr/bin/cat *"},
 	}
 	for _, r := range repls {
 		s = strings.Replace(s, r[0], r[1], 1)
@@ -1635,6 +1656,84 @@ Cmnd_Alias ZFSNAS_APT = \
     /usr/bin/systemctl daemon-reload, \
     /usr/bin/systemctl enable zfsnas
 
+# ── Firewall (SDN routing & firewall, optional) ──────────────────────────────
+# since v6.10.29 — present once Firewall mode is enabled (enabling it needs
+#   full sudo). nft loads the firewall table in one transaction and reads its
+#   counters; ifup/ifdown bring the Firewall's VLAN, PPPoE and WireGuard links
+#   up and down (ifup in a systemd scope of its own so pppd/dhclient survive a
+#   portal restart); sysctl/modprobe turn on forwarding and conntrack byte
+#   accounting; ip keeps the gateway policy-routing rules and tables;
+#   conntrack feeds the traffic statistics and drops the connections of a
+#   failed gateway; systemd-run arms the 30-second auto-revert; systemctl runs
+#   the Firewall's own units and turns off the distribution's nftables and
+#   suricata services it replaces; wg syncs WireGuard peers and reads their
+#   status; suricata-update downloads the IDS rules; install/mkdir/rm/cat keep
+#   its root-only files (PPPoE secrets, WireGuard keys, DHCP leases);
+#   arping probes a virtual IP before taking it and announces it after.
+# since v6.10.30 — znas-sdn-ddns runs ddclient (dynamic DNS); its config
+#   (provider tokens) and cache are root-only.
+# since v6.10.30 — znas-sdn-dhcp runs one DHCP server per network (DNS stays
+#   in znas-sdn-dns); its per-network configs live in /etc/znas-sdn/dhcp.d.
+#   reload znas-sdn-dns makes DNS read its blocklist file again (no restart).
+Cmnd_Alias ZFSNAS_SDN = \
+    /usr/sbin/nft *, \
+    /usr/sbin/ifup *, \
+    /usr/sbin/ifdown *, \
+    /usr/bin/systemd-run --scope --quiet --collect -- ifup *, \
+    /usr/bin/systemd-run --unit znas-sdn-revert --collect *, \
+    /usr/sbin/sysctl *, \
+    /usr/sbin/modprobe nf_conntrack, \
+    /usr/sbin/ip *, \
+    /usr/bin/ping *, \
+    /usr/sbin/conntrack *, \
+    /usr/bin/arping *, \
+    /usr/bin/systemctl enable znas-sdn.service znas-sdn-gw.service znas-sdn-dns.service znas-sdn-dhcp.service znas-sdn-ids.service znas-sdn-ddns.service, \
+    /usr/bin/systemctl reload znas-sdn-dns.service, \
+    /usr/bin/systemctl restart znas-sdn-dhcp.service, \
+    /usr/bin/systemctl reload znas-sdn-dhcp.service, \
+    /usr/bin/systemctl stop znas-sdn-dhcp.service, \
+    /usr/bin/systemctl is-active znas-sdn-dhcp.service, \
+    /usr/bin/systemctl disable --now znas-sdn-dhcp.service, \
+    /usr/bin/systemctl restart znas-sdn-ddns.service, \
+    /usr/bin/systemctl stop znas-sdn-ddns.service, \
+    /usr/bin/systemctl is-active znas-sdn-ddns.service, \
+    /usr/bin/systemctl disable --now znas-sdn-ddns.service, \
+    /usr/bin/systemctl disable --now ddclient.service, \
+    /usr/bin/systemctl disable znas-sdn.service, \
+    /usr/bin/systemctl restart znas-sdn-gw.service, \
+    /usr/bin/systemctl restart znas-sdn-dns.service, \
+    /usr/bin/systemctl restart znas-sdn-ids.service, \
+    /usr/bin/systemctl reload znas-sdn-ids.service, \
+    /usr/bin/systemctl stop znas-sdn-gw.service, \
+    /usr/bin/systemctl stop znas-sdn-dns.service, \
+    /usr/bin/systemctl stop znas-sdn-ids.service, \
+    /usr/bin/systemctl stop znas-sdn-dns.service znas-sdn-ids.service, \
+    /usr/bin/systemctl stop znas-sdn-revert.service, \
+    /usr/bin/systemctl reset-failed znas-sdn-revert.service, \
+    /usr/bin/systemctl is-active znas-sdn-dns.service, \
+    /usr/bin/systemctl is-active znas-sdn-ids.service, \
+    /usr/bin/systemctl disable --now znas-sdn-gw.service, \
+    /usr/bin/systemctl disable --now znas-sdn-dns.service, \
+    /usr/bin/systemctl disable --now znas-sdn-ids.service, \
+    /usr/bin/systemctl is-enabled nftables.service, \
+    /usr/bin/systemctl enable nftables.service, \
+    /usr/bin/systemctl disable nftables.service, \
+    /usr/bin/systemctl disable --now suricata.service, \
+    /usr/bin/systemctl disable --now suricata-update.timer, \
+    /usr/bin/wg syncconf *, \
+    /usr/bin/wg show *, \
+    /usr/bin/suricata-update *, \
+    /usr/bin/install -m 600 /dev/null *, \
+    /usr/bin/mkdir -p *, \
+    /usr/bin/rm -f *, \
+    /usr/bin/cat /etc/ppp/chap-secrets, \
+    /usr/bin/cat /etc/ppp/pap-secrets, \
+    /usr/bin/cat /etc/wireguard/*, \
+    /usr/bin/cat /var/lib/misc/znas-sdn.leases, \
+    /usr/bin/cat /etc/znas-sdn/ddclient.conf, \
+    /usr/bin/cat /var/cache/znas-sdn/ddclient.cache, \
+    /usr/bin/tee *
+
 # ── Sudoers self-management (Sudoers Hardening feature) ───────────────────────
 # since v6.3.31 — lets the portal overwrite its own sudoers file when the
 #   Sudoers Hardening feature is enabled in the Prerequisites tab.
@@ -1650,5 +1749,5 @@ Cmnd_Alias ZFSNAS_SECURITY = \
 
 # ── Grant all of the above, passwordless, to the service account ──────────────
 zfsnas ALL=(ALL) NOPASSWD: \
-    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_S3, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_SYNCOID, ZFSNAS_MERGERFS, ZFSNAS_RSYNC, ZFSNAS_APT, ZFSNAS_SECURITY
+    ZFSNAS_ZFS, ZFSNAS_SMB, ZFSNAS_NFS, ZFSNAS_ISCSI, ZFSNAS_S3, ZFSNAS_UPS, ZFSNAS_DISKPOWER, ZFSNAS_SYSPOWER, ZFSNAS_MEMCOMP, ZFSNAS_SMART, ZFSNAS_DISK, ZFSNAS_SCAN, ZFSNAS_FILES, ZFSNAS_SYSTEM, ZFSNAS_JOURNAL, ZFSNAS_NTP, ZFSNAS_INCUSNET, ZFSNAS_INCUS, ZFSNAS_SYNCOID, ZFSNAS_MERGERFS, ZFSNAS_RSYNC, ZFSNAS_SDN, ZFSNAS_APT, ZFSNAS_SECURITY
 `

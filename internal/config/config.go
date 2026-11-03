@@ -69,6 +69,7 @@ type StandardPermissions struct {
 	ManageInstanceBackups bool `json:"manage_instance_backups,omitempty"` // VM/container backups & snapshots
 	ViewNetworking        bool `json:"view_networking,omitempty"`         // see the Networking section at all
 	ManageNetworking      bool `json:"manage_networking,omitempty"`       // create/edit/delete bridges & networks
+	ViewFirewall          bool `json:"view_firewall,omitempty"`           // see the Firewall (SDN) pages read-only; changing anything is admin-only
 	// InstanceVisibilityRegex, when non-empty, restricts which instances a
 	// standard user can see/act on: only VMs/containers whose ID matches this
 	// regular expression are visible. Empty = no restriction (all visible).
@@ -669,6 +670,8 @@ type UserPreferences struct {
 	MapPins map[string]map[string][2]float64 `json:"map_pins,omitempty"`
 	// In-app Guide: true once the user ticked "Don't show this guide at login".
 	GuideHideAtLogin bool `json:"guide_hide_at_login,omitempty"`
+	// Firewall GeoMap base map: "" = built-in outline, "osm" = OpenStreetMap.
+	FWMapStyle string `json:"fw_map_style,omitempty"`
 }
 
 // User represents a portal or SMB-only user.

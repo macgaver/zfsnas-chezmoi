@@ -292,6 +292,14 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 			"nut":                  true,
 			"hdparm":               true,
 			"proxmox-import-tools": true,
+			"nftables":             true, // SDN / Firewall
+			"ppp":                  true, // SDN / Firewall PPPoE
+			"dnsmasq-base":         true, // SDN / Firewall DHCP & DNS
+			"wireguard-tools":      true, // SDN / Firewall WireGuard
+			"suricata":             true, // SDN / Firewall intrusion detection
+			"iputils-arping":       true, // SDN / Firewall virtual IPs
+			"ddclient":             true, // SDN / Firewall dynamic DNS
+			"sdn-firewall":         true, // every missing Firewall package at once (enable)
 		}
 		if !allowlist[req.Package] {
 			jsonErr(w, http.StatusBadRequest, "package not in allowlist")
@@ -408,9 +416,67 @@ func HandleInstallPackage(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 
+		// Firewall: install whatever it uses that is missing, in one apt run.
+		if req.Package == "sdn-firewall" {
+			pkgs := system.SDNMissingPackages()
+			if len(pkgs) == 0 {
+				jsonOK(w, map[string]string{"message": "nothing to install"})
+				return
+			}
+			withSuricata := false
+			for _, p := range pkgs {
+				if p == "suricata" {
+					withSuricata = true
+				}
+			}
+			if withSuricata {
+				pkgs = append(pkgs, "suricata-update")
+			}
+			pkgCmd := exec.Command("sudo", append([]string{"apt-get", "install", "-y", "-q"}, pkgs...)...)
+			pkgCmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			out, err := pkgCmd.CombinedOutput()
+			if withSuricata {
+				system.SDNDisableDistroSuricata() // the Firewall runs its own unit
+			}
+			for _, p := range pkgs {
+				if p == "ddclient" {
+					system.SDNDisableDistroDDClient() // same: znas-sdn-ddns
+				}
+			}
+			if err != nil {
+				jsonErr(w, http.StatusInternalServerError, string(out))
+				return
+			}
+			audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionInstallPrereqs,
+				Result: audit.ResultOK, Details: "installed: " + strings.Join(pkgs, ", ")})
+			jsonOK(w, map[string]string{"message": "installed: " + strings.Join(pkgs, ", ")})
+			return
+		}
+
+		// Suricata: the Firewall runs its own unit (znas-sdn-ids) with its own
+		// configuration; the package's service starts on install and would
+		// sniff every interface with the stock rules — turn it off right away.
+		if req.Package == "suricata" {
+			pkgCmd := exec.Command("sudo", "apt-get", "install", "-y", "-q", "suricata", "suricata-update")
+			pkgCmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			out, err := pkgCmd.CombinedOutput()
+			system.SDNDisableDistroSuricata()
+			if err != nil {
+				jsonErr(w, http.StatusInternalServerError, string(out))
+				return
+			}
+			audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionInstallPrereqs,
+				Result: audit.ResultOK, Details: "installed: suricata, suricata-update"})
+			jsonOK(w, map[string]string{"message": "suricata installed"})
+			return
+		}
+
 		pkgCmd := exec.Command("sudo", "apt-get", "install", "-y", "-q", req.Package)
 		pkgCmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 		out, err := pkgCmd.CombinedOutput()
+		if req.Package == "ddclient" {
+			system.SDNDisableDistroDDClient() // the Firewall runs its own unit
+		}
 		if err != nil {
 			jsonErr(w, http.StatusInternalServerError, string(out))
 			return

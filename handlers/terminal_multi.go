@@ -58,7 +58,7 @@ const terminalMultiPageHTML = `<!DOCTYPE html>
 <!-- Selectable console fonts (gear → Font type). Same CDN-assumed model as xterm above. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Fira+Code&family=Source+Code+Pro&family=IBM+Plex+Mono&family=Roboto+Mono&family=Ubuntu+Mono&family=Inconsolata&family=Space+Mono&family=Cousine&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Fira+Code&family=Source+Code+Pro&family=IBM+Plex+Mono&family=Roboto+Mono&family=Ubuntu+Mono&family=Inconsolata&family=Space+Mono&family=Cousine&display=swap">
 <style>
   :root {
     --bg-0:#0e1014; --bg-1:#161922; --bg-2:#1d2230;

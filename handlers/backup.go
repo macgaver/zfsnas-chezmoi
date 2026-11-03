@@ -29,6 +29,7 @@ import (
 	"zfsnas/internal/audit"
 	"zfsnas/internal/backup"
 	"zfsnas/internal/config"
+	"zfsnas/internal/sdn"
 	"zfsnas/internal/session"
 	"zfsnas/internal/version"
 	"zfsnas/system"
@@ -43,7 +44,7 @@ var backupSkipNames = map[string]bool{
 	"smart_cache.json": true, "updates_cache.json": true,
 	"lxc.log": true, "qemu.log": true,
 }
-var backupSkipDirs = map[string]bool{"folder_usage": true, "lxd_metrics": true}
+var backupSkipDirs = map[string]bool{"folder_usage": true, "lxd_metrics": true, "sdn-history": true}
 
 // config.json keys that describe THIS machine; on import the target keeps its
 // own values (port, sudoers state, relay mode, caches…).
@@ -117,9 +118,23 @@ func safeName(s string) string {
 }
 
 // buildBackup gathers the files and the manifest.
+// sdnLocalFiles are the firewall files that describe THIS machine's runtime
+// (pre-SDN capture, pending countdown, revert point, the admin's draft) —
+// only the confirmed firewall config travels in a backup.
+var sdnLocalFiles = map[string]bool{"sdn/state.json": true, "sdn/pending.json": true, "sdn/revert.json": true, "sdn/draft.json": true, "sdn/ids-state.json": true, "sdn/restored.json": true}
+
 func buildBackup(opts backup.ExportOptions) (backup.Manifest, map[string][]byte, error) {
+	files, err := collectConfigFiles(config.Dir(), opts)
+	if err != nil {
+		return backup.Manifest{}, nil, err
+	}
+	return finishBackup(opts, files)
+}
+
+// collectConfigFiles gathers the config dir files a backup carries, keyed
+// "config/<rel>".
+func collectConfigFiles(dir string, opts backup.ExportOptions) (map[string][]byte, error) {
 	files := map[string][]byte{}
-	dir := config.Dir()
 	err := filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -144,6 +159,8 @@ func buildBackup(opts backup.ExportOptions) (backup.Manifest, map[string][]byte,
 			return nil
 		case strings.HasSuffix(name, ".rrd.json") && !opts.IncludeCharts:
 			return nil
+		case sdnLocalFiles[filepath.ToSlash(rel)]:
+			return nil
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -152,9 +169,10 @@ func buildBackup(opts backup.ExportOptions) (backup.Manifest, map[string][]byte,
 		files["config/"+filepath.ToSlash(rel)] = b
 		return nil
 	})
-	if err != nil {
-		return backup.Manifest{}, nil, err
-	}
+	return files, err
+}
+
+func finishBackup(opts backup.ExportOptions, files map[string][]byte) (backup.Manifest, map[string][]byte, error) {
 
 	m := backup.Manifest{ZNASVersion: version.Version, SourceType: "host", Hostname: system.GetHostname(),
 		CreatedAt: time.Now().UTC(), Options: opts}
@@ -557,6 +575,9 @@ func runImport(j *importJob, pi *pendingImport, req applyReq, user, role string)
 		fail("writing the settings", err)
 		return
 	}
+	if (sdn.Store{Dir: dir}).Restored() {
+		j.note("The Firewall configuration was restored but is not active: enable the Firewall from Requisites → Optional Features and choose to start from it")
+	}
 	j.logf("✓ Settings restored")
 
 	// 3. Linux accounts (same uid/gid so file ownership on the pools stays right).
@@ -778,6 +799,17 @@ func writeConfigFiles(dir string, files map[string][]byte, withCerts bool) error
 	for _, n := range names {
 		rel := strings.TrimPrefix(n, "config/")
 		data := files[n]
+		// The firewall config never replaces a running one on import: it
+		// becomes the draft, and the admin applies it (30 s countdown). With
+		// the Firewall off it is what enabling will start from.
+		if strings.HasPrefix(rel, "sdn/") || strings.HasPrefix(rel, "sdn-history/") {
+			if rel == "sdn/config.json" {
+				if err := sdnImportToDraft(dir, data); err != nil {
+					return fmt.Errorf("firewall config: %w", err)
+				}
+			}
+			continue
+		}
 		if rel == "config.json" {
 			merged, err := mergeLocalConfig(filepath.Join(dir, "config.json"), data, withCerts)
 			if err != nil {
@@ -922,6 +954,15 @@ func restoreSnapshot(dir, snap string) error {
 			}
 		}
 	}
+	// A firewall config the import stored for Enable (the running one is
+	// never replaced, so it is in the copy whenever there was one).
+	for _, n := range []string{"sdn/config.json", "sdn/draft.json", "sdn/restored.json"} {
+		if _, err := os.Stat(filepath.Join(snap, n)); os.IsNotExist(err) {
+			if err := os.Remove(filepath.Join(dir, n)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -935,4 +976,28 @@ func HandleBackupStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	jsonOK(w, map[string]any{"rollback_available": latest != "", "rollback_from": strings.TrimPrefix(latest, preImportPrefix)})
+}
+
+func sdnImportToDraft(dir string, data []byte) error {
+	var c sdn.Config
+	if err := json.Unmarshal(data, &c); err != nil {
+		return err
+	}
+	c.Normalize()
+	st := sdn.Store{Dir: dir}
+	if state, _ := st.LoadState(); !state.Enabled {
+		if err := st.SaveConfirmed(&c); err != nil {
+			return err
+		}
+		if err := st.DiscardDraft(); err != nil {
+			return err
+		}
+		return st.MarkRestored()
+	}
+	d, err := st.LoadDraft()
+	if err != nil {
+		return err
+	}
+	_, err = st.SaveDraft(&c, d.Revision, "backup import")
+	return err
 }

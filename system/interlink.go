@@ -183,6 +183,10 @@ type CheckUserResponse struct {
 // CheckUserOnRemote calls POST <url>/api/interlink/check-user, signing with sharedSecret.
 // tlsFP pins the TLS certificate of the remote server.
 func CheckUserOnRemote(remoteURL, sharedSecret, username, tlsFP string) (*CheckUserResponse, error) {
+	return checkUserVia(interlinkClientFor(tlsFP), remoteURL, sharedSecret, username)
+}
+
+func checkUserVia(client *http.Client, remoteURL, sharedSecret, username string) (*CheckUserResponse, error) {
 	nonce := make([]byte, 8)
 	rand.Read(nonce) //nolint:errcheck
 	req := CheckUserRequest{
@@ -194,13 +198,13 @@ func CheckUserOnRemote(remoteURL, sharedSecret, username, tlsFP string) (*CheckU
 	req.HMAC = checkUserHMAC(sharedSecret, req.Username, req.Timestamp, req.Nonce)
 
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/interlink/check-user", "application/json", bytes.NewReader(body))
+	resp, err := client.Post(remoteURL+"/api/interlink/check-user", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("check-user returned status %d", resp.StatusCode)
+		return nil, interlinkHTTPErr("check-user", resp)
 	}
 	var r CheckUserResponse
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
@@ -343,7 +347,9 @@ func RemoteUnlinkHMAC(sharedSecret, remoteID string, timestamp int64, nonce stri
 // SendRemoteUnlink calls POST <url>/api/interlink/remote-unlink, asking the remote
 // server to remove us from its linked-server list. Errors are ignored (best-effort).
 // tlsFP pins the TLS certificate of the remote server.
-func SendRemoteUnlink(remoteURL, sharedSecret, remoteID, tlsFP string) error {
+// removed says whether the remote really removed the link: it answers 200 even
+// when the signature did not match. A version that does not report it counts as removed.
+func SendRemoteUnlink(remoteURL, sharedSecret, remoteID, tlsFP string) (removed bool, err error) {
 	nonce := make([]byte, 8)
 	rand.Read(nonce) //nolint:errcheck
 	ts := time.Now().Unix()
@@ -354,13 +360,17 @@ func SendRemoteUnlink(remoteURL, sharedSecret, remoteID, tlsFP string) error {
 		HMAC:      RemoteUnlinkHMAC(sharedSecret, remoteID, ts, hex.EncodeToString(nonce)),
 	}
 	body, _ := json.Marshal(req)
-	resp, err := interlinkClientFor(tlsFP).Post(remoteURL+"/api/interlink/remote-unlink", "application/json", bytes.NewReader(body))
+	resp, err := interlinkClientWithin(tlsFP, 8*time.Second).Post(remoteURL+"/api/interlink/remote-unlink", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return false, err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("remote-unlink returned status %d", resp.StatusCode)
+		return false, fmt.Errorf("remote-unlink returned status %d", resp.StatusCode)
 	}
-	return nil
+	var r struct {
+		Removed *bool `json:"removed"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&r)
+	return r.Removed == nil || *r.Removed, nil
 }

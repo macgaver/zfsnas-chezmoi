@@ -51,6 +51,10 @@ func HandleSetHostBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg.Name = mux.Vars(r)["name"]
+	if err := system.FirewallOwnsNetwork(cfg.Name); err != nil {
+		jsonErr(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err := system.SetHostBridgeConfig(cfg); err != nil {
 		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionHostBridgeEdit,
 			Target: cfg.Name, Result: audit.ResultError, Details: err.Error()})
@@ -129,12 +133,20 @@ func HandleEditLXDNetwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Name = name
+	if err := system.FirewallOwnsNetwork(name); err != nil {
+		jsonErr(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err := system.EditLXDNetwork(req); err != nil {
 		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDNetEdit, Target: name, Result: audit.ResultError, Details: err.Error()})
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDNetEdit, Target: name, Result: audit.ResultOK})
+	if err := system.SDNIncusNetworkChanged(name, sess.Username); err != nil {
+		jsonErr(w, http.StatusConflict, "the network was changed, but the Firewall could not follow: "+err.Error())
+		return
+	}
 	jsonOK(w, map[string]string{"ok": "updated"})
 }
 
@@ -143,6 +155,14 @@ func HandleEditLXDNetwork(w http.ResponseWriter, r *http.Request) {
 func HandleDeleteLXDNetwork(w http.ResponseWriter, r *http.Request) {
 	sess := MustSession(r)
 	name := mux.Vars(r)["name"]
+	if err := system.FirewallOwnsNetwork(name); err != nil {
+		jsonErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	if err := system.FirewallUsesNetwork(name); err != nil {
+		jsonErr(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err := system.DeleteLXDNetwork(name); err != nil {
 		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionLXDNetDelete, Target: name, Result: audit.ResultError, Details: err.Error()})
 		jsonErr(w, http.StatusInternalServerError, err.Error())

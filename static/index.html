@@ -15,6 +15,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ZFS NAS">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap">
+  <link rel="stylesheet" href="/static/sdn.css">
   <!-- Self-hosted SVG icon library (replaces emoji across the UI). Loaded
        before the app script so znasIcon() is available to every renderer. -->
   <script src="/static/icons.js"></script>
@@ -23,7 +25,7 @@
        monospace if the appliance has no internet access. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Fira+Code&family=Source+Code+Pro&family=IBM+Plex+Mono&family=Roboto+Mono&family=Ubuntu+Mono&family=Inconsolata&family=Space+Mono&family=Cousine&display=swap">
+  <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Fira+Code&family=Source+Code+Pro&family=IBM+Plex+Mono&family=Roboto+Mono&family=Ubuntu+Mono&family=Inconsolata&family=Space+Mono&family=Cousine&display=swap">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
   <link rel="stylesheet" href="/static/vendor/codemirror.min.css">
   <link rel="stylesheet" href="/static/vendor/codemirror-dracula.min.css">
@@ -363,6 +365,10 @@
       white-space:nowrap; transition:background .1s;
     }
     .cs-opt:hover { background:var(--surface3,rgba(255,255,255,.07)); }
+    .cs-group { padding:9px 12px 3px; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+      color:var(--text-3); cursor:default; white-space:nowrap; }
+    .cs-group:not(:first-child) { border-top:1px solid var(--border); margin-top:3px; }
+    .cs-opt.cs-grouped { padding-left:20px; }
     .cs-opt.cs-selected { color:var(--accent); font-weight:600; }
     .cs-opt.cs-disabled { color:var(--text-3); opacity:.55; cursor:not-allowed; }
     .cs-opt.cs-disabled:hover { background:none; }
@@ -727,6 +733,9 @@
       <button class="sidebar-mode-btn" id="mode-btn-networking" onclick="switchSidebarMode('networking')" data-label="Infrastructure" aria-label="Infrastructure">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm9 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM6 14a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm4-6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-1 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/><path fill-rule="evenodd" d="M3 3.5A.5.5 0 0 1 3.5 3h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 3.5zm-1 5A.5.5 0 0 1 2.5 8h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8.5zm1 5A.5.5 0 0 1 3.5 13h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5z"/></svg>
       </button>
+      <button class="sidebar-mode-btn" id="mode-btn-firewall" onclick="switchSidebarMode('firewall')" data-label="Firewall" aria-label="Firewall" style="display:none;">
+        <span data-icon="shield" data-icon-size="14" style="display:inline-flex;"></span>
+      </button>
     </div>
 
     <div class="sidebar-section sidebar-collapse-row" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;">
@@ -789,6 +798,27 @@
       <!-- Compact-mode stand-in: a single bridges icon; click to expand + pick one. -->
       <button class="nav-item compact-only" id="nav-net-compact" onclick="_sidebarTempExpand()"
         title="Bridges — expand to choose"><span class="nav-icon" data-icon="network"></span></button>
+    </div>
+
+    <!-- Firewall nav (SDN) — shown only in firewall mode. Pages are created by static/sdn.js. -->
+    <div id="nav-firewall-section" style="display:none;">
+      <div class="sidebar-section" style="margin-top:0;">Monitor</div>
+      <button class="nav-item" id="nav-fw-topo" onclick="showPage('fw-topo')"><span class="nav-icon" data-icon="network"></span><span class="nav-label">Local Topo</span></button>
+      <button class="nav-item" id="nav-fw-traffic" onclick="showPage('fw-traffic')"><span class="nav-icon" data-icon="globe"></span><span class="nav-label">Traffic &amp; GeoMap</span></button>
+      <button class="nav-item" id="nav-fw-live" onclick="showPage('fw-live')"><span class="nav-icon" data-icon="list"></span><span class="nav-label">Live connections</span></button>
+      <button class="nav-item" id="nav-fw-ids" onclick="showPage('fw-ids')"><span class="nav-icon" data-icon="bell"></span><span class="nav-label">IDS alerts</span></button>
+      <button class="nav-item" id="nav-fw-dns" onclick="showPage('fw-dns')"><span class="nav-icon" data-icon="search"></span><span class="nav-label">DNS queries</span></button>
+      <div class="sidebar-section">Configure</div>
+      <button class="nav-item" id="nav-fw-interfaces" onclick="showPage('fw-interfaces')"><span class="nav-icon" data-icon="plug"></span><span class="nav-label">Interfaces</span></button>
+      <button class="nav-item" id="nav-fw-rules" onclick="showPage('fw-rules')"><span class="nav-icon" data-icon="shield"></span><span class="nav-label">Rules</span></button>
+      <button class="nav-item" id="nav-fw-nat" onclick="showPage('fw-nat')"><span class="nav-icon" data-icon="recycle"></span><span class="nav-label">NAT</span></button>
+      <button class="nav-item" id="nav-fw-gateways" onclick="showPage('fw-gateways')"><span class="nav-icon" data-icon="satellite"></span><span class="nav-label">Routing</span></button>
+      <button class="nav-item" id="nav-fw-groups" onclick="showPage('fw-groups')"><span class="nav-icon" data-icon="layers"></span><span class="nav-label">Groups &amp; countries</span></button>
+      <div class="sidebar-section">Services</div>
+      <button class="nav-item" id="nav-fw-dhcp" onclick="showPage('fw-dhcp')"><span class="nav-icon" data-icon="server"></span><span class="nav-label">DHCP &amp; DNS</span></button>
+      <button class="nav-item" id="nav-fw-wireguard" onclick="showPage('fw-wireguard')"><span class="nav-icon" data-icon="lock"></span><span class="nav-label">WireGuard</span></button>
+      <button class="nav-item" id="nav-fw-ddns" onclick="showPage('fw-ddns')"><span class="nav-icon" data-icon="refresh-cw"></span><span class="nav-label">Dynamic DNS</span></button>
+      <button class="nav-item" id="nav-fw-suricata" onclick="showPage('fw-suricata')"><span class="nav-icon" data-icon="search"></span><span class="nav-label">Intrusion detection</span></button>
     </div>
 
     <!-- Datastores nav — shown only in networking mode -->
@@ -921,6 +951,12 @@
       <div class="topbar-inner">
         <span id="topbar-pool-title" class="topbar-title">Pool Capacity</span>
         <span id="pool-summary" class="text-sm text-2" style="text-align:center;"></span>
+        <span id="net-title" class="topbar-title">Internet traffic</span>
+        <span id="net-summary" class="text-sm text-2"></span>
+        <div id="net-eq" title="Gateway traffic — download (top) and upload; the bright square marks the highest rate since you logged in">
+          <div class="net-eq-row"><span class="net-eq-l">DL</span><div class="net-eq-bars" id="net-eq-down"></div><span class="net-eq-v" id="net-eq-down-v">—</span></div>
+          <div class="net-eq-row"><span class="net-eq-l">UL</span><div class="net-eq-bars" id="net-eq-up"></div><span class="net-eq-v" id="net-eq-up-v">—</span></div>
+        </div>
         <div style="display:flex;align-items:center;gap:2px;justify-self:end;">
           <!-- UPS top-bar widget -->
           <div id="ups-topbar" class="ups-topbar-widget" onclick="openUPSPanel()" title="UPS Status" style="display:none;align-items:center;gap:3px;padding:2px 5px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);margin-right:4px;">
@@ -1013,7 +1049,7 @@
             <button id="user-menu-btn" onclick="toggleTopUserMenu(event)" title="User menu" style="padding:6px 8px;background:none;border:none;cursor:pointer;color:var(--text-2);display:flex;align-items:center;opacity:0.7;transition:opacity .15s;border-radius:var(--radius-sm);" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </button>
-            <div id="user-menu-dropdown" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.3);z-index:3000;overflow:hidden;">
+            <div id="user-menu-dropdown" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.3);z-index:3000;overflow:hidden;">
               <div style="padding:8px 14px 6px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-3);" id="user-menu-name">—</div>
               <button onclick="openUserSettingsModal();closeUserMenu();" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='var(--surface3,rgba(255,255,255,0.07))'" onmouseout="this.style.background='none'">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1023,10 +1059,11 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 My Password
               </button>
-              <button id="user-menu-compact" onclick="toggleCompactHeader()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='var(--surface3,rgba(255,255,255,0.07))'" onmouseout="this.style.background='none'" title="Toggle a single-row header that hides the capacity bar and live IO charts. Saved per browser only.">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-                <span class="compact-label">Compact Header</span>
-              </button>
+              <div class="um-section">Top header</div>
+              <button class="um-hdr" data-hdr="storage-full" onclick="setHeaderMode('storage-full')"><svg class="hdr-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Storage focus, full</span></button>
+              <button class="um-hdr" data-hdr="storage-compact" onclick="setHeaderMode('storage-compact')"><svg class="hdr-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Storage focus, compact</span></button>
+              <button class="um-hdr" data-hdr="network-full" onclick="setHeaderMode('network-full')"><svg class="hdr-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Network focus, full</span></button>
+              <button class="um-hdr" data-hdr="network-compact" onclick="setHeaderMode('network-compact')"><svg class="hdr-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Network focus, compact</span></button>
               <div style="height:1px;background:var(--border);margin:2px 0;"></div>
               <button onclick="logout();closeUserMenu();" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;color:var(--text-2);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='var(--surface3,rgba(255,255,255,0.07))'" onmouseout="this.style.background='none'">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1061,6 +1098,21 @@
       </div>
     </div>
     <div id="io-chart-tooltip"></div>
+
+    <!-- Network Focus (full) header: the gateway's live traffic and two
+         speedtest-style dials. static/net-header.js -->
+    <div id="net-bar">
+      <div class="net-chart-wrap">
+        <div class="io-chart-label">Gateway traffic <span id="net-chart-iface"></span>
+          <span class="net-key"><span class="net-sw" style="background:#64d2ff"></span>Download <span class="net-sw" style="background:#bf5af2"></span>Upload</span></div>
+        <canvas id="net-chart"></canvas>
+        <div id="net-empty" class="net-empty">No default route: this server has no gateway.</div>
+      </div>
+      <div class="net-gauges">
+        <div class="net-gauge" id="net-gauge-down"></div>
+        <div class="net-gauge" id="net-gauge-up"></div>
+      </div>
+    </div>
 
     </div><!-- end topbar+io-bar right column -->
     </div><!-- end #topbar-io-wrapper -->
@@ -1627,6 +1679,19 @@
               <span id="prereq-mergerfs-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
               <label class="appliance-only optfeat-appl-check" data-status="prereq-mergerfs-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-mergerfs-btn" class="btn btn-ghost btn-sm" onclick="installMergerFS()" style="font-size:12px;white-space:nowrap;">Install MergerFS</button>
+              <span class="optfeat-menu-slot" aria-hidden="true"></span>
+            </div>
+            <!-- SDN — Routing & Firewall. Kept actionable on the appliance too
+                 (pre-installed there, the owner only clicks Enable). -->
+            <div id="optfeat-sdn-row" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+              <div style="flex:1;">
+                <span style="color:var(--text-1);font-size:14px;font-weight:500;">SDN — Routing &amp; Firewall</span>
+                <span style="font-size:10px;font-weight:700;background:#f5a623;color:#000;border-radius:4px;padding:1px 6px;letter-spacing:.04em;margin-left:6px;vertical-align:1px;">BETA</span>
+                <i class="info-tip" data-tip="Turns this server into your network's router and firewall: interfaces (ports, VLANs), visual firewall rules, and soon NAT, DHCP/DNS, WireGuard, intrusion detection and a traffic GeoMap.&#10;&#10;Every change is applied with a 30-second confirmation: if it cuts you off, the server goes back to the previous configuration by itself.&#10;&#10;Adds the Firewall mode to the sidebar. Requires ifupdown networking."></i>
+                <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Packages: nftables, ifupdown</div>
+              </div>
+              <span id="sdnfeat-status" style="font-size:13px;color:var(--text-3);">Checking…</span>
+              <button id="sdnfeat-btn" class="btn btn-ghost btn-sm" style="font-size:12px;white-space:nowrap;">Enable</button>
               <span class="optfeat-menu-slot" aria-hidden="true"></span>
             </div>
             <div id="optfeat-lxd-enable-row" style="display:none;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
@@ -4691,18 +4756,43 @@
               <label class="form-label">Default Landing Page</label>
               <select id="us-landing-page" class="input">
                 <option value="">— None (default) —</option>
-                <option value="dashboard">Performance</option>
-                <option value="capacity">Capacity Trend</option>
-                <option value="disks">Physical Disks</option>
-                <option value="pool">ZFS Pools</option>
-                <option value="datasets">Datasets &amp; Zvol</option>
-                <option value="snapshots">Protect</option>
-                <option value="shares">SMB Shares</option>
-                <option value="nfs">NFS Shares</option>
-                <option value="activity">Activity &amp; Events</option>
-                <option value="settings">Settings</option>
-                <option value="lxd">VMs &amp; Containers</option>
-                <option value="lxd-networks">Network Bridges</option>
+                <optgroup label="Storage">
+                  <option value="dashboard">Performance</option>
+                  <option value="capacity">Capacity Trend</option>
+                  <option value="disks">Physical Disks</option>
+                  <option value="pool">ZFS Pools</option>
+                  <option value="datasets">Datasets &amp; Zvol</option>
+                  <option value="snapshots">Protect</option>
+                  <option value="shares">SMB Shares</option>
+                  <option value="nfs">NFS Shares</option>
+                  <option value="activity">Activity &amp; Events</option>
+                  <option value="settings">Settings</option>
+                </optgroup>
+                <optgroup label="Compute">
+                  <option value="lxd">VMs &amp; Containers</option>
+                  <option value="services">Services</option>
+                </optgroup>
+                <optgroup label="Infrastructure">
+                  <option value="lxd-networks">Network Bridges</option>
+                  <option value="lxd-datastores">Datastores</option>
+                  <option value="lxd-backups">Backups</option>
+                </optgroup>
+                <optgroup label="Firewall">
+                  <option value="fw-topo">Local Topo</option>
+                  <option value="fw-traffic">Traffic &amp; GeoMap</option>
+                  <option value="fw-live">Live connections</option>
+                  <option value="fw-ids">IDS alerts</option>
+                  <option value="fw-dns">DNS queries</option>
+                  <option value="fw-interfaces">Interfaces</option>
+                  <option value="fw-rules">Rules</option>
+                  <option value="fw-nat">NAT</option>
+                  <option value="fw-gateways">Routing</option>
+                  <option value="fw-groups">Groups &amp; countries</option>
+                  <option value="fw-dhcp">DHCP &amp; DNS</option>
+                  <option value="fw-wireguard">WireGuard</option>
+                  <option value="fw-ddns">Dynamic DNS</option>
+                  <option value="fw-suricata">Intrusion detection</option>
+                </optgroup>
               </select>
               <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Page shown automatically after login</div>
             </div>
@@ -8189,7 +8279,7 @@ Select the Console tab to load.</pre>
         <span class="guide-brand-ic"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
         <div>
           <h3 id="guide-title" style="margin:0;">ZNAS Guide</h3>
-          <div class="guide-sub">Eight things to learn to get the most out of your NAS</div>
+          <div class="guide-sub">Nine things to learn to get the most out of your NAS</div>
         </div>
       </div>
       <button class="modal-close" onclick="closeGuide()" aria-label="Close"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
@@ -12598,7 +12688,7 @@ Select the Console tab to load.</pre>
 
 <!-- ===== InterLink: Manage Connected Servers modal ===== -->
 <div class="modal-backdrop hidden" id="modal-interlink" onclick="if(event.target===this)closeInterlinkModal()">
-  <div class="modal" style="max-width:640px;">
+  <div class="modal" style="max-width:860px;">
     <div class="modal-header">
       <h3>InterLink — Connected Servers</h3>
       <button class="modal-close" onclick="closeInterlinkModal()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
@@ -12620,6 +12710,7 @@ Select the Console tab to load.</pre>
           <i class="info-tip" data-tip="When enabled, switching to a linked server keeps your browser on this portal — all management API calls are securely proxied through this server to the remote. The remote does not need to be directly reachable from your browser, improving security and allowing management of servers behind a firewall."></i>
         </label>
       </div>
+      <div id="interlink-health-wrap" style="margin-top:16px"></div>
     </div>
   </div>
 </div>
@@ -13190,6 +13281,8 @@ let abRefreshInt     = null;
 // in All-Servers mode). "Show more" bumps the limit; the body scrolls.
 let _abEntriesLimit  = 250;
 let _abLastEntries   = null;
+let _abTotal         = 0;   // entries in the whole log (X-Audit-Total)
+let _abEtag          = {};  // {url, tag} of the rows on show
 let activeJobs       = {};  // id -> { label, startedAt, pending? }
 let _installRunning  = false;           // true while an install fetch is in flight
 let _pageUnloading   = false;
@@ -13351,6 +13444,7 @@ let _upsPerfCostCents = null;   // electricity cost (¢/kWh) for $/yr in UPS too
   }).catch(() => {}).finally(() => { _sidebarVersionCheck(); });
 
   await loadSettings();
+  await _loadIfNames();
   initAlertsWebSocket();
   _initAbAllServersGating();
   // Re-attach pollers for rsync jobs running on THIS server so background
@@ -14489,7 +14583,7 @@ function showPage(name) {
   if (name === 'users')     { showPage('settings'); switchSettingsTab('users'); return; }
   if (name !== 'activity')  _journalStopLive();
   if (name === 'activity')  _activityPageEnter();
-  if (name === 'prereqs')   loadPrereqs();
+  if (name === 'prereqs')   { loadPrereqs(); if (typeof sdnLoadStatus === 'function') sdnLoadStatus(); }
   if (name === 'disks')     { loadDisks(); _updateDiskPowerPrereqStatus(); }
   if (name === 'pool')      loadPool();
   if (name === 'datasets')  loadDatasets();
@@ -14517,6 +14611,7 @@ function showPage(name) {
   if (name === 'lxd-datastores')  { loadLXDDatastores(); _setDatastoresRootActive(); }
   if (name === 'lxd-backups')     { loadAllBackups(); }
   if (name === 'datastore-detail') {} // loaded by openDatastoreDetail
+  if (typeof sdnIsPage === 'function' && sdnIsPage(name)) sdnOnShowPage(name);
   // Sweep any <select id="…"> that hasn't been wrapped with the styled
   // custom dropdown yet. Idempotent — selects already initialised (or
   // explicitly opted out, e.g. settings-timezone) are skipped.
@@ -14527,6 +14622,7 @@ function showPage(name) {
 
 // ===== Logout =====
 async function logout() {
+  if (typeof window._clearNetPeak === 'function') window._clearNetPeak(); // the header's maxima are per login
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login';
 }
@@ -14959,18 +15055,34 @@ async function refreshActivityBar() {
   // browser already tracks are filtered out inside, since those render as
   // interactive rows in ab-jobs.
   _refreshRemoteJobs();
+  // Slow links: nothing is fetched for a closed drawer (opening it refreshes),
+  // only the rows on show are asked for, and an unchanged log answers 304. The
+  // ETag is sent by hand because a browser that distrusts the certificate keeps
+  // no cache to revalidate.
+  const bar = document.getElementById('activity-bar');
+  if (bar && bar.classList.contains('collapsed')) { renderActivityBar(null); return; }
+  const paged = url + '?limit=' + _abEntriesLimit;
+  const entriesEl = document.getElementById('ab-entries');
+  const headers = {};
+  if (_abEtag.url === paged && _abEtag.tag && entriesEl && entriesEl.children.length) headers['If-None-Match'] = _abEtag.tag;
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(paged, { headers });
+    if (resp.status === 304) { renderActivityBar(null); return; }
     if (!resp.ok) {
       if (useAgg) {
-        const r2 = await fetch('/api/audit');
+        const r2 = await fetch('/api/audit?limit=' + _abEntriesLimit);
         if (!r2.ok) return;
-        renderActivityBar((await r2.json()) || []);
+        const list = (await r2.json()) || [];
+        _abTotal = +r2.headers.get('X-Audit-Total') || list.length;
+        _abEtag = {};
+        renderActivityBar(list);
       }
       return;
     }
-    const entries = await resp.json();
-    renderActivityBar(entries || []);
+    const entries = (await resp.json()) || [];
+    _abTotal = +resp.headers.get('X-Audit-Total') || entries.length;
+    _abEtag = { url: paged, tag: resp.headers.get('ETag') };
+    renderActivityBar(entries);
   } catch {}
 }
 
@@ -15093,7 +15205,7 @@ function renderActivityBar(entries) {
   _abLastEntries = entries;
   const ordered = _abAllServers ? entries : [...entries].reverse();
   const recent = ordered.slice(0, _abEntriesLimit);
-  const remaining = ordered.length - recent.length;
+  const remaining = Math.max(ordered.length, _abTotal) - recent.length;
   entriesEl.innerHTML = recent.map(e => {
     const ev = _auditEventMeta(e);
     // Inline hostname chip — only in aggregate mode, so the local-only
@@ -15122,11 +15234,11 @@ function renderActivityBar(entries) {
     : '');
 }
 
-// Extends the drawer's visible entry window and re-renders from the cached
-// last fetch (no refetch needed). The 10s refresher keeps the wider window.
+// Extends the drawer's visible entry window and fetches the older rows. The
+// 10s refresher keeps the wider window.
 function _abShowMoreEntries() {
   _abEntriesLimit += 500;
-  if (_abLastEntries) renderActivityBar(_abLastEntries);
+  refreshActivityBar();
 }
 
 // Returns display metadata for an audit entry based on its action type.
@@ -17659,13 +17771,26 @@ function _journalStopLive() {
 
     function _buildOpts() {
       list.innerHTML = '';
+      var lastGroup = null;
       Array.from(sel.options).forEach(function(opt) {
         // A hidden <option> must not appear in the custom dropdown list — this
         // is how callers remove a choice (e.g. "Efficient Cores" on a CPU with
         // no efficiency cores) without deleting it from the native select.
         if (opt.hidden) return;
+        // <optgroup>: a heading before its first visible option (a group
+        // whose options are all hidden shows no heading).
+        var grp = opt.parentElement && opt.parentElement.tagName === 'OPTGROUP' ? opt.parentElement : null;
+        if (grp !== lastGroup) {
+          lastGroup = grp;
+          if (grp) {
+            var h = document.createElement('div');
+            h.className = 'cs-group';
+            h.textContent = grp.label;
+            list.appendChild(h);
+          }
+        }
         var div = document.createElement('div');
-        div.className = 'cs-opt' + (opt.value === sel.value ? ' cs-selected' : '');
+        div.className = 'cs-opt' + (opt.value === sel.value ? ' cs-selected' : '') + (grp ? ' cs-grouped' : '');
         if (opts.richOpts && opt.dataset.html) {
           div.innerHTML = opt.dataset.html;
         } else {
@@ -19384,6 +19509,8 @@ function _buildEventSubsHTML(p) {
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-users"><span>User created / deleted</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-shares"><span>Share created / deleted</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-pool-actions"><span>ZFS Pool actions (pool destroyed / disconnected / imported, dataset created / deleted, zvol created / deleted)</span></label>
+    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-firewall"><span>Firewall events <i class="info-tip tip-left tip-down" data-tip="Internet link (gateway) down, back up, or traffic moved to another link; a change automatically reverted because nobody confirmed it; the firewall starting in safe mode."></i></span></label>
+    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-ids"><span>Firewall intrusion detection <i class="info-tip tip-left tip-down" data-tip="Suricata alerts at or above the severity chosen on Firewall → Intrusion detection (at most once an hour per signature and source, 20 an hour in all)."></i></span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-interlink"><span>Interlink server unreachable <i class="info-tip tip-left tip-down" data-tip="Connectivity to every linked Interlink server is tested every 5 minutes. You are notified once when a server stops responding, and once more when it becomes reachable again."></i></span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-ups-power"><span>UPS power lost / recovered / shutdown <i class="info-tip tip-left tip-down" data-tip="Notifies once when the UPS loses AC power (switches to battery) and once when AC power is restored. If power drops again shortly after recovering, a fresh notification is sent — repeat outages are never suppressed.&#10;&#10;Also sends a final notification when an automatic shutdown is triggered by your configured battery threshold, naming the threshold that was crossed. That one is sent BEFORE the server halts and is waited on (up to ~15s), so it is the last thing the server does while still online. Requires the UPS feature to be enabled."></i></span></label>`;
 }
@@ -19422,6 +19549,8 @@ function _loadEventSubs(p, ev) {
   setChk(`al-${p}-ev-shares`,       ev.share_created_deleted);
   setChk(`al-${p}-ev-pool-actions`, ev.pool_actions);
   setChk(`al-${p}-ev-interlink`,    ev.interlink_unreachable);
+  setChk(`al-${p}-ev-firewall`,     ev.firewall_events);
+  setChk(`al-${p}-ev-ids`,          ev.ids_alerts);
   setChk(`al-${p}-ev-ups-power`,    ev.ups_power_changed);
   // Virtualization events — same EventConfig object, separate UI section.
   setChk(`al-${p}-ev-vm-start-fail`,        ev.vm_start_failure);
@@ -19454,6 +19583,8 @@ function _collectEventSubs(p) {
     share_created_deleted:  chk(`al-${p}-ev-shares`),
     pool_actions:           chk(`al-${p}-ev-pool-actions`),
     interlink_unreachable:  chk(`al-${p}-ev-interlink`),
+    firewall_events:        chk(`al-${p}-ev-firewall`),
+    ids_alerts:             chk(`al-${p}-ev-ids`),
     ups_power_changed:      chk(`al-${p}-ev-ups-power`),
     vm_start_failure:             chk(`al-${p}-ev-vm-start-fail`),
     vm_unexpected_stop:           chk(`al-${p}-ev-vm-unexpected-stop`),
@@ -25916,41 +26047,58 @@ async function loadSchedules() {
   }
 }
 
+// The Protect dot sums up ZFS protection and Filesystem rsync: red for a
+// snapshot or replication error, yellow for a failed rsync (the "Filesystem
+// rsync failed" live alert comes from the same status), green when something
+// is set up and fine, nothing when no schedule exists and no rsync has run.
+let _protectPolicies = [];
+let _protectStorages = [];
+
 async function refreshSnapshotNavDot() {
-  try {
-    const resp = await fetch('/api/snapshot-schedules');
-    if (!resp.ok) return;
-    const data = await resp.json();
-    updateSnapshotNavDot(data);
-  } catch { /* silent */ }
+  // Each answer belongs to the server in view: a failure must not leave the
+  // previous server's state on the dot after an InterLink switch.
+  const list = async url => {
+    try {
+      const resp = await fetch(url);
+      return resp.ok ? ((await resp.json()) || []) : [];
+    } catch { return []; }
+  };
+  const [policies, storages] = await Promise.all([list('/api/snapshot-schedules'), list('/api/extstorage')]);
+  _protectStorages = storages;
+  updateSnapshotNavDot(policies);
+}
+
+function _paintProtectNavDot() {
+  const dot = document.getElementById('nav-snapshots-dot');
+  if (!dot) return;
+  const policies = _protectPolicies, storages = _protectStorages;
+  const snapError = policies.some(_policyHasError);
+  const rsyncFailed = storages.some(s => s.last_sync_status === 'error');
+  const rsyncGood = storages.some(s => s.rsync && s.rsync.enabled && s.last_sync_status === 'ok');
+  const paint = (color, glow) => {
+    dot.style.display = '';
+    dot.style.background = color;
+    dot.style.boxShadow = '0 0 4px ' + glow;
+  };
+  if (snapError) paint('#ff453a', 'rgba(255,59,48,0.6)');
+  else if (rsyncFailed) paint('#f0b429', 'rgba(240,180,41,0.6)');
+  else if (policies.length || rsyncGood) paint('#32d74b', 'rgba(48,209,88,0.6)');
+  else dot.style.display = 'none';
+}
+
+function _policyHasError(p) {
+  return p.last_status === 'error' ||
+    (p.replication_enabled && p.last_rep_status === 'error') ||
+    (p.local_repl_enabled && p.last_local_repl_status === 'error');
 }
 
 function updateSnapshotNavDot(policies) {
-  const dot = document.getElementById('nav-snapshots-dot');
-  if (!dot) return;
-  if (!policies || !policies.length) {
-    dot.style.display = 'none';
-    return;
-  }
-  const hasError = policies.some(p =>
-    p.last_status === 'error' ||
-    (p.replication_enabled && p.last_rep_status === 'error') ||
-    (p.local_repl_enabled && p.last_local_repl_status === 'error')
-  );
-  dot.style.display = '';
-  if (hasError) {
-    dot.style.background = '#ff453a';
-    dot.style.boxShadow  = '0 0 4px rgba(255,59,48,0.6)';
-    // Live alerts feed
-    const errNames = policies.filter(p =>
-      p.last_status === 'error' ||
-      (p.replication_enabled && p.last_rep_status === 'error') ||
-      (p.local_repl_enabled && p.last_local_repl_status === 'error')
-    ).map(p => p.dataset || p.name || '').filter(Boolean);
+  _protectPolicies = policies || [];
+  _paintProtectNavDot();
+  const errNames = _protectPolicies.filter(_policyHasError).map(p => p.dataset || p.name || '').filter(Boolean);
+  if (_protectPolicies.some(_policyHasError)) {
     _setLiveAlert('snapshot-error', { severity: 'danger', label: 'Snapshot/replication error', message: errNames.join(', '), page: 'snapshots' });
   } else {
-    dot.style.background = '#32d74b';
-    dot.style.boxShadow  = '0 0 4px rgba(48,209,88,0.6)';
     _clearLiveAlert('snapshot-error');
   }
 }
@@ -26091,6 +26239,8 @@ async function loadExtStorages() {
   }
   renderExtStorages(el);
   _extUpdateTabDot();
+  _protectStorages = _extStorages;
+  _paintProtectNavDot();
   // While a sync is running, keep the Last Sync column progress fresh.
   clearTimeout(_extRefreshTimer);
   if (_extStorages.some(s => s.running_job)) {
@@ -32518,6 +32668,35 @@ function esc(s) {
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\\/g,'&#92;');
 }
 
+// Interface names: wherever an interface is shown, it is shown by the name
+// the admin gave it when configuring it (Firewall → Interfaces), and by its
+// Linux name only when it has none. /api/sdn/ifnames maps Linux devices
+// (VLAN, its bridge, a PPPoE link…) to those names.
+window._ifNames = window._ifNames || {};
+function ifLabel(dev) {
+  return (dev && window._ifNames[dev]) || dev || '';
+}
+// The same for HTML, with the Linux name on hover when they differ.
+// A table's interface cell: the given name, the Linux name under it.
+function _ifNameCell(dev) {
+  const n = dev && window._ifNames[dev];
+  return n ? `<td><div style="font-weight:600;">${esc(n)}</div><div style="font-family:monospace;font-size:11px;color:var(--text-3);">${esc(dev)}</div></td>`
+    : `<td style="font-family:monospace;font-weight:600;">${esc(dev || '')}</td>`;
+}
+function ifLabelHTML(dev) {
+  const n = dev && window._ifNames[dev];
+  return n ? `<span title="Linux interface: ${esc(dev)}">${esc(n)}</span>` : esc(dev || '');
+}
+async function _loadIfNames() {
+  try {
+    const r = await fetch('/api/sdn/ifnames');
+    if (r.ok) window._ifNames = (await r.json()) || {};
+  } catch (_) {}
+}
+window.ifLabel = ifLabel;
+window.ifLabelHTML = ifLabelHTML;
+window._loadIfNames = _loadIfNames;
+
 // Returns a hard-drive/SSD SVG icon string at the given pixel size.
 function diskSVG(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>`;
@@ -33138,7 +33317,7 @@ function openInteractiveUpdate() {
 
 // ===== v6.10.4: in-app Guide ===================================================
 // Book button (top right) + auto-open after login until "Don't show this guide at
-// login" is ticked (UserPreferences.guide_hide_at_login). Eight topics; the first,
+// login" is ticked (UserPreferences.guide_hide_at_login). Nine topics; the first,
 // Quick Start, is a live checklist built from this server's real state, so it
 // also follows an InterLink relay to whichever server is being viewed.
 let _guideIdx = 0;
@@ -33157,6 +33336,7 @@ const _G_IC = {
   check:   '<path d="M20 6 9 17l-5-5"/>',
   arrow:   '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
   bulb:    '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  globe:   '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
   party:   '<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/>',
 };
 
@@ -33185,6 +33365,8 @@ function _guideGo(fn) {
     users:       () => { showPage('settings'); setTimeout(() => switchSettingsTab('users'), 100); },
     security:    () => { showPage('settings'); setTimeout(() => switchSettingsTab('security'), 100); },
     platform:    () => { showPage('updates'); },
+    fwTraffic:   () => { if (typeof switchSidebarMode === 'function') switchSidebarMode('firewall'); showPage('fw-traffic'); },
+    fwRules:     () => { if (typeof switchSidebarMode === 'function') switchSidebarMode('firewall'); showPage('fw-rules'); },
   }[fn];
   if (run) setTimeout(run, 60);
 }
@@ -33263,6 +33445,22 @@ const _GUIDE_TOPICS = [
       ])}
       <p>The three icons under the server name switch the sidebar between <strong>Storage</strong>, <strong>Compute</strong> (your instances) and <strong>Infrastructure</strong> (networks, datastores, backups).</p>
       <div class="guide-actions">${window._appliance ? '' : _gBtn('Enable in Optional Features', 'optfeat')}${_gBtn('Add a datastore', 'datastore')}${_gBtn('Open VMs & Containers', 'vms', true, false)}</div>` },
+  { id: 'firewall', title: 'Firewall & router', blurb: 'Route, filter and watch your networks', ic: 'globe', c1: '#64d2ff', c2: '#bf5af2', render: () => `
+      <h2>Firewall & router</h2>
+      <p class="guide-lead">The optional <strong>Firewall</strong> turns ZNAS into the router of your home or lab: it joins your networks, filters what goes between them and the Internet, and shows <strong>who talks to whom</strong>, by country and city, on a live map.</p>
+      ${_gShot('firewall', 'Traffic & GeoMap: arrows point away from whoever started the connection')}
+      ${_gIdeas([
+        ['Interfaces', 'Adopt network ports, create VLANs (optionally usable by VMs), or a PPPoE Internet link.'],
+        ['Rules', 'Allow or block per network, by address, port or country. Changes go to a draft until you Apply.'],
+        ['Safe apply', 'Every Apply starts a 30-second countdown: if you lose access, the router goes back by itself. <em>Last Change</em> restores any of the last 15 changes.'],
+        ['Gateways & NAT', 'Several Internet links with automatic failover, port forwards (also from the VM editor) and outbound NAT through the link you choose.'],
+        ['DHCP, DNS & VPN', 'Hand out addresses with names in DNS, and connect phones or other sites with WireGuard (QR codes).'],
+        ['Intrusion detection', 'Suricata watches your Internet links with free rule sets; block an attacker from its alert in one click.'],
+      ])}
+      <div class="guide-actions">${window._sdnEnabled
+        ? _gBtn('Open Traffic & GeoMap', 'fwTraffic', true, false) + _gBtn('Open Rules', 'fwRules', false, false)
+        : _gBtn('Enable in Optional Features', 'optfeat', true)}</div>
+      ${_gTip('Start in <strong>Monitor only</strong> mode: nothing is filtered, and the traffic map shows you what your network really does before you write any rule.')}` },
   { id: 'monitor', title: 'Monitor & get alerts', blurb: 'Know what happens, before it matters', ic: 'bell', c1: '#ff9f0a', c2: '#ffd60a', render: () => `
       <h2>Monitor & get alerts</h2>
       <p class="guide-lead">The top bar always shows the selected pool's capacity and live disk activity. <strong>Performance</strong> charts CPU, memory, network and disk I/O; <strong>Capacity Trend</strong> shows how fast your storage fills up.</p>
@@ -34768,6 +34966,7 @@ function updateIOCharts(data) {
 // current server. Called on an interlink relay switch — the previous host's
 // disks (and its pool device filter) must not carry over.
 function _resetIOBar() {
+  if (typeof window._resetNetHeader === 'function') window._resetNetHeader();
   _ioDevices = [];
   _ioBufs = {};
   _ioCurrentPoolDevs = null;
@@ -36029,10 +36228,10 @@ function _renderGlobalPerfCharts(series, ifaces) {
   ifaces.forEach((iface, i) => {
     const rxColor = _NIC_RX[i % _NIC_RX.length];
     const txColor = _NIC_TX[i % _NIC_TX.length];
-    netDs.push({ label: iface + ' RX', data: negatePts(makePts('net_' + iface + '_rx')), fill: 'origin', borderColor: rxColor, backgroundColor: rxColor + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true });
-    netDs.push({ label: iface + ' TX', data:           makePts('net_' + iface + '_tx'),  fill: 'origin', borderColor: txColor, backgroundColor: txColor + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true });
-    legendHtml += `<span style="font-size:11px;color:${rxColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${iface} RX</span> `;
-    legendHtml += `<span style="font-size:11px;color:${txColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${iface} TX</span> `;
+    netDs.push({ label: ifLabel(iface) + ' RX', data: negatePts(makePts('net_' + iface + '_rx')), fill: 'origin', borderColor: rxColor, backgroundColor: rxColor + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true });
+    netDs.push({ label: ifLabel(iface) + ' TX', data:           makePts('net_' + iface + '_tx'),  fill: 'origin', borderColor: txColor, backgroundColor: txColor + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true });
+    legendHtml += `<span style="font-size:11px;color:${rxColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${esc(ifLabel(iface))} RX</span> `;
+    legendHtml += `<span style="font-size:11px;color:${txColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${esc(ifLabel(iface))} TX</span> `;
   });
   // Network chart uses external tooltip (overflows card bounds, sorted by value)
   (function() {
@@ -36406,11 +36605,11 @@ function _renderDashboardCharts(data, ifaceIPs = {}) {
       const rxColor  = _NIC_RX_COLORS[i % _NIC_RX_COLORS.length];
       const txColor  = _NIC_TX_COLORS[i % _NIC_TX_COLORS.length];
       const ipSuffix = ifaceIPs[iface] ? ' (' + ifaceIPs[iface] + ')' : '';
-      const label    = iface + ipSuffix;
+      const label    = ifLabel(iface) + ipSuffix;
       netDatasets.push(_dashDS(label + ' RX', rxColor, negate(built.dataArrays[i]), 'origin'));
       netDatasets.push(_dashDS(label + ' TX', txColor,       built.dataArrays[half + i], 'origin'));
-      legendHtml += `<span style="font-size:11px;color:${rxColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${label} RX</span> `;
-      legendHtml += `<span style="font-size:11px;color:${txColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${label} TX</span> `;
+      legendHtml += `<span style="font-size:11px;color:${rxColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${esc(label)} RX</span> `;
+      legendHtml += `<span style="font-size:11px;color:${txColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${esc(label)} TX</span> `;
     });
   } else {
     netLabels = _dashBuild24h([[]]).labels;
@@ -41684,7 +41883,7 @@ function runReplicationTask(id, name) {
     const briBox={}, instBox={}, dockBox={};
     // Measure the bridge sub-line in the SAME '↓x ↑y' format netUpdateDynamic
     // writes each poll — sizing for the single total let live text outgrow the box.
-    bridges.forEach(b=> briBox[b.id]=netMeasure('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>', b.name, ['↓'+netMbps(b.rx_mbps||0)+' ↑'+netMbps(b.tx_mbps||0)]));
+    bridges.forEach(b=> briBox[b.id]=netMeasure('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>', ifLabel(b.name), ['↓'+netMbps(b.rx_mbps||0)+' ↑'+netMbps(b.tx_mbps||0)]));
     instances.forEach(i=> instBox[i.id]=netMeasure(i.type==='vm'?'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>':'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>', i.name, [i.state||'']));
     docker.forEach(d=> dockBox[d.id]=netMeasure('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a5 5 0 0 0 5 5h6a5 5 0 0 0 5-5v-1H3z"/><path d="M4 9h2v2H4zM7 9h2v2H7zM10 9h2v2h-2zM10 6h2v2h-2z"/><path d="M19 12c1.5 0 3-1 3-3-1 0-2 .5-2.5 1"/></svg>', d.name, [netPortsLine(d.ports)]));
 
@@ -41735,7 +41934,7 @@ function runReplicationTask(id, name) {
       nodesSvg += netNodeMarkup({ id:b.id, cx:b.__cx, cy:b.__cy, w:bb.w, h:bb.h,
         cls:'net-node--bridge'+(b.managed?' net-managed':''), icon:'<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>',
         lines:bb.lines, subs:bb.subs, hue:b.__hue,
-        tip:b.name+(b.managed?' (managed)':'')+' — ↓'+netMbps(b.rx_mbps)+' ↑'+netMbps(b.tx_mbps) });
+        tip:ifLabel(b.name)+(ifLabel(b.name)!==b.name?' ('+b.name+')':'')+(b.managed?' (managed)':'')+' — ↓'+netMbps(b.rx_mbps)+' ↑'+netMbps(b.tx_mbps) });
     });
     instances.forEach(i=>{
       if (i.__cx==null) return;
@@ -43559,7 +43758,7 @@ function runReplicationTask(id, name) {
         body: JSON.stringify({ server_id: serverId })
       });
       if (!res.user_exists) {
-        _showToast('Your account does not exist on that server.', 'warning');
+        window.interlinkSwitchFailed(res);
         return;
       }
       if (res.relay) {
@@ -43605,6 +43804,7 @@ function runReplicationTask(id, name) {
     document.getElementById('modal-interlink').classList.remove('hidden');
     loadInterlinkList();
     loadGlobalRelayMode();
+    window.interlinkHealthLoad();
   };
 
   window.closeInterlinkModal = function() {
@@ -43670,6 +43870,7 @@ function runReplicationTask(id, name) {
   }
 
   window.loadInterlinkList = loadInterlinkList;
+  window.loadHostnameDropdown = loadHostnameDropdown;
 
   window.interlinkSyncLXDTrust = async function(serverID, btn) {
     const orig = btn.textContent;
@@ -43712,13 +43913,17 @@ function runReplicationTask(id, name) {
     showConfirm({
       title: 'Unlink Server',
       body: `Remove the connection to <strong style="font-family:monospace;">${_esc(hostname)}</strong>?<br><br>
-             This only removes the link locally — the remote server is not affected.`,
+             The other server is asked to remove its side too.`,
       confirmText: 'Unlink',
       danger: false,
       onConfirm: async () => {
         try {
-          await _apiFetch(`/api/interlink/${encodeURIComponent(id)}`, { method: 'DELETE' });
-          _showToast(`Unlinked ${hostname}`, 'success');
+          const res = await _apiFetch(`/api/interlink/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          if (res && res.remote_removed === false) {
+            _showToast(`Unlinked here, but ${hostname} still lists this server${res.remote_error ? ' (' + res.remote_error + ')' : ''}. Unlink it there too, before linking again.`, 'warning');
+          } else {
+            _showToast(`Unlinked ${hostname}`, 'success');
+          }
           loadInterlinkList();
           loadHostnameDropdown();
         } catch(e) {
@@ -44413,16 +44618,19 @@ function _pageToSidebarMode(page) {
   if (page === 'lxd' || page === 'compute' || page.startsWith('compute-instance') || page.startsWith('compute/')) return 'compute';
   if (page === 'services' || page === 'service-view') return 'compute';
   if (page === 'lxd-networks' || page === 'bridge-detail' || page === 'lxd-datastores' || page === 'datastore-detail' || page === 'lxd-backups') return 'networking';
+  if (page.startsWith('fw-')) return 'firewall';
   return 'storage';
 }
 
 function _applySidebarModeUI(mode) {
   if (mode === 'storage') _stopCIStatsPolling();
   _sidebarMode = mode;
-  ['storage','compute','networking'].forEach(m => {
+  ['storage','compute','networking','firewall'].forEach(m => {
     const btn = document.getElementById('mode-btn-' + m);
     if (btn) btn.classList.toggle('active', m === mode);
   });
+  const fwSection = document.getElementById('nav-firewall-section');
+  if (fwSection) fwSection.style.display = mode === 'firewall' ? '' : 'none';
   document.getElementById('nav-group-storage-sharing').style.display  = mode === 'storage'    ? '' : 'none';
   document.getElementById('nav-virt-section').style.display            = 'none';
   document.getElementById('nav-lxd').style.display                     = 'none';
@@ -44452,6 +44660,10 @@ function switchSidebarMode(mode) {
     refreshDatastoresNav();
     showPage('lxd-networks');
     _setNetworkingRootActive();
+  }
+  if (mode === 'firewall') {
+    const cur = document.querySelector('.page:not(.hidden)');
+    if (!cur || !cur.id.startsWith('page-fw-')) showPage(typeof sdnFirstPage === 'function' ? sdnFirstPage() : 'fw-interfaces');
   }
 }
 
@@ -51181,7 +51393,7 @@ async function loadComputeInstanceDetail(name, type) {
         if (n.vlan_id) val += ` <span style="background:rgba(10,132,255,0.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:11px;">VLAN ${n.vlan_id}</span>`;
         val += ` <span style="color:var(--text-3);font-size:11px;">${n.nictype || ''}</span>`;
         if (n.connected === false) val += ` <span style="color:#58a6ff;font-size:11px;">disconnected</span>`;
-        if (n.current_ip) val += `<br><span style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.current_ip)}</span>`;
+        if (n.current_ip) val += `<br><span style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(n.current_ip)}</span>${n.ip_source === 'host' ? ' <span style="color:var(--text-3);font-size:11px;" title="The guest reports no address for this card (for example, no agent). This is what this server last saw for its MAC address.">seen on network</span>' : ''}`;
         if (n.mac) val += `<br><span style="font-family:monospace;font-size:11px;color:var(--text-3);">${esc(n.mac)}</span>`;
         // Port forwards — only shown when one or more are present. Each
         // entry renders as "host:src → :dst (proto)" with a tiny arrow.
@@ -51601,10 +51813,13 @@ let _lxdCTBindMounts    = [];  // host /mnt bind-mount rows
 let _lxdDeleteName = '';
 let _lxdRefreshTimer = null;
 
+// Landing pages of the Compute and Infrastructure tabs (virtualization).
+const _LANDING_VIRT = ['lxd', 'services', 'lxd-networks', 'lxd-datastores', 'lxd-backups'];
+
 function _hideLXDLandingOptions() {
   const lp = document.getElementById('us-landing-page');
   if (!lp) return;
-  ['lxd', 'lxd-networks'].forEach(val => {
+  _LANDING_VIRT.forEach(val => {
     const opt = lp.querySelector(`option[value="${val}"]`);
     if (opt) opt.hidden = true;
   });
@@ -51621,7 +51836,10 @@ function _hideLXDLandingOptions() {
 // branches do the same teardown.
 function _hideSidebarVirtBits() {
   const sel = document.getElementById('sidebar-mode-selector');
-  if (sel) sel.style.display = 'none';
+  // The Firewall mode does not depend on virtualization: keep the selector
+  // (Storage + Firewall only) when it is enabled.
+  ['mode-btn-compute', 'mode-btn-networking'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
+  if (sel) sel.style.display = window._sdnEnabled ? '' : 'none';
   const badge = document.getElementById('logo-lxd-badge');
   if (badge) badge.style.display = 'none';
   if (typeof _mSyncVmsTab === 'function') _mSyncVmsTab();
@@ -51633,7 +51851,7 @@ async function initLXD() {
     if (!res.ok) {
       _hideLXDLandingOptions();
       _hideSidebarVirtBits();
-      if (_sidebarMode !== 'storage') { _applySidebarModeUI('storage'); showPage('dashboard'); }
+      if (_sidebarMode !== 'storage' && _sidebarMode !== 'firewall') { _applySidebarModeUI('storage'); showPage('dashboard'); }
       window._intendedComputePage = null;
       return;
     }
@@ -51643,7 +51861,7 @@ async function initLXD() {
       localStorage.removeItem('zfsnas_lxd_available');
       _hideLXDLandingOptions();
       _hideSidebarVirtBits();
-      if (_sidebarMode !== 'storage') { _applySidebarModeUI('storage'); showPage('dashboard'); }
+      if (_sidebarMode !== 'storage' && _sidebarMode !== 'firewall') { _applySidebarModeUI('storage'); showPage('dashboard'); }
       window._intendedComputePage = null;
       return;
     }
@@ -51693,7 +51911,7 @@ async function initLXD() {
   } catch(e) {
     _hideLXDLandingOptions();
     _hideSidebarVirtBits();
-    if (_sidebarMode !== 'storage') { _applySidebarModeUI('storage'); showPage('dashboard'); }
+    if (_sidebarMode !== 'storage' && _sidebarMode !== 'firewall') { _applySidebarModeUI('storage'); showPage('dashboard'); }
     window._intendedComputePage = null;
   }
 }
@@ -52394,6 +52612,8 @@ function _lxdEditSectionLabel(text) {
 }
 
 function lxdEditRenderNICs() {
+  // Firewall-owned forwards change what the NIC cards show: load once.
+  _sdnFwdLoad(lxdEditRenderNICs);
   const c = document.getElementById('lxd-edit-nics');
   c.innerHTML = '';
   _lxdEditNICs.forEach((nic, i) => {
@@ -52506,13 +52726,13 @@ function lxdEditRenderNICs() {
 
     // Port forwards block — visible only on host-nat (where the instance
     // has a private IP and forwarding from the host is meaningful).
-    const showPFwd = nic.bridge === 'host-nat';
+    const showPFwd = _pfwdShowFor(nic.bridge);
     const pfwdHTML = `
       <div id="lxd-edit-nic-pfwd-${i}" style="margin-top:10px;display:${showPFwd?'':'none'};">
         <label class="form-label" style="display:flex;align-items:center;gap:6px;">
           Port Forwards
           <span style="color:var(--text-3);font-size:11px;font-weight:400;">(host port → instance port)</span>
-          <i class="info-tip" data-tip="Incus proxy devices: traffic arriving at the host on a given protocol/port is forwarded to the instance. Adding or removing entries here is applied on Save.&#10;&#10;The instance port field also accepts ip:port when the guest uses a static IP that has no DHCP lease on the host-nat network."></i>
+          <i class="info-tip" data-tip="${_sdnFwdOn() ? esc(_PFWD_FW_TIP) : 'Incus proxy devices: traffic arriving at the host on a given protocol/port is forwarded to the instance. Adding or removing entries here is applied on Save.&#10;&#10;The instance port field also accepts ip:port when the guest uses a static IP that has no DHCP lease on the host-nat network.'}"></i>
         </label>
         <div id="lxd-edit-nic-pfwd-list-${i}"></div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="_editNicAddPFwd(${i})"
@@ -52564,7 +52784,7 @@ function _editNicBridgeChange(i) {
   if (sumEl) sumEl.textContent = sel.value || '—';
   // Show/hide port-forwards block — only meaningful on host-nat.
   const pfwd = document.getElementById('lxd-edit-nic-pfwd-' + i);
-  if (pfwd) pfwd.style.display = (sel.value === 'host-nat') ? '' : 'none';
+  if (pfwd) pfwd.style.display = _pfwdShowFor(sel.value) ? '' : 'none';
 }
 
 // ── Edit modal: per-NIC port forwards ──────────────────────────────────
@@ -52604,7 +52824,7 @@ function _editNicRenderPFwds(i) {
           <option value="udp"${f.proto==='udp'?' selected':''}>UDP</option>
         </select>
         <button type="button" onclick="_editNicRemovePFwd(${i},${idx})" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--accent-danger);font-size:16px;line-height:1;padding:0;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-      </div>`).join('');
+      </div>${_pfwdIfaceRow('edit', i, idx, f)}`).join('');
 }
 
 // ── Edit modal: per-NIC static routes ──────────────────────────────────
@@ -53404,7 +53624,7 @@ async function openLXDEditModal(name, type) {
       // an _orig snapshot so the submit handler can compute add/remove diffs
       // against the live config. An explicit target_addr folds back into the
       // editor's single "instance port" field as "ip:port".
-      port_forwards: (n.port_forwards || []).map(f => ({src: String(f.source_port||''), dst: (f.target_addr ? f.target_addr + ':' : '') + String(f.target_port||''), proto: (f.protocol||'tcp').toLowerCase()})),
+      port_forwards: (n.port_forwards || []).map(f => ({src: String(f.source_port||''), dst: (f.target_addr ? f.target_addr + ':' : '') + String(f.target_port||''), proto: (f.protocol||'tcp').toLowerCase(), ifaces: (f.interfaces || []).slice()})),
       _origPortForwards: JSON.parse(JSON.stringify(n.port_forwards || [])),
       // Extra static IPv4 routes read back from the container's network config.
       routes: (n.routes || []).map(r => ({to: r.to || '', via: r.via || ''})),
@@ -53493,9 +53713,9 @@ async function submitLXDEdit() {
   // state — profile NICs with only port-forward changes should still be
   // sent so the backend can apply the diff.
   const _pfwdChanged = (n) => {
-    const a = (n.port_forwards || []).map(f => { const d = _pfwdParseDst(f.dst); return {s:+f.src||0, d:d.port, a:d.addr, p:(f.proto||'tcp').toLowerCase()}; }).filter(f => f.s>0 && f.d>0);
-    const b = (n._origPortForwards || []).map(f => ({s:+f.source_port||0, d:+f.target_port||0, a:f.target_addr||'', p:(f.protocol||'tcp').toLowerCase()}));
-    const key = (f) => f.s+'/'+f.a+':'+f.d+'/'+f.p;
+    const a = (n.port_forwards || []).map(f => { const d = _pfwdParseDst(f.dst); return {s:+f.src||0, d:d.port, a:d.addr, p:(f.proto||'tcp').toLowerCase(), i:(f.ifaces||[]).slice().sort().join(',')}; }).filter(f => f.s>0 && f.d>0);
+    const b = (n._origPortForwards || []).map(f => ({s:+f.source_port||0, d:+f.target_port||0, a:f.target_addr||'', p:(f.protocol||'tcp').toLowerCase(), i:(f.interfaces||[]).slice().sort().join(',')}));
+    const key = (f) => f.s+'/'+f.a+':'+f.d+'/'+f.p+'@'+f.i;
     if (a.length !== b.length) return true;
     const sa = a.map(key).sort(), sb = b.map(key).sort();
     for (let i=0; i<sa.length; i++) if (sa[i] !== sb[i]) return true;
@@ -53553,7 +53773,7 @@ async function submitLXDEdit() {
       // ones the user removed. Only fold-in entries where both ports are
       // sensible numbers.
       port_forwards: (n.port_forwards || [])
-        .map(f => { const d = _pfwdParseDst(f.dst); return {source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase()}; })
+        .map(f => { const d = _pfwdParseDst(f.dst); return {source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase(), interfaces: f.ifaces || []}; })
         .filter(f => f.source_port > 0 && f.target_port > 0),
     }));
 
@@ -56045,7 +56265,8 @@ function _ctNic0BridgeChange() {
   const sum = document.getElementById('cthw-nic0-summary');
   if (sum) sum.textContent = v || '—';
   const pfwd = document.getElementById('lxd-ct-nic0-pfwd');
-  if (pfwd) pfwd.style.display = (v === 'host-nat') ? '' : 'none';
+  if (pfwd) pfwd.style.display = _pfwdShowFor(v) ? '' : 'none';
+  _sdnFwdLoad(() => { _ctNic0BridgeChange(); _ctNic0RenderPFwds(); });
 }
 
 // ── NIC0 port-forwards state + rendering (VM modal) ──────────────────────
@@ -56081,6 +56302,53 @@ function _pfwdValidate(list) {
   }
   return '';
 }
+// Firewall (SDN) enabled: forwards are published on the Firewall interfaces
+// ticked per row (none = paused) instead of on every host address, and are
+// available on any network, not only host-nat. Loaded once per page load.
+let _sdnFwdIfaces = null; // {enabled, interfaces:[{id,name,role,color}]}
+let _sdnFwdIfacesLoading = null;
+function _sdnFwdLoad(rerender) {
+  if (_sdnFwdIfaces) return true;
+  if (!_sdnFwdIfacesLoading) {
+    _sdnFwdIfacesLoading = fetch('/api/sdn/forward-interfaces', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null).catch(() => null)
+      .then(d => { _sdnFwdIfaces = d || { enabled: false, interfaces: [] }; });
+  }
+  _sdnFwdIfacesLoading.then(() => { if (rerender) rerender(); });
+  return false;
+}
+const _sdnFwdOn = () => !!(_sdnFwdIfaces && _sdnFwdIfaces.enabled);
+function _sdnFwdReset() { _sdnFwdIfaces = null; _sdnFwdIfacesLoading = null; } // sdn.js: status reloaded
+function _pfwdShowFor(bridge) { return bridge === 'host-nat' || (_sdnFwdOn() && !!bridge); }
+const _PFWD_FW_TIP = 'The Firewall is enabled: tick the interface(s) this port is published on — usually your WAN. With none ticked the forward is paused. Every forward also shows on Firewall → NAT.';
+// Lists behind the three editors, by kind ("edit" takes the NIC index).
+function _pfwdList(kind, i) {
+  if (kind === 'vm') return _lxdVMNic0PFwds;
+  if (kind === 'ct') return _lxdCTNic0PFwds;
+  return (_lxdEditNICs[i] && _lxdEditNICs[i].port_forwards) || [];
+}
+function _pfwdRerender(kind, i) {
+  if (kind === 'vm') _vmNic0RenderPFwds(); else if (kind === 'ct') _ctNic0RenderPFwds(); else _editNicRenderPFwds(i);
+}
+function _pfwdToggleIf(kind, i, idx, id) {
+  const f = _pfwdList(kind, i)[idx];
+  if (!f) return;
+  f.ifaces = f.ifaces || [];
+  f.ifaces = f.ifaces.includes(id) ? f.ifaces.filter(x => x !== id) : [...f.ifaces, id];
+  _pfwdRerender(kind, i);
+}
+// The "Published on" chips under a forward row (Firewall enabled only).
+function _pfwdIfaceRow(kind, i, idx, f) {
+  if (!_sdnFwdOn()) return '';
+  const list = _sdnFwdIfaces.interfaces || [];
+  const on = f.ifaces || [];
+  const col = c => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : '#888888');
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:-2px 0 8px;font-size:11.5px;">
+    <span style="color:var(--text-3);">Published on</span>
+    ${list.map(x => `<button type="button" onclick="_pfwdToggleIf('${kind}',${i},${idx},'${esc(x.id)}')" style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;cursor:pointer;font-size:11.5px;border:1px solid ${on.includes(x.id) ? 'var(--accent-2)' : 'var(--border)'};background:${on.includes(x.id) ? 'rgba(10,132,255,.14)' : 'var(--surface2)'};color:${on.includes(x.id) ? 'var(--text)' : 'var(--text-3)'};"><span style="width:7px;height:7px;border-radius:50%;background:${col(x.color)}"></span>${esc(x.name)}${x.role === 'wan' ? ' <small style="opacity:.7;font-weight:700">WAN</small>' : ''}</button>`).join('')}
+    ${on.length ? '' : '<span style="color:var(--accent-warn);font-weight:600;">paused — tick an interface</span>'}
+  </div>`;
+}
 let _lxdVMNic0PFwds = [];
 function _vmNic0BridgeChange() {
   const sel = document.getElementById('lxd-vm-nic0-bridge');
@@ -56088,7 +56356,8 @@ function _vmNic0BridgeChange() {
   const sum = document.getElementById('vmhw-nic0-summary');
   if (sum) sum.textContent = v || '—';
   const pfwd = document.getElementById('lxd-vm-nic0-pfwd');
-  if (pfwd) pfwd.style.display = (v === 'host-nat') ? '' : 'none';
+  if (pfwd) pfwd.style.display = _pfwdShowFor(v) ? '' : 'none';
+  _sdnFwdLoad(() => { _vmNic0BridgeChange(); _vmNic0RenderPFwds(); });
 }
 function _vmNic0AddPFwd() { _lxdVMNic0PFwds.push({src:'',dst:'',proto:'tcp'}); _vmNic0RenderPFwds(); }
 function _vmNic0RemovePFwd(i) { _lxdVMNic0PFwds.splice(i,1); _vmNic0RenderPFwds(); }
@@ -56117,7 +56386,7 @@ function _vmNic0RenderPFwds() {
           <option value="udp"${f.proto==='udp'?' selected':''}>UDP</option>
         </select>
         <button type="button" onclick="_vmNic0RemovePFwd(${i})" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--accent-danger);font-size:16px;line-height:1;padding:0;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-      </div>`).join('');
+      </div>${_pfwdIfaceRow('vm', 0, i, f)}`).join('');
 }
 
 // ── NIC0 port-forwards state + rendering (container modal) ────────────────
@@ -56156,7 +56425,7 @@ function _ctNic0RenderPFwds() {
           <option value="udp"${f.proto==='udp'?' selected':''}>UDP</option>
         </select>
         <button type="button" onclick="_ctNic0RemovePFwd(${i})" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--accent-danger);font-size:16px;line-height:1;padding:0;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-      </div>`).join('');
+      </div>${_pfwdIfaceRow('ct', 0, i, f)}`).join('');
 }
 
 // ── NIC0 static routes state + rendering (container modal) ────────────────
@@ -56793,11 +57062,11 @@ async function submitCreateVM(e) {
   const allNICs = [];
   if (nic0Bridge && nic0Connected) {
     const nic0 = { device_name: 'eth0', network: nic0Bridge };
-    if (nic0Bridge === 'host-nat' && _lxdVMNic0PFwds.length) {
+    if (_pfwdShowFor(nic0Bridge) && _lxdVMNic0PFwds.length) {
       const _pfErr = _pfwdValidate(_lxdVMNic0PFwds);
       if (_pfErr) { alertEl.textContent = _pfErr; alertEl.classList.remove('hidden'); btn.disabled = false; return; }
       const forwards = _lxdVMNic0PFwds
-        .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase() }; })
+        .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase(), interfaces: f.ifaces || [] }; })
         .filter(f => f.source_port > 0 && f.target_port > 0);
       if (forwards.length) nic0.port_forwards = forwards;
     }
@@ -57825,11 +58094,11 @@ async function submitCreateContainer(e) {
     }
     // Port forwards (only meaningful on host-nat; the UI hides the table
     // for any other bridge, but be defensive and drop incomplete rows).
-    if (nic0Bridge === 'host-nat' && _lxdCTNic0PFwds.length) {
+    if (_pfwdShowFor(nic0Bridge) && _lxdCTNic0PFwds.length) {
       const _pfErr = _pfwdValidate(_lxdCTNic0PFwds);
       if (_pfErr) { alertEl.textContent = _pfErr; alertEl.classList.remove('hidden'); btn.disabled = false; return; }
       const forwards = _lxdCTNic0PFwds
-        .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase() }; })
+        .map(f => { const d = _pfwdParseDst(f.dst); return { source_port: parseInt(f.src)||0, target_port: d.port, target_addr: d.addr, protocol: (f.proto||'tcp').toLowerCase(), interfaces: f.ifaces || [] }; })
         .filter(f => f.source_port > 0 && f.target_port > 0);
       if (forwards.length) nic0.port_forwards = forwards;
     }
@@ -59655,6 +59924,9 @@ async function _softRelayRefresh() {
 
     // Reset in-memory caches that hold per-server data. Re-declared with
     // typeof guards so referencing a not-yet-defined symbol is safe.
+    // Interface names are the viewed server's.
+    window._ifNames = {};
+    await _loadIfNames();
     if (typeof datasetCache       !== 'undefined') datasetCache       = [];
     if (typeof zvolCache          !== 'undefined') zvolCache          = [];
     if (typeof _lxdInstancesCache !== 'undefined') _lxdInstancesCache = [];
@@ -59756,6 +60028,7 @@ async function _softRelayRefresh() {
     // without this re-fetch those screens keep showing the original server's
     // values in relay mode. /api/settings is relayed, so this pulls the peer's.
     if (typeof loadSettings === 'function') { try { await loadSettings(); } catch(_) {} }
+    if (typeof sdnLoadStatus === 'function') { try { await sdnLoadStatus(); } catch(_) {} }
 
     // Re-run the boot-time sidebar/topbar wiring so the LEFT nav reflects
     // what the new server actually has (LXD on/off, iSCSI/MinIO/UPS
@@ -59904,6 +60177,10 @@ async function _relayRestoreView(view) {
   // Pages that only exist when the peer has virtualization enabled.
   const lxdScoped = new Set(['lxd', 'lxd-networks', 'lxd-datastores', 'lxd-backups']);
   if (alwaysSafe.has(page)) { showPage(page); return; }
+  if (page.startsWith('fw-')) {
+    if (window._sdnEnabled) { _applySidebarModeUI('firewall'); showPage(page); } else { _applySidebarModeUI('storage'); showPage('dashboard'); }
+    return;
+  }
   if (lxdScoped.has(page)) { showPage(window._lxdAvailable ? page : 'dashboard'); return; }
   showPage('dashboard');
 }
@@ -63149,33 +63426,9 @@ function closeUserMenu() {
   if (dd) dd.style.display = 'none';
 }
 
-// Compact-Header view: hides the capacity bar + live IO charts and shrinks
-// the CPU/MEM/SWAP gauge panels to just their percentage readout, leaving
-// a single-row header. Persisted per browser via localStorage so the same
-// account on another browser/device can keep its own preference.
-const COMPACT_HEADER_LS_KEY = 'znas_compact_header';
-
-function applyCompactHeader(enabled) {
-  document.body.classList.toggle('compact-header', !!enabled);
-  const lbl = document.querySelector('#user-menu-compact .compact-label');
-  if (lbl) lbl.textContent = enabled ? 'Full Header' : 'Compact Header';
-}
-
-function toggleCompactHeader() {
-  const enabled = !document.body.classList.contains('compact-header');
-  applyCompactHeader(enabled);
-  try { localStorage.setItem(COMPACT_HEADER_LS_KEY, enabled ? 'true' : 'false'); } catch (_) {}
-  closeUserMenu();
-}
-
-// Restore on boot — runs after the DOM is parsed so the body class lands
-// before the first paint and the user doesn't see the full header flash.
-document.addEventListener('DOMContentLoaded', () => {
-  let enabled = false;
-  try { enabled = localStorage.getItem(COMPACT_HEADER_LS_KEY) === 'true'; } catch (_) {}
-  applyCompactHeader(enabled);
-});
-
+// Top header: Storage focus (capacity bar + disk I/O) or Network focus
+// (gateway traffic), each full or compact. static/net-header.js does the
+// work; the choice is kept per browser.
 // Best-effort "is virtualization available" hint that's reliable the instant
 // the modal opens. The authoritative flag `_lxdAvailable` is only set after
 // initLXD()'s async /api/incus/status resolves, so right after a fresh login
@@ -63199,12 +63452,17 @@ function openUserSettingsModal() {
     // Toggle LXD-dependent options by availability — must also UN-hide them
     // when virt is available, since _hideLXDLandingOptions() never reverts and
     // a hidden-but-selected option can't be shown.
-    ['lxd', 'lxd-networks'].forEach(val => {
+    _LANDING_VIRT.forEach(val => {
       const opt = lp.querySelector(`option[value="${val}"]`);
-      if (opt) opt.hidden = !lxdAvail;
+      if (opt) opt.hidden = !lxdAvail || (val === 'services' && window._servicesEnabled === false);
     });
+    // Firewall pages: only while the Firewall tab is there for this user.
+    const fwBtn = document.getElementById('mode-btn-firewall');
+    const fwOn = !!fwBtn && fwBtn.style.display !== 'none';
+    lp.querySelectorAll('option[value^="fw-"]').forEach(opt => { opt.hidden = !fwOn; });
     const savedVal = prefs.landing_page || '';
-    lp.value = (!lxdAvail && ['lxd','lxd-networks'].includes(savedVal)) ? '' : savedVal;
+    const savedOpt = savedVal && lp.querySelector(`option[value="${savedVal}"]`);
+    lp.value = savedOpt && !savedOpt.hidden ? savedVal : '';
   }
   if (td) td.value = prefs.theme_day || '';
   if (tn) tn.value = prefs.theme_night || '';
@@ -63312,8 +63570,8 @@ function renderLXDNetworksTable(nets) {
   // ports_label backs the sortable "Physical NIC" column.
   (nets || []).forEach(n => {
     const phys = (n.ports || []).filter(p => !/^(veth|tap|macvlan|vlan)/.test(p));
-    n.ports_label = phys.length ? phys.join(', ') : (n.nat && n.uplink ? n.uplink : '');
-    if (n.type !== 'bridge') n.ports_label = (n.parent_nics || []).join(', ');
+    n.ports_label = phys.length ? phys.map(ifLabel).join(', ') : (n.nat && n.uplink ? ifLabel(n.uplink) : '');
+    if (n.type !== 'bridge') n.ports_label = (n.parent_nics || []).map(ifLabel).join(', ');
   });
   _bridgesCache = (nets || []).filter(n => n.type === 'bridge');
   _othersCache = (nets || []).filter(n => n.type !== 'bridge');
@@ -63352,20 +63610,20 @@ function _renderNetworkRow(n, opts) {
   let portsEl;
   if (physPorts.length) {
     // A LAN bridge: the NIC is enslaved to it.
-    portsEl = `<span style="font-family:monospace;font-size:12px;">${esc(physPorts.join(', '))}</span>`;
+    portsEl = `<span style="font-family:monospace;font-size:12px;">${physPorts.map(ifLabelHTML).join(', ')}</span>`;
   } else if (n.nat && n.uplink) {
     // A NAT bridge has no NIC of its own. When it was created for a specific
     // port (one host-nat per addressed port) we show that port; otherwise the
     // only answer available is where the host's default route goes today.
     if (n.uplink_pinned) {
       const routed = n.uplink_via && n.uplink_via !== n.uplink;
-      const tip = `This NAT network belongs to ${n.uplink}. Guest traffic is masqueraded onto the host routing table`
-        + (routed ? `, which today leaves through ${n.uplink_via}.` : '.');
-      portsEl = `<span style="font-family:monospace;font-size:12px;" title="${esc(tip)}">${esc(n.uplink)}</span>`;
+      const tip = `This NAT network belongs to ${ifLabel(n.uplink)}. Guest traffic is masqueraded onto the host routing table`
+        + (routed ? `, which today leaves through ${ifLabel(n.uplink_via)}.` : '.');
+      portsEl = `<span style="font-family:monospace;font-size:12px;" title="${esc(tip)}">${esc(ifLabel(n.uplink))}</span>`;
     } else {
       const via = n.uplink_via && n.uplink_via !== n.uplink
-        ? ` <span style="color:var(--text-3);">via ${esc(n.uplink_via)}</span>` : '';
-      portsEl = `<span style="font-family:monospace;font-size:12px;" title="NAT egress: traffic from this network leaves through ${esc(n.uplink)}${n.uplink_via && n.uplink_via !== n.uplink ? ' (the host default route uses ' + esc(n.uplink_via) + ')' : ''}">${esc(n.uplink)}${via}</span>`;
+        ? ` <span style="color:var(--text-3);">via ${esc(ifLabel(n.uplink_via))}</span>` : '';
+      portsEl = `<span style="font-family:monospace;font-size:12px;" title="NAT egress: traffic from this network leaves through ${esc(ifLabel(n.uplink))}${n.uplink_via && n.uplink_via !== n.uplink ? ' (the host default route uses ' + esc(ifLabel(n.uplink_via)) + ')' : ''}">${esc(ifLabel(n.uplink))}${via}</span>`;
     }
   } else if (n.type === 'bridge') {
     portsEl = `<span style="font-size:12px;color:var(--text-3);font-style:italic;" title="No physical port and no NAT — this network is isolated from the LAN">isolated</span>`;
@@ -63381,7 +63639,12 @@ function _renderNetworkRow(n, opts) {
     ? `<span style="font-family:monospace;font-size:12px;color:var(--text-1);">${esc(n.speed_label)}</span>`
     : `<span style="font-size:12px;color:var(--text-3);" title="${n.ports_label ? 'No link — this port has no carrier' : 'No physical port on this network'}">—</span>`;
   let actionsEl = '';
-  if (n.managed || n.type === 'vlan') {
+  if (n.firewall_owned) {
+    // Managed by the Firewall (SDN): edited from Firewall → Interfaces only —
+    // two owners would fight over the bridge's addressing. VMs can still be
+    // attached to it.
+    actionsEl = `<span class="fw-badge lock" style="cursor:pointer;font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(10,132,255,.14);color:var(--accent-2);font-weight:700;" title="Managed by the Firewall — change it from Firewall → Interfaces. VMs can be attached to it." onclick="_applySidebarModeUI('firewall');showPage('fw-interfaces')">Firewall</span>`;
+  } else if (n.managed || n.type === 'vlan') {
     actionsEl = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
       onclick='toggleNetBurger(event,${JSON.stringify(n.name)},${n.vm_count},${JSON.stringify(n.type)},${n.managed})'><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
   } else if (n.type === 'bridge') {
@@ -63403,8 +63666,8 @@ function _renderNetworkRow(n, opts) {
       portsEl = `<span style="font-size:12px;color:var(--text-3);">—</span>`;
     } else {
       const via = n.vlan_parent && !parents.includes(n.vlan_parent)
-        ? ` <span style="color:var(--text-3);">via ${esc(n.vlan_parent)}</span>` : '';
-      portsEl = `<span style="font-family:monospace;font-size:12px;">${esc(parents.join(', '))}${via}</span>`;
+        ? ` <span style="color:var(--text-3);">via ${ifLabelHTML(n.vlan_parent)}</span>` : '';
+      portsEl = `<span style="font-family:monospace;font-size:12px;">${parents.map(ifLabelHTML).join(', ')}${via}</span>`;
     }
     const tag = n.vlan_id
       ? `<span style="background:rgba(188,140,255,0.15);color:#bc8cff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;margin-right:6px;">VLAN ${n.vlan_id}</span>` : '';
@@ -63412,7 +63675,7 @@ function _renderNetworkRow(n, opts) {
       ? `<span style="font-size:12px;color:var(--text-2);">${esc(n.nic_model)}</span>`
       : `<span style="font-size:12px;color:var(--text-3);font-style:italic;">${n.type === 'physical' ? 'unknown' : '—'}</span>`;
     return `<tr>
-    <td style="font-family:monospace;font-weight:600;">${esc(n.name)}</td>
+    ${_ifNameCell(n.name)}
     <td>${typeBadge}</td>
     <td>${portsEl}</td>
     <td>${speedEl}</td>
@@ -63423,7 +63686,7 @@ function _renderNetworkRow(n, opts) {
   </tr>`;
   }
   return `<tr>
-    <td style="font-family:monospace;font-weight:600;">${esc(n.name)}</td>
+    ${_ifNameCell(n.name)}
     <td>${typeBadge}</td>
     <td>${portsEl}</td>
     <td>${speedEl}</td>
@@ -63633,8 +63896,8 @@ function _bmChartUpdate(memberNames) {
     memberNames.forEach((iface, i) => {
       const mst = _bmMembers[iface];
       if (!mst) return;
-      uplinkDS.push({ label: iface + ' ↓ RX', data: Array.from(mst.rxBuf), borderColor: rxColors[i % rxColors.length], backgroundColor: 'rgba(88,166,255,0.08)', borderWidth: 1.5, fill: i === 0, tension: 0.35, pointRadius: 0 });
-      uplinkDS.push({ label: iface + ' ↑ TX', data: Array.from(mst.txBuf), borderColor: txColors[i % txColors.length], backgroundColor: 'transparent',             borderWidth: 1.5, fill: false,    tension: 0.35, pointRadius: 0 });
+      uplinkDS.push({ label: ifLabel(iface) + ' ↓ RX', data: Array.from(mst.rxBuf), borderColor: rxColors[i % rxColors.length], backgroundColor: 'rgba(88,166,255,0.08)', borderWidth: 1.5, fill: i === 0, tension: 0.35, pointRadius: 0 });
+      uplinkDS.push({ label: ifLabel(iface) + ' ↑ TX', data: Array.from(mst.txBuf), borderColor: txColors[i % txColors.length], backgroundColor: 'transparent',             borderWidth: 1.5, fill: false,    tension: 0.35, pointRadius: 0 });
     });
     if (!_bmUplinkChart) {
       _bmUplinkChart = new Chart(uplinkCanvas, { type: 'line', data: { labels: Array(_BM_POINTS).fill(''), datasets: uplinkDS }, options: _bmMakeChartOpts(textColor, tickColor, gridColor) });
@@ -63748,8 +64011,8 @@ function _renderBmHistCharts(series) {
     const txColors = ['#f0b429', '#34c759', '#a78bfa'];
     const uplinkDS = [];
     members.forEach((iface, i) => {
-      uplinkDS.push({ label: iface + ' ↓ RX', data: pts('net_' + iface + '_rx'), borderColor: rxColors[i % rxColors.length], backgroundColor: 'rgba(88,166,255,0.08)', borderWidth: 1.5, fill: i === 0, tension: 0.3, pointRadius: 0, spanGaps: true });
-      uplinkDS.push({ label: iface + ' ↑ TX', data: pts('net_' + iface + '_tx'), borderColor: txColors[i % txColors.length], backgroundColor: 'transparent',            borderWidth: 1.5, fill: false,    tension: 0.3, pointRadius: 0, spanGaps: true });
+      uplinkDS.push({ label: ifLabel(iface) + ' ↓ RX', data: pts('net_' + iface + '_rx'), borderColor: rxColors[i % rxColors.length], backgroundColor: 'rgba(88,166,255,0.08)', borderWidth: 1.5, fill: i === 0, tension: 0.3, pointRadius: 0, spanGaps: true });
+      uplinkDS.push({ label: ifLabel(iface) + ' ↑ TX', data: pts('net_' + iface + '_tx'), borderColor: txColors[i % txColors.length], backgroundColor: 'transparent',            borderWidth: 1.5, fill: false,    tension: 0.3, pointRadius: 0, spanGaps: true });
     });
     _bmHistUplinkChart = makeHistChart('bm-hist-uplink-chart', uplinkDS, _bmHistUplinkChart);
   }
@@ -63781,7 +64044,7 @@ function renderNetworkingNav(nets) {
     const dot = n.vm_count > 0
       ? `<span class="nav-dot" style="background:#3fb950;"></span>`
       : `<span class="nav-dot" style="background:#6e7681;"></span>`;
-    const label = n.description || n.name;
+    const label = n.description || ifLabel(n.name);
     return `<button class="nav-compute-instance" id="nav-bridge-${esc(n.name)}" title="${esc(n.description ? n.description+' ('+n.name+')' : n.name)}"
         onclick='openBridgeDetail(${JSON.stringify(n.name)})'
         oncontextmenu='event.preventDefault();_navContextMenuFor(event,"networking",${JSON.stringify(n.name)})'>
@@ -63795,7 +64058,9 @@ function renderNetworkingNav(nets) {
 async function openBridgeDetail(name) {
   _bmReset();
   _currentBridgeName = name;
-  document.getElementById('bridge-detail-title').textContent = name;
+  const _bdTitle = document.getElementById('bridge-detail-title');
+  _bdTitle.textContent = ifLabel(name);
+  _bdTitle.title = ifLabel(name) !== name ? 'Linux interface: ' + name : '';
   _clearNetworkingRootActive();
   document.querySelectorAll('#nav-networking-bridges .nav-compute-instance').forEach(b => b.classList.remove('active'));
   const navBtn = document.getElementById('nav-bridge-' + name);
@@ -64360,6 +64625,19 @@ function _ebEffective(cfg, key) {
     case 'ipv4.address': case 'ipv6.address': return 'none';
     default: return '';
   }
+}
+
+// Opens a bridge's editor from another tab (Firewall, DHCP & DNS): lands on
+// Infrastructure, Networking and reads the network fresh, so the form never
+// starts from a cache filled earlier.
+async function openBridgeEditorFromFirewall(name) {
+  switchSidebarMode('networking');
+  try {
+    const res = await fetch('/api/incus/network-bridges');
+    if (!res.ok) return;
+    _lxdNetworksCache = (await res.json()) || [];
+  } catch (e) { return; }
+  openEditBridgeModal(name);
 }
 
 function openEditBridgeModal(name) {
@@ -65174,5 +65452,16 @@ async function submitDeleteDatastore() {
 <!-- Floating external tooltip for network I/O chart -->
 <div id="chart-net-tooltip" style="position:fixed;z-index:9999;pointer-events:none;display:none;min-width:200px;max-width:340px;background:var(--surface,#1c1c1e);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 14px;box-shadow:0 4px 24px rgba(0,0,0,.5);font-size:12px;"></div>
 
+<script src="/static/sdn.js"></script>
+<script src="/static/sdn-traffic.js"></script>
+<script src="/static/sdn-hostcard.js"></script>
+<script src="/static/interlink-health.js"></script>
+<script src="/static/sdn-gw-nat.js"></script>
+<script src="/static/sdn-services.js"></script>
+<script src="/static/sdn-ddns.js"></script>
+<script src="/static/net-header.js"></script>
+<script src="/static/sdn-dns-report.js"></script>
+<script src="/static/sdn-ids.js"></script>
+<script src="/static/sdn-topo.js"></script>
 </body>
 </html>

@@ -162,6 +162,9 @@ type LXDNetwork struct {
 	Name        string            `json:"name"`
 	Type        string            `json:"type"` // "bridge", "physical", "vlan", etc.
 	Managed     bool              `json:"managed"`
+	// FirewallOwned: the Firewall (SDN) manages this network — Infrastructure
+	// shows it read-only.
+	FirewallOwned bool `json:"firewall_owned,omitempty"`
 	Description string            `json:"description"`
 	State       string            `json:"state"` // "Created" | ""
 	IPv4        string            `json:"ipv4"`
@@ -319,6 +322,7 @@ func ListLXDNetworks() ([]LXDNetwork, error) {
 		n.SpeedLabel, n.SpeedMbps = NICSpeedsLabel(n.physicalNICs())
 		nets = append(nets, n)
 	}
+	markFirewallOwned(nets)
 	// One lspci call for every port the interfaces table names.
 	var ports []string
 	for _, n := range nets {
@@ -824,6 +828,9 @@ func CreateLXDNetwork(req LXDNetworkCreateRequest) error {
 		if req.Name == vlanIface {
 			return fmt.Errorf("bridge name cannot be the same as the VLAN interface name (%s)", vlanIface)
 		}
+		if err := sdnVLANOwnedByFirewall(vlanIface); err != nil {
+			return err
+		}
 		if err := writeVLANInterfaceStanzaCustom(req.ParentInterface, req.VLANTag, vlanIface); err != nil {
 			return err
 		}
@@ -881,6 +888,9 @@ func CreateLXDNetwork(req LXDNetworkCreateRequest) error {
 		// A NIC can only be a port of one bridge: Incus would silently steal
 		// it from its current master, cutting the host's uplink if that
 		// master carries the management IP.
+		if err := FirewallOwnsNetwork(req.ParentInterface); err != nil {
+			return err
+		}
 		if m := ifaceMaster(req.ParentInterface); m != "" {
 			return fmt.Errorf("interface %s is already a port of %q — moving it into a new bridge would disconnect %q (and possibly this server). Pick a free interface, or create a VLAN bridge on top of %s instead", req.ParentInterface, m, m, req.ParentInterface)
 		}

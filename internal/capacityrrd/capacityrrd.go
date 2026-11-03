@@ -9,6 +9,10 @@
 package capacityrrd
 
 import (
+	"log"
+
+	"zfsnas/internal/rrd"
+
 	"encoding/json"
 	"os"
 	"sync"
@@ -149,10 +153,31 @@ func (s *capSeries) compactForSlots(slots int) {
 	}
 }
 
+// scrub drops the samples holding an impossible value an earlier version
+// stored (an aggregate's maximum shows it, and its average is poisoned too).
+func (s *capSeries) scrub(key string) {
+	all := s.all()
+	kept := all[:0:0]
+	for _, x := range all {
+		if rrd.Plausible(key, x.Max) && rrd.Plausible(key, x.Min) && rrd.Plausible(key, x.Avg) {
+			kept = append(kept, x)
+		}
+	}
+	if len(kept) == len(all) {
+		return
+	}
+	log.Printf("[rrd] %s: dropped %d impossible samples", key, len(all)-len(kept))
+	s.Buf, s.Count = kept, len(kept)
+	s.Head = len(kept)
+	if len(kept) >= s.Slots {
+		s.Head = 0
+	}
+}
+
 // tierStore holds all series for one resolution tier.
 type tierStore struct {
-	Slots  int                    `json:"slots"`
-	Series map[string]*capSeries  `json:"series"`
+	Slots  int                   `json:"slots"`
+	Series map[string]*capSeries `json:"series"`
 }
 
 func newTierStore(slots int) tierStore {
@@ -177,7 +202,7 @@ type dbData struct {
 
 // pendingBucket accumulates raw values within the current aggregate window.
 type pendingBucket struct {
-	bucketStart int64     // Unix seconds, truncated to bucket boundary
+	bucketStart int64 // Unix seconds, truncated to bucket boundary
 	pending     map[string][]float64
 }
 
@@ -236,12 +261,21 @@ func Open(path string) (*DB, error) {
 	for _, s := range db.data.Tier2.Series {
 		s.compactForSlots(Tier2Slots)
 	}
+	for _, t := range []*tierStore{&db.data.Tier0, &db.data.Tier1, &db.data.Tier2} {
+		for key, s := range t.Series {
+			s.scrub(key)
+		}
+	}
 	return db, nil
 }
 
 // Record adds one 5-minute raw sample. It also folds pending values into
 // Tier1 and Tier2 when bucket boundaries are crossed.
 func (db *DB) Record(key string, value float64, now time.Time) {
+	if !rrd.Plausible(key, value) {
+		log.Printf("[rrd] %s: refused impossible value %v", key, value)
+		return
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 

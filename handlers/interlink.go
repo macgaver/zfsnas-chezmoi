@@ -153,17 +153,33 @@ func HandleInterlinkAcceptLink(appCfg *config.AppConfig) http.HandlerFunc {
 		// propagation can finish the job — also why ExistingPeers is
 		// computed BEFORE the new-link branch appends `req.CallerURL`,
 		// so the caller never sees itself in its own propagation list.
-		for _, ls := range appCfg.InterLink {
-			if normalizeInterlinkURL(ls.URL) == normalizeInterlinkURL(req.CallerURL) {
-				resp := system.AcceptLinkResponse{
-					RemoteID:      ls.ID,
-					Hostname:      hostname,
-					ExistingPeers: buildInterlinkPeerList(appCfg, req.CallerURL),
-				}
+		// The caller keeps the secret it just sent, and the admin password was
+		// checked above: take it, or the two sides stop agreeing for good.
+		if i := findAcceptedLink(appCfg.InterLink, req); i >= 0 {
+			ls := &appCfg.InterLink[i]
+			ls.SharedSecret, ls.RemoteID = req.SharedSecret, req.CallerID
+			if err := config.SaveAppConfig(appCfg); err != nil {
 				interlinkMu.Unlock()
-				jsonOK(w, resp)
+				jsonErr(w, http.StatusInternalServerError, "failed to save config")
 				return
 			}
+			resp := system.AcceptLinkResponse{
+				RemoteID:      ls.ID,
+				Hostname:      hostname,
+				ExistingPeers: buildInterlinkPeerList(appCfg, req.CallerURL),
+			}
+			target := ls.Hostname
+			interlinkMu.Unlock()
+			audit.Log(audit.Entry{
+				User:    req.AdminUsername,
+				Role:    config.RoleAdmin,
+				Action:  audit.ActionInterlinkAccepted,
+				Target:  target,
+				Result:  audit.ResultOK,
+				Details: "InterLink key renewed by " + req.CallerURL,
+			})
+			jsonOK(w, resp)
+			return
 		}
 
 		// Snapshot the peer list BEFORE appending the new caller — we don't
@@ -235,6 +251,23 @@ func HandleInterlinkAcceptLink(appCfg *config.AppConfig) http.HandlerFunc {
 			ExistingPeers: existingPeers,
 		})
 	}
+}
+
+// findAcceptedLink finds the entry an accept-link request is about: by the
+// caller's link ID (a repair: the caller may not reach us under the URL we
+// hold for it), then by its URL.
+func findAcceptedLink(links []config.LinkedServer, req system.AcceptLinkRequest) int {
+	for i, ls := range links {
+		if ls.RemoteID != "" && ls.RemoteID == req.CallerID {
+			return i
+		}
+	}
+	for i, ls := range links {
+		if normalizeInterlinkURL(ls.URL) == normalizeInterlinkURL(req.CallerURL) {
+			return i
+		}
+	}
+	return -1
 }
 
 // buildInterlinkPeerList returns the local InterLink config as a list of
@@ -713,9 +746,12 @@ func HandleInterlinkLink(appCfg *config.AppConfig) http.HandlerFunc {
 		// A↔B link that already succeeded.
 		propagation := propagateInterlink(r, appCfg, sess, req.Username, req.Password, req.TOTP, resp.ExistingPeers)
 
+		// The browser needs the name; the secret stays on the server.
+		shown := ls
+		shown.SharedSecret = ""
 		jsonOK(w, map[string]interface{}{
 			"ok":            true,
-			"linked_server": ls,
+			"linked_server": shown,
 			// propagation.summary lets the modal show "Also linked to
 			// hostX, hostY (1 failed: hostZ — invalid credentials)".
 			// Empty array when the remote had no other peers.
@@ -943,9 +979,17 @@ func HandleInterlinkUnlink(appCfg *config.AppConfig) http.HandlerFunc {
 		delete(statusCache, id)
 		statusCacheMu.Unlock()
 
-		// Best-effort: tell the remote to remove us from its list too.
+		// Tell the remote to remove us from its list too, and say if it did
+		// not: a link left on one side is how the two ended up disagreeing.
+		remoteRemoved := removed.RemoteID == ""
+		remoteErr := ""
 		if removed.RemoteID != "" {
-			go system.SendRemoteUnlink(removed.URL, removed.SharedSecret, removed.RemoteID, removed.TLSFingerprint) //nolint:errcheck
+			ok, err := system.SendRemoteUnlink(removed.URL, removed.SharedSecret, removed.RemoteID, removed.TLSFingerprint)
+			remoteRemoved = ok
+			if err != nil {
+				remoteErr = err.Error()
+				log.Printf("interlink unlink: %s: %v", removed.Hostname, err)
+			}
 		}
 
 		audit.Log(audit.Entry{
@@ -957,7 +1001,7 @@ func HandleInterlinkUnlink(appCfg *config.AppConfig) http.HandlerFunc {
 			Details: "unlinked " + removed.URL,
 		})
 
-		jsonOK(w, map[string]string{"message": "unlinked"})
+		jsonOK(w, map[string]interface{}{"message": "unlinked", "remote_removed": remoteRemoved, "remote_error": remoteErr})
 	}
 }
 
@@ -1197,8 +1241,9 @@ func HandleInterlinkRemoteUnlink(appCfg *config.AppConfig) http.HandlerFunc {
 			}
 		}
 		if matched == nil {
-			// Return 200 anyway — idempotent, don't leak info.
-			jsonOK(w, map[string]string{"message": "ok"})
+			// 200 anyway: idempotent. "removed" lets the caller warn its admin
+			// that this side still holds the link.
+			jsonOK(w, map[string]interface{}{"message": "ok", "removed": false})
 			return
 		}
 
@@ -1225,7 +1270,7 @@ func HandleInterlinkRemoteUnlink(appCfg *config.AppConfig) http.HandlerFunc {
 			Details: "remote-initiated unlink from " + matched.URL,
 		})
 
-		jsonOK(w, map[string]string{"message": "ok"})
+		jsonOK(w, map[string]interface{}{"message": "ok", "removed": true})
 	}
 }
 
@@ -1258,9 +1303,15 @@ func HandleInterlinkSwitch(appCfg *config.AppConfig) http.HandlerFunc {
 
 		checkResp, err := system.CheckUserOnRemote(ls.URL, ls.SharedSecret, sess.Username, ls.TLSFingerprint)
 		if err != nil || !checkResp.Exists {
+			reason, detail := "no_account", ""
+			if err != nil {
+				reason, detail = system.ClassifyInterlinkErr(err), err.Error()
+			}
 			jsonOK(w, map[string]interface{}{
 				"user_exists":  false,
 				"redirect_url": "",
+				"reason":       reason,
+				"detail":       detail,
 			})
 			return
 		}

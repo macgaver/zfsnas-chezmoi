@@ -7,6 +7,7 @@ package system
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -67,4 +68,54 @@ func GetRemoteAudit(remoteURL, sharedSecret, tlsFP string) ([]audit.Entry, error
 		return nil, err
 	}
 	return r.Entries, nil
+}
+
+// ── Which peer owns this MAC ──────────────────────────────────────────────
+
+// InterlinkMACOwnerHMAC signs a question about one MAC address.
+func InterlinkMACOwnerHMAC(sharedSecret string, timestamp int64, nonce, mac string) string {
+	key, _ := hex.DecodeString(sharedSecret)
+	if len(key) == 0 {
+		key = []byte(sharedSecret)
+	}
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte("mac-owner|" + strconv.FormatInt(timestamp, 10) + "|" + nonce + "|" + mac))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// InterlinkMACOwnerRequest is the HMAC-signed POST body sent to a peer.
+type InterlinkMACOwnerRequest struct {
+	Timestamp int64  `json:"timestamp"`
+	Nonce     string `json:"nonce"`
+	MAC       string `json:"mac"`
+	HMAC      string `json:"hmac"`
+}
+
+// GetRemoteMACOwner asks a peer which of its instances has this MAC. nil = none.
+func GetRemoteMACOwner(ctx context.Context, remoteURL, sharedSecret, tlsFP, mac string) (*LXDInstanceOwner, error) {
+	ts := time.Now().Unix()
+	nonceBytes := make([]byte, 8)
+	rand.Read(nonceBytes) //nolint:errcheck
+	nh := hex.EncodeToString(nonceBytes)
+	body, _ := json.Marshal(InterlinkMACOwnerRequest{Timestamp: ts, Nonce: nh, MAC: mac, HMAC: InterlinkMACOwnerHMAC(sharedSecret, ts, nh, mac)})
+	req, err := http.NewRequestWithContext(ctx, "POST", remoteURL+"/api/lxd/interlink-mac-owner", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := interlinkClientFor(tlsFP).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("interlink-mac-owner returned status %d", resp.StatusCode)
+	}
+	var r struct {
+		Owner *LXDInstanceOwner `json:"owner"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return nil, err
+	}
+	return r.Owner, nil
 }

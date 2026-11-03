@@ -19,7 +19,10 @@ package system
 // a single transient `incus list` slow tick from spamming the banner.
 
 import (
+	"context"
+	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -45,81 +48,80 @@ func IncusHealth() IncusHealthState {
 	return incusHealthCurrent
 }
 
-// StartIncusHealthWatcher launches a background poller that runs
-// `incus list` with a 10 s deadline every 30 s. The callback fires
-// only on state transitions (healthy→stuck, stuck→healthy), so the
-// alerts hub doesn't see chatter on every successful probe. Caller is
-// responsible for delivering the state change to whatever sink they
-// want (WebSocket hub, log, audit, …).
-//
-// A single transient failure does NOT flip the state — we require two
-// consecutive failures before declaring "stuck" so a one-off slow tick
-// doesn't paint the banner. Recovery is immediate (one success clears).
+// incusProbe runs `incus list` with a deadline and tells apart a daemon that
+// answers (ok), one that hangs (hung: deadline hit) and one that fails at
+// once (neither) — the latter is Incus installed but not usable by the
+// portal (feature not enabled, no socket access), which is not "stuck".
+var incusProbe = func() (ok, hung bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := exec.CommandContext(ctx, "incus", "list", "--format", "json").Run()
+	return err == nil, ctx.Err() == context.DeadlineExceeded
+}
+
+var incusInstalledFn = IncusInstalled
+
+// incusUsable: the last probe got an answer from the daemon. Code that only
+// wants Incus when the VMs & Containers feature really works (the Firewall's
+// interface list, for one) checks IncusUsable() instead of calling incus.
+var incusUsable atomic.Bool
+
+// IncusUsable reports whether the last health probe reached a working Incus.
+func IncusUsable() bool { return incusUsable.Load() }
+
+type incusWatch struct{ fails int }
+
+func (w *incusWatch) setStuck(stuck bool, lastErr string, onChange func(IncusHealthState)) {
+	incusHealthMu.Lock()
+	changed := incusHealthCurrent.Stuck != stuck
+	if changed {
+		incusHealthCurrent = IncusHealthState{Stuck: stuck, LastError: lastErr, ChangedAt: time.Now()}
+	}
+	snap := incusHealthCurrent
+	incusHealthMu.Unlock()
+	if changed && onChange != nil {
+		onChange(snap)
+	}
+}
+
+// tick is one probe of the watchdog. A single timeout does NOT flip the
+// state — two consecutive ones do, so a one-off slow tick doesn't paint the
+// banner. Recovery is immediate. No binary, or a fast failure, is "not in
+// use", never "stuck".
+func (w *incusWatch) tick(onChange func(IncusHealthState)) {
+	if !incusInstalledFn() {
+		w.fails = 0
+		incusUsable.Store(false)
+		w.setStuck(false, "", onChange)
+		return
+	}
+	ok, hung := incusProbe()
+	switch {
+	case ok:
+		w.fails = 0
+		incusUsable.Store(true)
+		w.setStuck(false, "", onChange)
+	case !hung:
+		w.fails = 0
+		incusUsable.Store(false)
+		w.setStuck(false, "", onChange)
+	default:
+		w.fails++
+		incusUsable.Store(false)
+		if w.fails >= 2 {
+			w.setStuck(true, "incus list timed out", onChange)
+		}
+	}
+}
+
+// StartIncusHealthWatcher probes Incus every 30 s (10 s deadline) and calls
+// onChange only on stuck/healthy transitions.
 func StartIncusHealthWatcher(onChange func(IncusHealthState)) {
-	const (
-		interval        = 30 * time.Second
-		probeTimeout    = 10 * time.Second
-		stuckThreshold  = 2 // consecutive failures before flipping to stuck
-	)
 	go func() {
-		fails := 0
-		var lastErr string
+		w := &incusWatch{}
 		for {
-			// No `incus` binary → virtualization isn't installed on this box.
-			// There's no daemon to be "stuck", so never raise the hung-daemon
-			// banner; just make sure any prior stuck state is cleared. This is
-			// the fresh-install case: ZNAS up, virtualization not yet added.
-			if !IncusInstalled() {
-				fails = 0
-				lastErr = ""
-				incusHealthMu.Lock()
-				wasStuck := incusHealthCurrent.Stuck
-				if wasStuck {
-					incusHealthCurrent = IncusHealthState{Stuck: false, ChangedAt: time.Now()}
-				}
-				snap := incusHealthCurrent
-				incusHealthMu.Unlock()
-				if wasStuck && onChange != nil {
-					onChange(snap)
-				}
-				time.Sleep(interval)
-				continue
-			}
-			if LXDAvailableTimeout(probeTimeout) {
-				lastErr = ""
-				fails = 0
-				// Was stuck → recovered. Broadcast once.
-				incusHealthMu.Lock()
-				wasStuck := incusHealthCurrent.Stuck
-				if wasStuck {
-					incusHealthCurrent = IncusHealthState{Stuck: false, ChangedAt: time.Now()}
-				}
-				snap := incusHealthCurrent
-				incusHealthMu.Unlock()
-				if wasStuck && onChange != nil {
-					onChange(snap)
-				}
-			} else {
-				fails++
-				lastErr = "incus list timed out or failed"
-				if fails >= stuckThreshold {
-					incusHealthMu.Lock()
-					wasOK := !incusHealthCurrent.Stuck
-					if wasOK {
-						incusHealthCurrent = IncusHealthState{
-							Stuck:     true,
-							LastError: lastErr,
-							ChangedAt: time.Now(),
-						}
-					}
-					snap := incusHealthCurrent
-					incusHealthMu.Unlock()
-					if wasOK && onChange != nil {
-						onChange(snap)
-					}
-				}
-			}
-			time.Sleep(interval)
+			w.tick(onChange)
+			time.Sleep(30 * time.Second)
 		}
 	}()
 }

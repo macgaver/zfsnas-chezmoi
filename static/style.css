@@ -1,12 +1,9 @@
 /* ===== ZFS NAS Portal — Global Design System ===== */
 
-/* Tron Legacy / Matrix Reload theme fonts (Orbitron + Share Tech Mono).
-   WARNING: this @import MUST stay above every style rule in this file: per the CSS
-   spec an @import that follows any rule is ignored by the browser. A
-   `html, body { touch-action }` rule was once added above this line, which
-   silently disabled these theme fonts for several releases — keep the import
-   first (only @charset may precede it). */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap');
+/* Tron Legacy / Matrix Reload theme fonts: loaded by each page's <head> with
+   media="print" + onload, never @import here, which would hold up the whole
+   stylesheet (and the first paint) until Google answers, on a VPN with no
+   Internet route until it times out. */
 
 /* Fixed page zoom on touch devices: pan gestures only. The viewport meta's
    maximum-scale/user-scalable lock is ignored by newer iOS Safari for
@@ -1261,6 +1258,14 @@ body .sidebar-section.nav-root-active {
   color: var(--accent-2);
   font-weight: 600;
 }
+
+/* Menu entries always stay on one line — the bold active state must not
+   push a long label ("Groups & countries", "Intrusion detection") to a
+   second row: a little of the right padding goes to the text, the active
+   label is tightened by the width bold adds, and ellipsis is the last resort. */
+.nav-item { padding-right: 10px; }
+.nav-label { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-item.active .nav-label { letter-spacing: -0.012em; }
 
 .nav-icon { width: 18px; text-align: center; font-size: 16px; opacity: 0.8; }
 
@@ -3995,3 +4000,148 @@ body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"]:not(#prereq
 body.is-phone .guide-modal > .guide-head { padding: 12px 14px !important; }
 body.is-phone .guide-modal > .guide-body { padding: 0 !important; }
 body.is-phone .guide-modal > .guide-foot { padding: 10px 14px !important; }
+
+/* ===== Top header modes (user menu → Top header; static/net-header.js) ===== */
+#user-menu-dropdown .um-section { padding: 8px 14px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-3); border-top: 1px solid var(--border); }
+#user-menu-dropdown .um-hdr { width: 100%; text-align: left; padding: 7px 14px; background: none; border: none; color: var(--text);
+  font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+#user-menu-dropdown .um-hdr:hover { background: var(--surface3, rgba(255,255,255,0.07)); }
+#user-menu-dropdown .um-hdr .hdr-check { visibility: hidden; flex: none; color: var(--accent-2, #0a84ff); }
+#user-menu-dropdown .um-hdr.on .hdr-check { visibility: visible; }
+#user-menu-dropdown .um-hdr.on { font-weight: 600; }
+
+#net-title, #net-summary, #net-eq, #net-bar { display: none; }
+/* Network focus: the gateway replaces the pool capacity bar and disk I/O */
+body.net-header #topbar-pool-title,
+body.net-header #pool-summary,
+body.net-header #pool-bar,
+body.net-header #pool-legend,
+body.net-header #pool-tip,
+body.net-header #io-bar,
+body.net-header #io-chart-tooltip { display: none !important; }
+body.net-header #net-title { display: inline; }
+body.net-header:not(.compact-header) #net-summary { display: inline; text-align: center; }
+body.net-header:not(.compact-header) .topbar-inner { margin-bottom: 0; }
+body.net-header:not(.compact-header) #net-bar { display: flex; }
+body.net-header.compact-header #net-eq { display: flex; }
+
+#net-bar { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 6px 16px 6px;
+  gap: 14px; align-items: stretch; }
+.net-chart-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.net-chart-wrap canvas { display: block; width: 100% !important; height: 110px !important; }
+.net-key { float: right; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); }
+.net-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 6px; }
+.net-empty { position: absolute; inset: 18px 0 0; display: none; align-items: center; justify-content: center; font-size: 12px; color: var(--text-3); }
+.net-gauges { display: flex; gap: 4px; flex: none; }
+.net-gauge { width: 132px; display: flex; flex-direction: column; align-items: center; }
+.net-gauge svg { display: block; overflow: visible; }
+.ng-track { fill: none; stroke: rgba(128,128,128,.22); stroke-width: 10; stroke-linecap: round; }
+.ng-val { fill: none; stroke-width: 10; stroke-linecap: round; }
+.ng-tick { stroke: var(--text-3); stroke-width: 1; opacity: .7; }
+.ng-tl { fill: var(--text-3); font-size: 7.5px; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.ng-needle { stroke-width: 2.5; stroke-linecap: round; }
+.ng-peak { stroke: #ff453a; stroke-width: 3; stroke-linecap: round; }
+.ng-v { fill: var(--text); font-size: 18px; font-weight: 700; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.ng-u { fill: var(--text-3); font-size: 9px; font-weight: 500; }
+.ng-n { font-size: 8.5px; font-weight: 700; letter-spacing: .08em; }
+.ng-max { margin-top: -4px; font-size: 10.5px; color: var(--text-3); display: flex; align-items: center; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ng-mk { width: 10px; height: 3px; border-radius: 2px; background: #ff453a; display: inline-block; }
+
+/* Network focus, compact: two equalizer lines in the one-row header */
+#net-eq { flex: 1; min-width: 0; flex-direction: column; gap: 2px; justify-content: center; }
+.net-eq-row { display: flex; align-items: center; gap: 6px; }
+.net-eq-l { font-size: 9px; font-weight: 700; color: var(--text-3); width: 14px; letter-spacing: .04em; }
+.net-eq-bars { display: flex; gap: 2px; }
+.net-eq-bars i { width: 9px; height: 5px; border-radius: 1px; opacity: .18; transition: opacity .25s; }
+.net-eq-bars i.g { background: #30d158; }
+.net-eq-bars i.y { background: #ffd60a; }
+.net-eq-bars i.r { background: #ff453a; }
+.net-eq-bars i.on { opacity: 1; }
+.net-eq-bars i.pk { opacity: 1; box-shadow: 0 0 0 1px rgba(255,255,255,.55); }
+.net-eq-v { font-size: 10.5px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 78px; }
+@media (max-width: 760px) {
+  .net-gauge { width: 104px; }
+  .net-gauge svg { width: 104px; height: 99px; }
+  .net-eq-bars i { width: 6px; }
+}
+@media (max-height: 500px) {
+  #net-bar { display: none !important; }
+}
+/* two 10 px lines: the compact row stays the height of the storage one */
+.net-eq-row { height: 10px; }
+.net-eq-l, .net-eq-v { line-height: 10px; }
+
+/* Network focus: top talkers popup (static/net-header.js) */
+.net-gauge, .net-eq-row { cursor: pointer; touch-action: manipulation; }
+.tk-pop { position: fixed; z-index: 3500; width: min(560px, calc(100vw - 16px)); display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0,0,0,.42); animation: tk-in .14s ease-out; }
+@keyframes tk-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.tk-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface2); border-bottom: 1px solid var(--border);
+  border-top: 2px solid var(--tk-acc); }
+.tk-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--surface); }
+.tk-seg button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--text-3); font-size: 12px; font-weight: 600;
+  padding: 5px 9px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.tk-seg button.on { background: var(--surface2); color: var(--text); box-shadow: inset 0 0 0 1px var(--tk-acc); }
+.tk-total { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.tk-total b { color: var(--text); font-variant-numeric: tabular-nums; }
+.tk-pulse { width: 7px; height: 7px; border-radius: 50%; background: #30d158; display: inline-block; animation: tk-pulse 1.6s infinite; flex: none; }
+@keyframes tk-pulse { 50% { opacity: .3; } }
+.tk-list { overflow-y: auto; flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; }
+.tk-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.tk-row:last-child { border-bottom: 0; }
+.tk-av { width: 30px; height: 30px; border-radius: 9px; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 14px; }
+.tk-main { flex: 1; min-width: 0; }
+.tk-l1 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tk-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tk-rate { font-size: 11px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-rate b { font-size: 15px; color: var(--text); }
+.tk-l2 { display: flex; gap: 8px; font-size: 11px; color: var(--text-3); margin-top: 1px; min-width: 0; }
+.tk-ip { font-family: var(--font-mono, monospace); flex: none; }
+.tk-fqdn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tk-bar { height: 4px; border-radius: 3px; background: rgba(128,128,128,.18); margin: 5px 0 4px; overflow: hidden; }
+.tk-bar i { display: block; height: 100%; border-radius: 3px; transition: width .4s; }
+.tk-l3 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tk-st { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.tk-dl svg { color: #64d2ff; } .tk-ul svg { color: #bf5af2; }
+.tk-sh { margin-left: auto; color: var(--text-2); font-weight: 600; }
+.tk-spark { flex: none; display: block; }
+.tk-msg { padding: 26px 18px; text-align: center; font-size: 13px; color: var(--text-2); line-height: 1.5; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.tk-f { padding: 6px 12px; font-size: 10.5px; color: var(--text-3); border-top: 1px solid var(--border); background: var(--surface2); }
+@media (max-width: 520px) { .tk-spark { display: none; } }
+/* one line at any width: the summary gives way first */
+body.net-header #net-title { white-space: nowrap; }
+body.net-header:not(.compact-header) #net-summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+body.net-header .topbar-inner { column-gap: 12px; }
+/* the squares take all the width the header has left */
+.net-eq-row { width: 100%; min-width: 0; }
+.net-eq-bars { flex: 1; min-width: 0; overflow: hidden; }
+.net-eq-bars i { flex: none; }
+.net-eq-v { flex: none; min-width: 172px; text-align: left; }
+@media (max-width: 760px) { .net-eq-v { min-width: 0; font-size: 9.5px; } }
+.net-eq-bars { justify-content: space-between; }
+/* a phone has room for the squares only: the popup gives the numbers */
+@media (max-width: 560px) { .net-eq-v { display: none; } }
+
+/* Manage InterLink: health */
+.il-head{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;margin-bottom:6px}
+.il-row{display:flex;gap:12px;padding:7px 0;border-top:1px solid var(--border);align-items:flex-start}
+.il-name{width:110px;flex:none;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.il-chips{display:flex;flex-wrap:wrap;gap:4px 5px;align-items:center;min-width:0}
+.il-chip{font-size:11px;padding:1px 7px;border-radius:9px;white-space:nowrap}
+.il-chip.ok{color:#16a34a;background:rgba(34,197,94,.12)}
+.il-chip.warn{color:#d97706;background:rgba(245,158,11,.14)}
+.il-chip.bad{color:#ef4444;background:rgba(239,68,68,.13);font-weight:600}
+.il-fix{font-size:11px!important;padding:1px 7px!important;margin-right:4px}
+.il-grid .il-fix{margin:0 0 0 6px}
+.il-scroll{overflow-x:auto}
+.il-grid{border-collapse:collapse;font-size:12px;width:100%}
+.il-grid th,.il-grid td{border:1px solid var(--border);padding:4px 7px;text-align:center;white-space:nowrap}
+.il-grid th{font-weight:600}
+.il-grid tbody th{text-align:left}
+.il-self{background:var(--border)}
+.il-good{color:#16a34a}
+.il-warnc{color:#d97706}
+.il-badc{color:#ef4444;font-weight:600}
+.il-na{color:var(--text-3)}

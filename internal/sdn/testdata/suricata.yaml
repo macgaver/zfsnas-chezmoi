@@ -1,0 +1,71 @@
+%YAML 1.1
+---
+# Managed by ZNAS Firewall — rewritten on every apply and at boot.
+vars:
+  address-groups:
+    HOME_NET: "[192.168.2.0/24,10.128.4.0/24,10.128.5.0/24,10.128.7.0/24,10.128.8.0/24]"
+    EXTERNAL_NET: "!$HOME_NET"
+    HTTP_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
+    DNS_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
+    DNP3_CLIENT: "$HOME_NET"
+    MODBUS_CLIENT: "$HOME_NET"
+    MODBUS_SERVER: "$HOME_NET"
+    ENIP_CLIENT: "$HOME_NET"
+    ENIP_SERVER: "$HOME_NET"
+    AIM_SERVERS: "$EXTERNAL_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+default-log-dir: /run/znas-sdn-ids
+stats:
+  enabled: no
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: unix_dgram
+      filename: /opt/zfsnas/config/sdn/ids-eve.sock
+      types:
+        - alert:
+            tagged-packets: no
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+af-packet:
+  - interface: ppp-ifpppoe1
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    tpacket-v3: yes
+app-layer:
+  protocols:
+    http:
+      enabled: yes
+    tls:
+      enabled: yes
+    dns:
+      tcp:
+        enabled: yes
+      udp:
+        enabled: yes
+default-rule-path: /labpool/znas-netstats/suricata/rules
+rule-files:
+  - suricata.rules
+classification-file: /labpool/znas-netstats/suricata/rules/classification.config
+reference-config-file: /etc/suricata/reference.config
+threshold-file: /etc/znas-sdn/threshold.config
