@@ -285,10 +285,10 @@ body.light .fw-maplegend, body.dawn .fw-maplegend { background: rgba(255,255,255
 .fw-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--text-3); font-weight: 600; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .fw-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; color: var(--text-2); font-size: 12.5px; }
 /* Traffic tables: columns as wide as their content, no stretching */
-.fw-table.fw-dense { width: auto; }
+.fw-table.fw-dense { width: 100%; }
 .fw-table.fw-dense th { padding: 4px 8px; letter-spacing: .3px; }
-.fw-table.fw-dense td { padding: 2px 8px; font-size: 12px; line-height: 1.35; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
-.fw-table.fw-dense td:has(.fw-bytes) { max-width: none; }
+.fw-table.fw-dense td { padding: 2px 8px; font-size: 12px; line-height: 1.35; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.fw-table.fw-dense td:has(.fw-bytes), .fw-table.fw-dense td.fw-hosts { max-width: none; }
 .fw-table.fw-dense .fw-b { max-width: 36px; }
 .fw-table.fw-dense .fw-flag { line-height: 1; }
 .fw-contents { display: contents; }
@@ -738,3 +738,17 @@ body.light .tp-root, body.dawn .tp-root { --tp-on: #1a9e3f; --tp-idle: #b58900; 
 .fw-un-list { padding: 10px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 5px; }
 .fw-un-named { display: flex; align-items: center; gap: 10px; font-size: 12px; }
 .fw-un-named .fw-icon-btn { margin-left: auto; }
+
+/* jumps from Local Topo and the address card */
+.tp-c.tp-go { cursor: pointer; }
+.tp-c.tp-go:hover { color: var(--text); border-color: currentColor; background: var(--surface2); }
+.tp-c.ids.tp-go:hover { color: var(--tp-off); }
+.fw-hc-go { display: inline-flex; align-items: center; gap: 2px; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.fw-hc-go:hover { color: var(--accent, var(--fw-in)); text-decoration: underline; }
+.fw-ipchip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; font-size: 12px; color: var(--text-2);
+  background: rgba(10,132,255,.12); border: 1px solid rgba(10,132,255,.35); }
+.fw-ipchip b { color: var(--text); font-weight: 600; }
+.fw-ipchip button { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 0; background: none; color: var(--text-3); cursor: pointer; padding: 0; }
+.fw-ipchip button:hover { background: var(--surface2); color: var(--text); }
+@keyframes fw-flash { 0%, 30% { background: rgba(10,132,255,.28); } 100% { background: transparent; } }
+.fw-flash td, div.fw-flash { animation: fw-flash 2.4s ease-out; }

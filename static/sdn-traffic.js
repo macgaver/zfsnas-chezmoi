@@ -521,6 +521,7 @@
   const portLabel = p => SVC[p] ? `${p} ${SVC[p]}` : String(p);
   const portsLabel = r => (r.ports || []).map(portLabel).join(', ');
 
+  const hn = (name, ip, cls) => (typeof window.fwHostName === 'function' ? window.fwHostName(name, ip, cls) : E(name || ip || ''));
   const tms = t => (t && !String(t).startsWith('0001') ? new Date(t).getTime() || 0 : 0);
   const locKey = r => [r.country || r.cc, r.city].filter(Boolean).join(' ');
   function rowKey(dir, r) { return `${dir}:${r.remote || r.cc}:${r.city || ''}`; }
@@ -534,7 +535,7 @@
     return `<div class="fw-tcard"><div class="fw-tch"><span class="fw-dir in">${arr}Incoming</span><h3>Connections coming from the Internet</h3><span class="fw-sub">${E(T.range)} · ${fmtN(res.total)} lines · click a row to find it on the map</span><span style="flex:1"></span><button class="fw-icon-btn" data-csv="in">${icon('download', 12)}CSV</button></div>
       <div class="fw-tscroll"><table class="fw-table fw-dense" data-sort="traffic-in-${byIP ? 'ip' : 'geo'}"><thead><tr><th>${byIP ? 'Remote (initiator)' : 'Where'}</th>${byIP ? '<th>Location</th><th>Network</th><th></th><th>Hit our public</th><th>Forwarded to (inside)</th>' : '<th>IPs</th>'}<th>Sessions</th><th>Data ↓ / ↑</th><th>Last seen</th><th></th></tr></thead><tbody>
       ${rows.length ? rows.map(r => `<tr data-k="${E(rowKey('in', r))}">
-        ${byIP ? `<td class="fw-mono">${E(r.remote || '(others)')}</td><td data-v="${E(locKey(r))}">${loc(r)}</td><td>${E(r.as_org || '')}</td><td><span class="fw-dir in">${arr}</span></td><td><span title="${E(r.iface && ifName(r.iface) !== r.iface ? 'Linux interface: ' + r.iface : '')}">${E(ifName(r.iface))}</span><span class="fw-mono">:${E(r.pub_port || '')}</span></td><td><span class="fw-host"><span>${E(r.name || '')}</span><small>${E(r.inside ? r.inside + ':' + r.port : '')}</small></span></td>`
+        ${byIP ? `<td class="fw-mono">${E(r.remote || '(others)')}</td><td data-v="${E(locKey(r))}">${loc(r)}</td><td>${E(r.as_org || '')}</td><td><span class="fw-dir in">${arr}</span></td><td><span title="${E(r.iface && ifName(r.iface) !== r.iface ? 'Linux interface: ' + r.iface : '')}">${E(ifName(r.iface))}</span><span class="fw-mono">:${E(r.pub_port || '')}</span></td><td><span class="fw-host">${hn(r.name || '', r.inside)}<small>${E(r.inside ? r.inside + ':' + r.port : '')}</small></span></td>`
           : `<td data-v="${E(locKey(r))}">${loc(r)}</td><td data-v="${r.ips || 0}">${fmtN(r.ips)}</td>`}
         <td data-v="${r.sessions || 0}">${fmtN(r.sessions)}</td><td data-v="${(r.bytes_in || 0) + (r.bytes_out || 0)}">${bar((r.bytes_in || 0) + (r.bytes_out || 0), max, 'linear-gradient(90deg,var(--accent-2),var(--fw-in))')}${fmtB(r.bytes_in)} / ${fmtB(r.bytes_out)}</div></td><td data-v="${tms(r.last)}">${ago(r.last)}</td>
         <td>${isAdmin() ? `<span class="fw-act-h">${r.remote ? `<button data-block-ip="${E(r.remote)}">Block IP</button>` : ''}${r.cc ? `<button data-block-cc="${E(r.cc)}">Block ${E(r.country || r.cc)}</button>` : ''}</span>` : ''}</td></tr>`).join('')
@@ -549,7 +550,7 @@
     return `<div class="fw-tcard"><div class="fw-tch"><span class="fw-dir out">${arr}Outgoing</span><h3>Connections we opened to the Internet</h3><span class="fw-sub">${E(T.range)} · ${fmtN(res.total)} lines</span><span style="flex:1"></span><button class="fw-icon-btn" data-csv="out">${icon('download', 12)}CSV</button></div>
       <div class="fw-tscroll"><table class="fw-table fw-dense" data-sort="traffic-out-${byIP ? 'ip' : 'geo'}"><thead><tr><th>${byIP ? 'Remote' : 'Where'}</th>${byIP ? '<th>Location</th><th>Network</th><th>Port / service</th><th>Top inside hosts</th><th>Interface</th>' : '<th>IPs</th><th>Top ports</th>'}<th>Sessions</th><th>Data ↑ / ↓</th><th>Last seen</th><th></th></tr></thead><tbody>
       ${rows.length ? rows.map(r => `<tr data-k="${E(rowKey('out', r))}">
-        ${byIP ? `<td class="fw-mono">${E(r.remote || '(others)')}</td><td data-v="${E(locKey(r))}">${loc(r)}</td><td>${E(r.as_org || '')}</td><td>${E(portsLabel(r))}</td><td>${E((r.hosts || []).join(', '))}</td><td title="${E(r.iface && ifName(r.iface) !== r.iface ? 'Linux interface: ' + r.iface : '')}">${E(ifName(r.iface))}</td>` : `<td data-v="${E(locKey(r))}">${loc(r)}</td><td data-v="${r.ips || 0}">${fmtN(r.ips)}</td><td>${E(portsLabel(r))}</td>`}
+        ${byIP ? `<td class="fw-mono">${E(r.remote || '(others)')}</td><td data-v="${E(locKey(r))}">${loc(r)}</td><td>${E(r.as_org || '')}</td><td>${E(portsLabel(r))}</td><td class="fw-hosts">${(r.hosts || []).map((h, i) => hn(h, (r.host_ips || [])[i])).join(', ')}</td><td title="${E(r.iface && ifName(r.iface) !== r.iface ? 'Linux interface: ' + r.iface : '')}">${E(ifName(r.iface))}</td>` : `<td data-v="${E(locKey(r))}">${loc(r)}</td><td data-v="${r.ips || 0}">${fmtN(r.ips)}</td><td>${E(portsLabel(r))}</td>`}
         <td data-v="${r.sessions || 0}">${fmtN(r.sessions)}</td><td data-v="${(r.bytes_in || 0) + (r.bytes_out || 0)}">${bar((r.bytes_in || 0) + (r.bytes_out || 0), max, 'linear-gradient(90deg,#8e44ad,var(--fw-out))')}${fmtB(r.bytes_out)} / ${fmtB(r.bytes_in)}</div></td><td data-v="${tms(r.last)}">${ago(r.last)}</td>
         <td>${isAdmin() && r.remote ? `<span class="fw-act-h"><button data-block-ip="${E(r.remote)}" data-out="1">Block</button></span>` : ''}</td></tr>`).join('')
         : `<tr><td colspan="10" class="fw-empty">No outgoing connections in this period.</td></tr>`}
@@ -823,7 +824,7 @@
     const busy = (document.activeElement && document.activeElement.id === 'fwl-q') || document.querySelector('#fwl-quick .fw-picker-pop');
     if (found && rerenderLive && document.getElementById('fwl-q') && !busy) rerenderLive();
   }
-  const fq = ip => (ip && LN[ip]) ? `<small class="fw-fqdn" title="${E(LN[ip])}">${E(LN[ip])}</small>` : '';
+  const fq = ip => (ip && LN[ip]) ? `<small class="fw-fqdn" title="${E(LN[ip])}">${hn(LN[ip], ip)}</small>` : '';
   // Quick filters: direction to/from the Internet, or to/from one of our
   // inside networks (every non-WAN interface with its own address).
   const ip2n = a => (a || '').split('.').reduce((n, o) => n * 256 + (Number(o) || 0), 0);
@@ -872,7 +873,7 @@
       <div class="fw-tcard"><div class="fw-tscroll"><table class="fw-table" data-sort="live"><thead><tr><th></th><th>Proto</th><th>From</th><th>To</th><th>Location</th><th>Inside host</th><th>Data</th>${isAdmin() ? '<th></th>' : ''}</tr></thead><tbody>
       ${rows.map(c => `<tr><td>${ini(c)}</td><td>${E(c.proto || '')}</td><td class="fw-mono">${E(c.src)}${c.sport ? ':' + c.sport : ''}${fq(c.src)}</td><td class="fw-mono">${E(c.dst)}${c.dport ? ':' + c.dport : ''}${fq(c.dst)}</td>
         <td data-v="${E([c.country, c.city].filter(Boolean).join(' '))}">${c.cc ? `<span class="fw-flag">${flag(c.cc)}</span>${E(c.city || c.country || '')}` : ''}${c.as_org ? `<div style="color:var(--text-3);font-size:11px">${E(c.as_org)}</div>` : ''}</td>
-        <td>${E(c.name || c.inside || '')}${c.inside && c.inside !== c.src && c.inside !== c.dst ? fq(c.inside) : ''}</td><td data-v="${(c.bytes_in || 0) + (c.bytes_out || 0)}">${fmtB((c.bytes_in || 0) + (c.bytes_out || 0))}</td>
+        <td>${hn(c.name || '', c.inside)}${c.inside && c.inside !== c.src && c.inside !== c.dst ? fq(c.inside) : ''}</td><td data-v="${(c.bytes_in || 0) + (c.bytes_out || 0)}">${fmtB((c.bytes_in || 0) + (c.bytes_out || 0))}</td>
         ${isAdmin() ? `<td><span class="fw-act-h"><button data-kill='${E(JSON.stringify({ proto: c.proto, src: c.src, dst: c.dst, sport: c.sport, dport: c.dport }))}' title="Drop this connection from the tracking table">Kill</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="8" class="fw-empty">No connection.</td></tr>'}
       </tbody></table></div></div>`;
   }

@@ -6,11 +6,17 @@
 (function () {
   'use strict';
   const INTERNAL = /(^|[^\d.])((?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01])|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])|169\.254)\.\d{1,3}\.\d{1,3})(?!\d|\.\d|\/(?!32\b))/g;
+  const INTERNAL_ONE = /^(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01])|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])|169\.254)\.\d{1,3}\.\d{1,3}$/;
   const valid = ip => ip.split('.').every(o => +o <= 255);
   const SKIP = 'button,select,option,textarea,input,script,style,svg,.fw-ipi';
   const E = s => (typeof window.esc === 'function' ? window.esc(s) : String(s == null ? '' : s));
   const icon = (n, size) => (typeof window.znasIcon === 'function' ? window.znasIcon(n, { size: size || 14 }) : '');
 
+  // A name shown in place of an internal address (its DNS name, a DHCP or
+  // VM name) opens the same card as the address itself.
+  window.fwHostName = (name, ip, cls) => (ip && name && name !== ip && INTERNAL_ONE.test(ip))
+    ? `<span class="fw-ipi${cls ? ' ' + cls : ''}" data-ip="${E(ip)}" title="${E(ip)}">${E(name)}</span>`
+    : (cls ? `<span class="${cls}">${E(name || ip || '')}</span>` : E(name || ip || ''));
   // ── marking the addresses ───────────────────────────────────────────────
   function mark(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -96,7 +102,8 @@
     STALE: ['idle', 'Idle'], FAILED: ['off', 'Not answering'], INCOMPLETE: ['off', 'Not answering'],
   };
   const row = (label, val, cls) => (val === '' || val == null ? '' : `<div class="fw-hc-k">${E(label)}</div><div class="fw-hc-v${cls ? ' ' + cls : ''}">${val}</div>`);
-  const section = (ic, title, body, note) => body ? `<section class="fw-hc-s"><h4>${icon(ic, 13)}<span>${E(title)}</span>${note ? `<small>${E(note)}</small>` : ''}</h4>${body}</section>` : '';
+  // go: a title that opens the page with everything about this address
+  const section = (ic, title, body, note, go) => body ? `<section class="fw-hc-s"><h4>${icon(ic, 13)}${go ? `<button type="button" class="fw-hc-go" data-hc-go="${E(go)}" title="Show all of them">${E(title)}${icon('chevron-right', 12)}</button>` : `<span>${E(title)}</span>`}${note ? `<small>${E(note)}</small>` : ''}</h4>${body}</section>` : '';
 
   function liveHTML(l) {
     const tile = (cls, ic, label, v, peak, pts, color) => `<div class="fw-hc-tile ${cls}"><div class="fw-hc-tl">${icon(ic, 12)}${label}</div><b>${l.ready ? fmtBps(v) : '—'}</b><small>${l.ready && peak ? 'peak ' + fmtBps(peak) : '&nbsp;'}</small>${spark(pts, color)}</div>`;
@@ -177,8 +184,8 @@
       </div>
       <section class="fw-hc-s"><h4>${icon('arrow-up-down', 13)}<span>Right now</span><small id="fw-hc-conncount">${connCount(h.live)}</small></h4><div id="fw-hc-live">${liveHTML(h.live)}</div></section>
       ${section('clock', 'Last 24 hours', traffic, tr.remotes ? fmtN(tr.remotes) + (tr.remotes === 1 ? ' destination' : ' destinations') : '')}
-      ${section('search', 'DNS lookups', dns, dn.first ? 'since ' + ago(dn.first) : '')}
-      ${section('alert-triangle', 'Intrusion detection', ids, 'last 7 days')}
+      ${section('search', 'DNS lookups', dns, dn.first ? 'since ' + ago(dn.first) : '', 'dns')}
+      ${section('alert-triangle', 'Intrusion detection', ids, 'last 7 days', 'ids')}
       ${section('shield', 'Firewall', fw)}`;
   }
   const connCount = l => l.conns ? `${fmtN(l.conns)} open · ${fmtN(l.tcp)} TCP · ${fmtN(l.udp)} UDP` : '';
@@ -226,6 +233,13 @@
       card.className = 'fw-hostcard'; card.style.display = 'none';
       card.addEventListener('mouseenter', () => clearTimeout(hideT));
       card.addEventListener('mouseleave', () => { hideT = setTimeout(close, 220); });
+      card.addEventListener('click', e => {
+        const g = e.target.closest('[data-hc-go]');
+        if (!g) return;
+        const ip = openIP, fn = g.dataset.hcGo === 'dns' ? window.fwDNSFocus : window.fwIDSFocus;
+        close();
+        if (fn && ip) fn(ip);
+      });
       document.body.append(card);
     }
     document.querySelectorAll('.fw-ipcard').forEach(c => { c.style.display = 'none'; }); // the IDS page's own card

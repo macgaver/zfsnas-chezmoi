@@ -21,7 +21,17 @@
   let portsF = pref('ports', 'open'); // open | all
   let dirF = pref('dir', 'all');      // all | in | out
   let netF = pref('net', '');         // '' (all networks) | interface id
-  const passes = a => (portsF === 'all' || a.open !== false) && (dirF === 'all' || a.dir === dirF) && netMatch(a);
+  let ipF = '';                       // only the alerts about this address (from Local Topo or the address card)
+  const about = (a, ip) => [a.src, a.dst, a.src_inside, a.dst_inside].includes(ip);
+  const passes = a => (portsF === 'all' || a.open !== false) && (dirF === 'all' || a.dir === dirF) && netMatch(a) && (!ipF || about(a, ipF));
+  // Opens IDS alerts on everything about one address over 7 days — what the
+  // Local Topo count and the address card count. The remembered filters are
+  // widened for this visit only.
+  window.fwIDSFocus = ip => {
+    ipF = ip; hours = 168; sevFilter = 3; search = ''; portsF = 'all'; dirF = 'all'; netF = '';
+    if (typeof switchSidebarMode === 'function') switchSidebarMode('firewall');
+    window.showPage('fw-ids');
+  };
   const visible = () => {
     const q = search.toLowerCase();
     return alerts.filter(a => passes(a) && a.severity <= sevFilter && (!q || [a.signature, a.src, a.dst, a.src_inside, a.dst_inside, a.category, a.sid,
@@ -237,7 +247,7 @@
     const flag = cc => cc ? `<span class="fw-flag" title="${F.E(F.ccName(cc))}">${F.flagOf(cc)}</span>` : '';
     // Behind NAT: the inside host replaces our public address.
     // internal address → its DNS name when found (the address stays in the tooltip)
-    const shown = ip => { const n = internal(ip) && nameOf(ip); return n ? `<span title="${F.E(ip)}">${F.E(n)}</span>` : F.E(ip); };
+    const shown = ip => { const n = internal(ip) && nameOf(ip); return n && window.fwHostName ? window.fwHostName(n, ip) : (n ? `<span title="${F.E(ip)}">${F.E(n)}</span>` : F.E(ip)); };
     const host = (ip, inside) => inside ? `${shown(inside)}<span class="fw-natb">NAT</span>` : shown(ip);
     const rows = list.map((a, k) => {
       const [sl, sc] = SEV[a.severity] || ['?', 'none'];
@@ -257,6 +267,7 @@
     return `
       ${!s.enabled ? `<div class="fw-safemode" style="background:rgba(255,214,10,.10);border-color:rgba(255,214,10,.4)">${F.icon('info', 16)}<div>Intrusion detection is off — turn it on in <a href="#" onclick="showPage('fw-suricata');return false">Intrusion detection</a>.</div></div>` : ''}
       <div class="fw-filterbar"><span class="fw-filterbar-l">${F.icon('filter', 13)}Filtering</span>
+        ${ipF ? `<span class="fw-ipchip">About <b>${nameOf(ipF) && window.fwHostName ? window.fwHostName(nameOf(ipF), ipF) : `<span class="fw-ipi" data-ip="${F.E(ipF)}">${F.E(ipF)}</span>`}</b><button type="button" id="fw-ids-ipx" title="Show every address" aria-label="Show every address">${F.icon('x', 12)}</button></span>` : ''}
         <div id="fw-ids-portsf"></div><div id="fw-ids-dirf"></div><div id="fw-ids-netf" class="fw-quick"></div>
         <span class="fw-sub">${portsF === 'open' && closed ? `${F.E(closed)} alert group${closed > 1 ? 's' : ''} on closed ports hidden — the firewall dropped those probes` : ''}</span></div>
       <div class="fw-kpis" style="margin-bottom:12px">
@@ -285,6 +296,8 @@
     }
     F.seg(root.querySelector('#fw-ids-sevf'), [['1', 'High'], ['2', 'Medium+'], ['3', 'All']], String(sevFilter), v => { sevFilter = Number(v); F.rerender(); });
     F.seg(root.querySelector('#fw-ids-range'), [['24', '24 h'], ['168', '7 days'], ['720', '30 days']], String(hours), async v => { hours = Number(v); await loadAlerts(); F.rerender(); });
+    const ipx = root.querySelector('#fw-ids-ipx');
+    if (ipx) ipx.onclick = () => { ipF = ''; portsF = pref('ports', 'open'); dirF = pref('dir', 'all'); netF = pref('net', ''); F.rerender(); };
     const qi = root.querySelector('#fw-ids-q');
     qi.oninput = () => { search = qi.value; const pos = qi.selectionStart; F.rerender(); const n = document.getElementById('fw-ids-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
     const list = visible();

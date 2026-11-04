@@ -75,9 +75,9 @@
     const k = KIND[h.kind] || KIND.device;
     const name = h.name || h.vendor || (h.mac_private ? 'Private device' : 'Unknown device');
     const sub = h.addressing === 'self' ? h.note || '' : h.name && h.vendor && !isInst(h) ? h.vendor : isInst(h) ? (h.kind === 'vm' ? 'VM' : 'CT') + (h.os ? ' · ' + h.os : '') : h.kind === 'vpn' ? (h.networks && h.networks.length ? h.networks.join(', ') : '') : h.note || '';
-    const chips = (h.addressing === 'reserved' ? '<em class="tp-c" title="Reserved DHCP address">R</em>' : '')
+    const chips = (h.addressing === 'reserved' ? `<em class="tp-c tp-go" data-go-res="${E(h.ip || '')}" data-mac="${E(h.mac || '')}" title="Reserved DHCP address — open it in DHCP &amp; DNS">R</em>` : '')
       + (h.forwards ? `<em class="tp-c fwd" title="Port forwards reach it">${h.forwards} FWD</em>` : '')
-      + (h.ids_alerts ? `<em class="tp-c ids" title="IDS alerts in 7 days">${F.fmtCount(h.ids_alerts)} IDS</em>` : '');
+      + (h.ids_alerts ? `<em class="tp-c ids tp-go" data-go-ids="${E(h.ip || '')}" title="IDS alerts in 7 days — show them">${F.fmtCount(h.ids_alerts)} IDS</em>` : '');
     const activity = T.ready && (h.down_bps > 999 || h.up_bps > 999)
       ? `<span class="tp-rate live" title="Download, upload right now"><b>↓</b>${fmtRate(h.down_bps)} <b>↑</b>${fmtRate(h.up_bps)}</span>`
       : h.bytes_24h ? `<span class="tp-rate" title="Traffic in the last 24 hours">${fmtBytes(h.bytes_24h)}</span>` : '<span class="tp-rate"></span>';
@@ -308,6 +308,8 @@
     const input = root.querySelector('#tp-q');
     if (input) input.oninput = () => { q = input.value; applyFilter(root); };
     root.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view; F.rerender(); });
+    root.querySelectorAll('[data-go-ids]').forEach(b => b.onclick = e => { e.stopPropagation(); if (window.fwIDSFocus) window.fwIDSFocus(b.dataset.goIds); });
+    root.querySelectorAll('[data-go-res]').forEach(b => b.onclick = e => { e.stopPropagation(); if (window.fwDHCPFocus) window.fwDHCPFocus(b.dataset.goRes, b.dataset.mac); });
     applyFilter(root);
     const cv = root.querySelector('#tp-canvas');
     if (ro) ro.disconnect();

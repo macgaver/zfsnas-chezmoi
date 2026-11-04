@@ -157,3 +157,20 @@ func TestStore_QueryLocatesAgain(t *testing.T) {
 		}
 	}
 }
+
+func TestStore_HostIPsFollowHosts(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	a := rec("out", "1.1.1.1", "AU", 500, 1, day)
+	a.Inside, a.Name = "10.0.0.5", "nas.lan"
+	b := rec("out", "1.1.1.1", "AU", 100, 1, day)
+	b.Inside = "10.0.0.9" // no name known: shown by its address
+	_ = s.Write([]Bucket{bucket(day, a, b)})
+	r := s.Query(Query{From: day, To: day.Add(time.Hour), Dir: "out", Group: "ip"}, nil, day.Add(time.Hour))
+	if len(r.Rows) != 1 {
+		t.Fatalf("rows: %+v", r.Rows)
+	}
+	row := r.Rows[0]
+	if len(row.Hosts) != 2 || row.Hosts[0] != "nas.lan" || row.HostIPs[0] != "10.0.0.5" || row.Hosts[1] != "10.0.0.9" || row.HostIPs[1] != "10.0.0.9" {
+		t.Fatalf("hosts %v / %v", row.Hosts, row.HostIPs)
+	}
+}

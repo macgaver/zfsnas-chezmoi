@@ -65,12 +65,34 @@
   }
 
   // ── DHCP & DNS ─────────────────────────────────────────────────────────
+  // Local Topo's "R" chip: open DHCP & DNS on the lease of that address, or
+  // on its reservation when the device holds no lease right now.
+  let focus = null; // {ip, mac, ready}
+  window.fwDHCPFocus = (ip, mac) => {
+    focus = { ip, mac: (mac || '').toLowerCase(), ready: false };
+    if (typeof switchSidebarMode === 'function') switchSidebarMode('firewall');
+    window.showPage('fw-dhcp');
+  };
+  function applyFocus(root) {
+    if (!focus || !focus.ready || !F.cfg().interfaces.length) return;
+    const f = focus; focus = null;
+    const flash = el => { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.remove('fw-flash'); void el.offsetWidth; el.classList.add('fw-flash'); };
+    const row = [...root.querySelectorAll('tr[data-lip]')].find(tr => tr.dataset.lip === f.ip) || (f.mac && [...root.querySelectorAll('tr[data-lmac]')].find(tr => tr.dataset.lmac === f.mac));
+    if (row) { flash(row); return; }
+    const d = F.cfg().dhcp.find(x => x.reservations.some(r => r.ip === f.ip || (f.mac && r.mac === f.mac)));
+    if (!d) { F.toast(`No DHCP lease or reservation for ${f.ip} any more`, 'info'); return; }
+    if (!F.isAdmin()) { F.toast(`${f.ip} is reserved, with no lease right now`, 'info'); return; }
+    editDHCP(d.interface); // the device is off: its reservation is in the DHCP settings
+    const k = d.reservations.findIndex(r => r.ip === f.ip || (f.mac && r.mac === f.mac));
+    setTimeout(() => { const el = document.querySelector(`#fwd-res [data-res="${k}"]`); if (el) flash(el); }, 350);
+  }
   async function loadDHCP() {
     const [, r, inc] = await Promise.all([loadSvc(), F.api('GET', '/api/sdn/dhcp/leases'), F.api('GET', '/api/sdn/incus-networks')]);
     leases = r.ok ? (r.data || []) : [];
     incusNets = inc.ok ? (inc.data || []) : [];
     // The heavier of the page's reads, and slow to change: once a minute.
     if (unnamed === null || unnamedTick++ % 6 === 0) await loadUnnamed();
+    if (focus) focus.ready = true;
   }
   async function loadUnnamed() {
     const r = await F.api('GET', '/api/sdn/unnamed-hosts');
@@ -212,7 +234,7 @@
       const d = c.dhcp.find(x => x.interface === l.interface);
       const reserved = d && d.reservations.some(r => r.mac === l.mac.toLowerCase());
       const exp = !l.expires || l.expires.startsWith('0001') ? 'never' : F.fmtTime(l.expires);
-      return `<tr><td>${i ? `<span class="fw-pillx">${dot(i)}${F.E(i.name)}</span>` : '—'}</td><td>${F.E(l.hostname || '—')}</td>
+      return `<tr data-lip="${F.E(l.ip)}" data-lmac="${F.E((l.mac || '').toLowerCase())}"><td>${i ? `<span class="fw-pillx">${dot(i)}${F.E(i.name)}</span>` : '—'}</td><td>${F.E(l.hostname || '—')}</td>
         <td class="fw-mono">${F.E(l.ip)}</td><td class="fw-mono">${F.E(l.mac)}</td><td>${F.E(exp)}</td>
         <td>${reserved ? '<span class="fw-badge lan">reserved</span>' : (admin && d ? `<button class="fw-icon-btn" data-static="${F.E(l.mac)}" data-ip="${F.E(l.ip)}" data-host="${F.E(l.hostname || '')}" data-if="${F.E(l.interface)}">${F.icon('pin', 12)}Make static</button>` : '')}</td></tr>`;
     }).join('');
@@ -230,7 +252,7 @@
           <span>Leases</span><span>${n.leases.length} device${n.leases.length === 1 ? '' : 's'}</span></div>
       </div>`).join('');
     const incusRows = incusNets.flatMap(n => n.leases.map(l => ({ n, l }))).sort((a, b) => a.n.name.localeCompare(b.n.name) || ip2n(a.l.address) - ip2n(b.l.address))
-      .map(({ n, l }) => `<tr><td>${incusPill(n)}</td><td>${F.E(l.hostname || '—')}</td>
+      .map(({ n, l }) => `<tr data-lip="${F.E(l.address)}" data-lmac="${F.E((l.mac || '').toLowerCase())}"><td>${incusPill(n)}</td><td>${F.E(l.hostname || '—')}</td>
         <td class="fw-mono">${F.E(l.address)}</td><td class="fw-mono">${F.E(l.mac || '—')}</td><td>—</td>
         <td>${l.type === 'static' ? '<span class="fw-badge lan" title="Fixed in the instance\'s settings (VMs &amp; Containers)">reserved</span>' : ''}</td></tr>`).join('');
     const nLeases = leases.length + incusNets.reduce((a, n) => a + n.leases.length, 0);
@@ -262,6 +284,7 @@
   }
 
   function wireDHCP(root) {
+    setTimeout(() => applyFocus(root), 0);
     root.querySelectorAll('[data-install]').forEach(b => b.onclick = () => install(b.dataset.install, b));
     root.querySelectorAll('[data-dhcp]').forEach(b => b.onclick = () => editDHCP(b.dataset.dhcp));
     root.querySelectorAll('[data-incus-net]').forEach(b => b.onclick = () => openBridgeEditorFromFirewall(b.dataset.incusNet));

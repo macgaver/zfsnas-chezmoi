@@ -355,7 +355,11 @@ type Row struct {
 	IPs   int      `json:"ips,omitempty"`   // distinct remotes (country/city rows)
 	Ports []uint16 `json:"ports,omitempty"` // top targeted ports (blocked) / remote ports reached (outgoing)
 	Hosts []string `json:"hosts,omitempty"` // top inside hosts (outgoing)
-	Trend []uint64 `json:"trend,omitempty"` // 24 points over the range
+	// HostIPs is the address of each of Hosts, in the same order: a host is
+	// shown by its name when one is known, and the page still needs the
+	// address behind it for the inside host card.
+	HostIPs []string `json:"host_ips,omitempty"`
+	Trend   []uint64 `json:"trend,omitempty"` // 24 points over the range
 }
 
 type KPI struct {
@@ -485,10 +489,11 @@ func matches(r Rec, f string) bool {
 func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 	res := Result{KPI: map[string]KPI{}}
 	type acc struct {
-		row   Row
-		ips   map[string]bool
-		ports map[uint16]uint64
-		hosts map[string]uint64
+		row    Row
+		ips    map[string]bool
+		ports  map[uint16]uint64
+		hosts  map[string]uint64
+		hostIP map[string]string
 	}
 	rows := map[string]*acc{}
 	remotes := map[string]map[string]bool{}
@@ -537,7 +542,7 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 			gk := groupKey(r, q.Group)
 			a := rows[gk]
 			if a == nil {
-				a = &acc{row: Row{Rec: r, Trend: make([]uint64, 24)}, ips: map[string]bool{}, ports: map[uint16]uint64{}, hosts: map[string]uint64{}}
+				a = &acc{row: Row{Rec: r, Trend: make([]uint64, 24)}, ips: map[string]bool{}, ports: map[uint16]uint64{}, hosts: map[string]uint64{}, hostIP: map[string]string{}}
 				a.row.BytesIn, a.row.BytesOut, a.row.Pkts, a.row.Sessions = 0, 0, 0, 0
 				if q.Group == "country" || q.Group == "city" {
 					a.row.Remote, a.row.Inside, a.row.Name, a.row.ASN, a.row.ASOrg = "", "", "", 0, ""
@@ -563,6 +568,9 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 					h = r.Inside
 				}
 				a.hosts[h] += r.BytesIn + r.BytesOut
+				if r.Inside != "" {
+					a.hostIP[h] = r.Inside
+				}
 			}
 		}
 	})
@@ -591,6 +599,12 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 		}
 		a.row.Ports = topKeys(a.ports, nPorts)
 		a.row.Hosts = topKeys(a.hosts, 3)
+		if len(a.row.Hosts) > 0 {
+			a.row.HostIPs = make([]string, len(a.row.Hosts))
+			for i, h := range a.row.Hosts {
+				a.row.HostIPs[i] = a.hostIP[h]
+			}
+		}
 		all = append(all, a.row)
 	}
 	sort.Slice(all, func(i, j int) bool {

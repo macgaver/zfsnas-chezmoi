@@ -18,7 +18,7 @@
 
   const fmtN = n => Number(n || 0).toLocaleString();
   const pct = (a, b) => b ? (100 * a / b).toFixed(a && a / b < 0.1 ? 1 : 0) + '%' : '0%';
-  const name = ip => (R.names[ip] ? `${F.E(R.names[ip])} <span class="fw-dns-ip">${F.E(ip)}</span>` : `<span class="fw-mono">${F.E(ip)}</span>`);
+  const name = ip => (R.names[ip] ? `${window.fwHostName ? window.fwHostName(R.names[ip], ip) : F.E(R.names[ip])} <span class="fw-dns-ip">${F.E(ip)}</span>` : `<span class="fw-mono">${F.E(ip)}</span>`);
   const nameText = ip => R.names[ip] ? `${R.names[ip]} (${ip})` : ip;
 
   async function load() {
@@ -241,6 +241,12 @@
       ${R.tab === 'dash' ? dashHTML() : logHTML()}`;
   }
 
+  // From the address card: the query log of one client.
+  window.fwDNSFocus = ip => {
+    R.tab = 'log'; R.q = { domain: '', client: ip, status: '' }; R.log = [];
+    if (typeof switchSidebarMode === 'function') switchSidebarMode('firewall');
+    window.showPage('fw-dns');
+  };
   function goLog(filter) {
     R.tab = 'log';
     R.q = Object.assign({ domain: '', client: '', status: '' }, filter);
