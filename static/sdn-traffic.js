@@ -820,9 +820,8 @@
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
     lnBusy = false;
-    // show them now unless the user is typing in the search box or a menu is open
-    const busy = (document.activeElement && document.activeElement.id === 'fwl-q') || document.querySelector('#fwl-quick .fw-picker-pop');
-    if (found && rerenderLive && document.getElementById('fwl-q') && !busy) rerenderLive();
+    // show them now: only the table is redrawn, so typing is never disturbed
+    if (found) liveRefresh();
   }
   const fq = ip => (ip && LN[ip]) ? `<small class="fw-fqdn" title="${E(LN[ip])}">${hn(LN[ip], ip)}</small>` : '';
   // Quick filters: direction to/from the Internet, or to/from one of our
@@ -864,6 +863,13 @@
     return side === 'from' ? inNet(c.src, n.cidr) : (inNet(c.dst, n.cidr) || (c.initiator === 'remote' && inNet(c.inside, n.cidr)));
   }
 
+  // the protocol next to the destination port: TCP, UDP, or whatever else
+  const ptag = p => {
+    const v = String(p || '').toLowerCase();
+    if (!v) return '';
+    const k = v === 'tcp' || v === 'udp' ? v : 'other';
+    return `<span class="fw-pt fw-pt-${k}" title="Protocol">${E(v.toUpperCase())}</span>`;
+  };
   function liveHTML() {
     if (!L.list) return '<div class="fw-empty">Loading connections…</div>';
     const q = L.q.toLowerCase();
@@ -871,7 +877,7 @@
     const ini = c => c.initiator === 'remote' ? `<span class="fw-dir in" title="Started by the remote side">${arr}in</span>` : (c.initiator === 'inside' ? `<span class="fw-dir out" title="Started from inside">${arr}out</span>` : '<span class="fw-dir" style="background:var(--surface2);color:var(--text-3)" title="Between your own networks">internal</span>');
     return `<div class="fw-ttb"><div id="fwl-quick" class="fw-quick"></div><input class="fw-search fw-search-sm" id="fwl-q" placeholder="Filter: IP, country, host, port…" value="${E(L.q)}"><span class="fw-sub" style="color:var(--text-3);font-size:12px">${fmtN(rows.length)} of ${fmtN(L.list.length)} · refreshes every 5 s</span></div>
       <div class="fw-tcard"><div class="fw-tscroll"><table class="fw-table" data-sort="live"><thead><tr><th></th><th>Proto</th><th>From</th><th>To</th><th>Location</th><th>Inside host</th><th>Data</th>${isAdmin() ? '<th></th>' : ''}</tr></thead><tbody>
-      ${rows.map(c => `<tr><td>${ini(c)}</td><td>${E(c.proto || '')}</td><td class="fw-mono">${E(c.src)}${c.sport ? ':' + c.sport : ''}${fq(c.src)}</td><td class="fw-mono">${E(c.dst)}${c.dport ? ':' + c.dport : ''}${fq(c.dst)}</td>
+      ${rows.map(c => `<tr><td>${ini(c)}</td><td>${E(c.proto || '')}</td><td class="fw-mono">${E(c.src)}${c.sport ? ':' + c.sport : ''}${fq(c.src)}</td><td class="fw-mono">${E(c.dst)}${c.dport ? ':' + c.dport : ''}${ptag(c.proto)}${fq(c.dst)}</td>
         <td data-v="${E([c.country, c.city].filter(Boolean).join(' '))}">${c.cc ? `<span class="fw-flag">${flag(c.cc)}</span>${E(c.city || c.country || '')}` : ''}${c.as_org ? `<div style="color:var(--text-3);font-size:11px">${E(c.as_org)}</div>` : ''}</td>
         <td>${hn(c.name || '', c.inside)}${c.inside && c.inside !== c.src && c.inside !== c.dst ? fq(c.inside) : ''}</td><td data-v="${(c.bytes_in || 0) + (c.bytes_out || 0)}">${fmtB((c.bytes_in || 0) + (c.bytes_out || 0))}</td>
         ${isAdmin() ? `<td><span class="fw-act-h"><button data-kill='${E(JSON.stringify({ proto: c.proto, src: c.src, dst: c.dst, sport: c.sport, dport: c.dport }))}' title="Drop this connection from the tracking table">Kill</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="8" class="fw-empty">No connection.</td></tr>'}
@@ -884,13 +890,37 @@
       const btn = qb.querySelector('.fw-picker-btn');
       if (btn) btn.insertAdjacentHTML('afterbegin', icon('filter', 13)), btn.classList.toggle('fw-quick-on', !!L.qf);
     }
+    // Typing filters the table in place: the box itself is never redrawn, so
+    // neither a keystroke nor the 5 s refresh takes the focus or the caret.
     const q = root.querySelector('#fwl-q');
-    if (q) { q.oninput = () => { L.q = q.value; const pos = q.selectionStart; if (rerenderLive) rerenderLive(); const n = document.getElementById('fwl-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }; }
+    if (q) q.oninput = () => { L.q = q.value; clearTimeout(L.qt); L.qt = setTimeout(liveRefresh, 120); };
+    wireKill(root);
+  }
+  function wireKill(root) {
     root.querySelectorAll('[data-kill]').forEach(b => b.onclick = async () => {
       const r = await api('/api/sdn/connections/kill', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: b.dataset.kill });
       toast(r.ok ? 'Connection dropped' : ((r.data && r.data.error) || 'Failed'), r.ok ? 'success' : 'error');
-      await loadLive(); if (rerenderLive) rerenderLive();
+      await loadLive(); liveRefresh();
     });
+  }
+  // Redraws only the table and its count, keeping the sort and the scroll.
+  // False when the page is not drawn yet (then a full render is needed).
+  function liveRefresh() {
+    const card = document.querySelector('#page-fw-live .fw-tcard'), F = window.sdnFW;
+    if (!card) return false;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = liveHTML();
+    const nc = tmp.querySelector('.fw-tcard');
+    if (!nc) return false;
+    const sc = card.querySelector('.fw-tscroll'), top = sc ? sc.scrollTop : 0, left = sc ? sc.scrollLeft : 0;
+    card.replaceWith(nc);
+    const ns = tmp.querySelector('.fw-ttb .fw-sub'), os = document.querySelector('#page-fw-live .fw-ttb .fw-sub');
+    if (ns && os) os.textContent = ns.textContent;
+    if (F && F.sortTables) F.sortTables(nc);
+    wireKill(nc);
+    const nsc = nc.querySelector('.fw-tscroll');
+    if (nsc) { nsc.scrollTop = top; nsc.scrollLeft = left; }
+    return true;
   }
   let rerenderLive = null;
 
@@ -902,9 +932,13 @@
     });
     window.sdnRegisterPage('fw-live', {
       load: async rr => { rerenderLive = rr; await loadLive(); },
-      render: liveHTML, wire: wireLive, pollMs: 5000, poll: async () => {
-        if (document.querySelector('#fwl-quick .fw-picker-pop')) return false; // quick-filter menu open: don't redraw under it
-        if (!document.activeElement || document.activeElement.id !== 'fwl-q') await loadLive();
+      render: liveHTML, wire: wireLive, pollMs: 5000,
+      // the whole page is not redrawn while someone types in the filter box
+      busy: () => !!document.activeElement && document.activeElement.id === 'fwl-q',
+      poll: async () => {
+        // the connections stay live while typing: only the table is redrawn
+        await loadLive();
+        if (liveRefresh()) return false;
       },
     });
   }

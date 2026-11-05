@@ -742,6 +742,11 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleGetDiskIO))).Methods("GET")
 	r.Handle("/api/sysinfo/gatewaynet",
 		RequireAuth(HandleGetGatewayNet(appCfg))).Methods("GET")
+	// Network Focus (full): the top 10 devices on the gateway (Firewall on) or
+	// instances, 5 s blocks over 20 min, plus "Other" (the rest of the
+	// gateway's traffic).
+	r.Handle("/api/sysinfo/vmnet-live",
+		RequireAuth(HandleGetVMNetLive(appCfg))).Methods("GET")
 
 	// --- Per-process CPU metrics ---
 	r.Handle("/api/sysinfo/cpu-procs",

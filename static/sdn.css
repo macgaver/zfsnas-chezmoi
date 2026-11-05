@@ -401,6 +401,10 @@ input.fw-search.fw-search-sm { flex: 0 1 300px; min-width: 160px; height: 34px; 
 .fw-vip-st.bad { color: var(--fw-blk); background: rgba(255,69,58,.12); cursor: help; }
 
 /* Live connections: DNS name under an address. */
+.fw-pt { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-family: var(--font, inherit); font-size: 10px; font-weight: 700;
+  letter-spacing: .03em; line-height: 16px; vertical-align: 1px; background: var(--surface2); color: var(--text-3); }
+.fw-pt-tcp { background: rgba(10,132,255,.15); color: #0a84ff; }
+.fw-pt-udp { background: rgba(255,159,10,.16); color: #ff9f0a; }
 .fw-fqdn { display: block; font-family: var(--font, inherit); font-size: 11px; color: var(--text-3); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
 .btn-warn { background: #ff9f0a; color: #fff; }
 .btn-warn:hover:not(:disabled) { opacity: 0.85; }

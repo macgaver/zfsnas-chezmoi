@@ -58,6 +58,7 @@
     b.classList.toggle('net-header', mode.startsWith('network'));
     document.querySelectorAll('#user-menu-dropdown .um-hdr').forEach(x => x.classList.toggle('on', x.dataset.hdr === mode));
     if (mode.startsWith('network')) start(); else stop();
+    if (mode === 'network-full') vnStart(); else vnStop();
     if (window._tkClose) window._tkClose();
   }
   window.setHeaderMode = function (m) {
@@ -85,9 +86,11 @@
     loadPeak();
     poll();
     timer = setInterval(poll, 3000);
+    vnStart();
   }
   function stop() {
     clearInterval(timer); timer = null;
+    vnStop();
   }
   async function poll() {
     if (document.hidden) return;
@@ -118,7 +121,8 @@
     reset();
     peak = { iface: '', down: 0, up: 0 };
     savePeak();
-    if (timer) poll();
+    vnReset();
+    if (timer) { poll(); vnPoll(); }
   };
   function loadPeak() {
     try { const p = JSON.parse(sessionStorage.getItem(SS_PEAK) || 'null'); if (p && typeof p.down === 'number') peak = p; } catch (_) {}
@@ -146,7 +150,7 @@
     if (ci) { ci.textContent = d.iface ? '· ' + nm : ''; ci.title = devTip; }
     const empty = document.getElementById('net-empty');
     if (empty) empty.style.display = last && !d.iface ? 'flex' : 'none';
-    if (mode === 'network-full') { drawChart(); drawGauge('down'); drawGauge('up'); }
+    if (mode === 'network-full') { if (!vnShown()) drawChart(); drawGauge('down'); drawGauge('up'); }
     if (mode === 'network-compact') { drawEq('down'); drawEq('up'); }
   }
 
@@ -264,6 +268,172 @@
       if (e) new ResizeObserver(fit).observe(e);
     });
   }
+
+
+  // ── Network Focus (full): the top 10 devices or instances, stacked blocks ──
+  // One block per 5 s (the first 5 every 2 s, to fill in quickly), 20 minutes
+  // across. Upload above the line, download under it, each line in its own
+  // colour, and "Other" (the gateway's traffic those 10 do not explain) in
+  // grey, so a column's height is the gateway's traffic. With the Firewall on,
+  // the 10 are the gateway's busiest inside devices (FQDN, else IP); without
+  // it, the busiest instances. The server chooses them once and keeps them.
+  // Hover a column: that moment, the gateway's total and every line.
+  const VN = { timer: null, roster: 0, hosts: [], pts: [], last: 0, iface: '', mode: '', on: false, denied: false, hover: -1, tip: null, seq: 0 };
+  const VN_COLS = 240, VN_STEP = 5, VN_FAST = 2, VN_FAST_N = 5;
+  const VN_PAL = ['#ff9f0a', '#30d158', '#ff453a', '#ffd60a', '#5e5ce6', '#ff6fb5', '#63e6be', '#c69c6d', '#b5e853', '#3a7bd5'];
+  const VN_OTHER = '#8e8e93';
+  function vnShown() { return VN.on && mode === 'network-full'; }
+  // every 2 s until the first blocks are in, then every 5 s
+  function vnStart() {
+    if (VN.timer || mode !== 'network-full' || VN.denied) return;
+    const tick = async () => {
+      if (!document.hidden) await vnPoll();
+      if (!VN.timer) return;
+      VN.timer = setTimeout(tick, (VN.pts.length < VN_FAST_N ? VN_FAST : VN_STEP) * 1000);
+    };
+    VN.timer = setTimeout(tick, 0);
+  }
+  function vnStop() { clearTimeout(VN.timer); VN.timer = null; vnHideTip(); }
+  function vnReset() { VN.roster = 0; VN.hosts = []; VN.pts = []; VN.last = 0; VN.on = false; VN.denied = false; vnHideTip(); vnShow(); }
+  async function vnPoll() {
+    const seq = ++VN.seq;
+    let d;
+    try {
+      const r = await fetch('/api/sysinfo/vmnet-live?since=' + (VN.roster ? VN.last : 0));
+      if (seq !== VN.seq) return;
+      if (r.status === 403) { VN.denied = true; VN.on = false; vnStop(); vnShow(); return; }
+      if (!r.ok) return;
+      d = await r.json();
+    } catch (_) { return; }
+    if (seq !== VN.seq) return;
+    if (d.roster !== VN.roster) {
+      // new choice of instances (the server restarted its sampler): start over
+      if (VN.roster && VN.last) { VN.roster = d.roster; VN.pts = []; VN.last = 0; vnPoll(); return; }
+      VN.roster = d.roster; VN.pts = [];
+    }
+    VN.hosts = d.hosts || []; VN.iface = d.iface || ''; VN.mode = d.mode || '';
+    for (const p of d.data || []) if (p.ts > VN.last) { VN.pts.push(p); VN.last = p.ts; }
+    if (VN.pts.length > VN_COLS) VN.pts.splice(0, VN.pts.length - VN_COLS);
+    VN.on = !!d.available && VN.hosts.length > 0;
+    vnShow();
+    if (VN.on) { vnDraw(); if (VN.hover >= 0) vnTip(); }
+  }
+  // the instance stack, or the gateway line chart when there is no instance
+  function vnShow() {
+    const on = vnShown();
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.style.display = v; };
+    set('vn-chart', on ? '' : 'none'); set('net-chart', on ? 'none' : '');
+    set('net-key-vn', on ? '' : 'none'); set('net-key-gw', on ? 'none' : '');
+    // the stack needs no title row (the arrows on its scale say which side
+    // is which): it takes that height too
+    const wrap = document.querySelector('#net-bar .net-chart-wrap');
+    if (wrap) wrap.classList.toggle('vn-on', on);
+    const t = document.getElementById('net-chart-title');
+    if (t) t.textContent = !on ? 'Gateway traffic' : VN.mode === 'devices' ? 'Top devices' : 'Top instances';
+    if (!on && mode === 'network-full') drawChart();
+  }
+  // column index (0 = oldest, VN_COLS-1 = newest) of the i-th point: blocks
+  // sit side by side, the newest at the right edge
+  function vnCol(i) { return VN_COLS - VN.pts.length + i; }
+  function vnGeom(cv) {
+    const W = cv.clientWidth, H = cv.clientHeight;
+    let maxU = 1, maxD = 1;
+    for (const p of VN.pts) {
+      const su = p.up.reduce((a, b) => a + b, 0) + p.other_up, sd = p.down.reduce((a, b) => a + b, 0) + p.other_down;
+      maxU = Math.max(maxU, su); maxD = Math.max(maxD, sd);
+    }
+    // the zero line splits the height by the busier side, each side keeping a fifth
+    const share = Math.min(0.8, Math.max(0.2, maxU / (maxU + maxD)));
+    const top = 2, bot = H - 2, zero = Math.round(top + (bot - top) * share);
+    return { W, H, top, bot, zero, maxU, maxD, cw: W / VN_COLS };
+  }
+  function vnDraw() {
+    const cv = document.getElementById('vn-chart');
+    if (!cv || !cv.clientWidth) return;
+    const dpr = window.devicePixelRatio || 1;
+    const g = vnGeom(cv);
+    if (cv.width !== Math.round(g.W * dpr) || cv.height !== Math.round(g.H * dpr)) { cv.width = Math.round(g.W * dpr); cv.height = Math.round(g.H * dpr); }
+    const x = cv.getContext('2d');
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    x.clearRect(0, 0, g.W, g.H);
+    const gap = g.cw >= 3 ? 1 : 0, bw = Math.max(1, g.cw - gap);
+    const hu = (g.zero - g.top) / g.maxU, hd = (g.bot - g.zero) / g.maxD;
+    for (let pi = 0; pi < VN.pts.length; pi++) {
+      const p = VN.pts[pi], c = vnCol(pi);
+      if (c < 0) continue;
+      const x0 = c * g.cw;
+      let y = g.zero;
+      const segUp = (v, col) => { if (v <= 0) return; const h = v * hu; x.fillStyle = col; x.fillRect(x0, y - h, bw, h); y -= h; };
+      p.up.forEach((v, i) => segUp(v, VN_PAL[i % VN_PAL.length]));
+      x.globalAlpha = 0.55; segUp(p.other_up, VN_OTHER); x.globalAlpha = 1;
+      y = g.zero;
+      const segDn = (v, col) => { if (v <= 0) return; const h = v * hd; x.fillStyle = col; x.fillRect(x0, y, bw, h); y += h; };
+      x.globalAlpha = 0.72; p.down.forEach((v, i) => segDn(v, VN_PAL[i % VN_PAL.length]));
+      x.globalAlpha = 0.4; segDn(p.other_down, VN_OTHER); x.globalAlpha = 1;
+    }
+    // the zero line, the hovered column, the scale
+    x.fillStyle = cssVar('--border', 'rgba(128,128,128,.3)');
+    x.fillRect(0, g.zero, g.W, 1);
+    if (VN.hover >= 0) {
+      x.strokeStyle = cssVar('--text', '#fff'); x.lineWidth = 1;
+      x.strokeRect(VN.hover * g.cw + 0.5, g.top - 1.5, Math.max(1, g.cw - 1), g.bot - g.top + 3);
+    }
+    x.font = '10px system-ui, -apple-system, sans-serif';
+    x.fillStyle = cssVar('--text-3', '#8e8e93');
+    x.textBaseline = 'top'; x.fillText('↑ ' + fmtBits(g.maxU), 4, g.top + 1);
+    x.textBaseline = 'bottom'; x.fillText('↓ ' + fmtBits(g.maxD), 4, g.bot - 1);
+    x.textAlign = 'right'; x.fillText('now', g.W - 3, g.bot - 1);
+    x.textAlign = 'left';
+  }
+  function vnHideTip() {
+    VN.hover = -1;
+    if (VN.tip) { VN.tip.remove(); VN.tip = null; }
+  }
+  function vnTip(ev) {
+    const cv = document.getElementById('vn-chart');
+    if (!cv) return;
+    if (ev) {
+      const r = cv.getBoundingClientRect();
+      VN.hover = Math.max(0, Math.min(VN_COLS - 1, Math.floor((ev.clientX - r.left) / (r.width / VN_COLS))));
+      VN.mx = ev.clientX; VN.my = ev.clientY;
+    }
+    const p = VN.pts[VN.hover - (VN_COLS - VN.pts.length)];
+    if (!p) { if (VN.tip) { VN.tip.remove(); VN.tip = null; } vnDraw(); return; } // not filled in yet
+    const ts = p.ts;
+    if (!VN.tip) { VN.tip = document.createElement('div'); VN.tip.className = 'vn-tip'; document.body.appendChild(VN.tip); }
+    const ago = Math.max(0, VN.last - ts), when = new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const agoTxt = ago < 60 ? ago + ' s ago' : Math.floor(ago / 60) + ' min ' + (ago % 60 ? (ago % 60) + ' s ' : '') + 'ago';
+    const rate = v => v > 0 ? fmtBits(v) : '<span class="vn-z">0</span>';
+    // a device by its FQDN (its IP when none is known); this server says so
+    const label = h => esc(h.name) + (h.type === 'server' ? ' <span class="vn-z">(this server)</span>' : '');
+    const hint = h => esc(h.ip && h.ip !== h.name ? h.name + ' · ' + h.ip : h.name);
+    let body;
+    if (!p) body = '<div class="vn-r"><span></span><span class="vn-z">No sample for this moment</span><span></span><span></span></div>';
+    else {
+      body = VN.hosts.map((h, i) => `<div class="vn-r"><span class="vn-sw" style="background:${VN_PAL[i % VN_PAL.length]}"></span><span class="vn-n" title="${hint(h)}">${label(h)}</span><span class="vn-dl">↓ ${rate(p.down[i])}</span><span class="vn-ul">↑ ${rate(p.up[i])}</span></div>`).join('')
+        + `<div class="vn-r vn-other"><span class="vn-sw" style="background:${VN_OTHER}"></span><span class="vn-n" title="The gateway's traffic not explained by the ${VN.mode === 'devices' ? 'devices' : 'instances'} above">Other</span><span class="vn-dl">↓ ${rate(p.other_down)}</span><span class="vn-ul">↑ ${rate(p.other_up)}</span></div>`;
+    }
+    const nm = (last && last.iface === VN.iface && last.name) || VN.iface || 'Gateway';
+    const per = p && p.step_sec && p.step_sec !== VN_STEP ? ` · ${p.step_sec} s block` : '';
+    VN.tip.innerHTML = `<div class="vn-h"><div class="vn-t">${when} · ${agoTxt}${per}</div>
+      <div class="vn-tot"><span>${esc(nm)} total</span><span class="vn-dl"><b>↓ ${p ? fmtBits(p.total_down) : '—'}</b></span><span class="vn-ul"><b>↑ ${p ? fmtBits(p.total_up) : '—'}</b></span></div></div>
+      <div class="vn-rows">${body}</div>`;
+    const w = VN.tip.offsetWidth, h = VN.tip.offsetHeight;
+    let lx = VN.mx + 14, ly = VN.my + 14;
+    if (lx + w > window.innerWidth - 8) lx = VN.mx - w - 14;
+    if (ly + h > window.innerHeight - 8) ly = Math.max(8, window.innerHeight - h - 8);
+    VN.tip.style.left = Math.max(8, lx) + 'px'; VN.tip.style.top = ly + 'px';
+    vnDraw();
+  }
+  window.addEventListener('DOMContentLoaded', () => {
+    const cv = document.getElementById('vn-chart');
+    if (!cv) return;
+    cv.addEventListener('pointermove', e => { if (VN.on) vnTip(e); });
+    cv.addEventListener('pointerdown', e => { if (VN.on) vnTip(e); });
+    cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { vnHideTip(); vnDraw(); } });
+    if (window.ResizeObserver) new ResizeObserver(() => { if (vnShown()) vnDraw(); }).observe(cv);
+  });
+  document.addEventListener('click', e => { if (VN.tip && e.target.id !== 'vn-chart') { vnHideTip(); vnDraw(); } });
 
   // ── top talkers popup: hover a dial or an equalizer line (mouse), or tap ──
   // The busiest inside devices on the Internet right now. Polled only while

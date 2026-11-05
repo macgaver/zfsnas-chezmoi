@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"zfsnas/internal/config"
 	"zfsnas/internal/sdn"
@@ -28,6 +29,28 @@ func HandleGetGatewayNet(appCfg *config.AppConfig) http.HandlerFunc {
 			c, _ = st.LoadConfirmed()
 		}
 		jsonOK(w, gatewayNetNamed(system.GetGatewayNet(), c))
+	}
+}
+
+// HandleGetVMNetLive — GET /api/sysinfo/vmnet-live?since=<unix ts>
+// The Network Focus header's stack: the gateway's top devices when the
+// Firewall is on (needs the Firewall view), else the top instances (needs the
+// virtualization view). The points newer than since (all of them without it).
+func HandleGetVMNetLive(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var c *sdn.Config
+		st := sdnStoreFor(appCfg)
+		if s, _ := st.LoadState(); s.Enabled {
+			if cc, err := st.LoadConfirmed(); err == nil {
+				c = cc
+			}
+		}
+		if p := standardPermsForSession(r); p != nil && ((c != nil && !p.ViewFirewall) || (c == nil && !p.ViewVirtualization)) {
+			jsonErr(w, http.StatusForbidden, "permission denied")
+			return
+		}
+		since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
+		jsonOK(w, system.GetVMNetLive(since, c))
 	}
 }
 

@@ -16,6 +16,9 @@ const (
 	talkerThis   = "this-server"    // this server's entry
 )
 
+// ThisServer is the key of this server's own entry in Keyed.
+const ThisServer = talkerThis
+
 // Talker is one inside device.
 type Talker struct {
 	IP          string  `json:"ip"`
@@ -201,4 +204,13 @@ func (t *Talkers) Totals() (down, up int64) {
 		up += h.UpBps
 	}
 	return down, up
+}
+
+// Keyed is every device by its key: its inside address, or ThisServer.
+func (t *Talkers) Keyed() map[string]Talker {
+	out := make(map[string]Talker, len(t.hosts))
+	for k, h := range t.hosts {
+		out[k] = *h
+	}
+	return out
 }

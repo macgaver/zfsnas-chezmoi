@@ -4033,6 +4033,24 @@ body.net-header.compact-header #net-eq { display: flex; }
 .net-chart-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .net-chart-wrap canvas { display: block; width: 100% !important; height: 110px !important; }
 .net-key { float: right; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); }
+#vn-chart { cursor: crosshair; }
+.net-chart-wrap.vn-on .io-chart-label { display: none; }
+.net-chart-wrap.vn-on #vn-chart { flex: 1 1 0; height: 0 !important; min-height: 110px; } /* fills the row; never sized by its own pixels */
+.vn-tip { position: fixed; z-index: 3500; pointer-events: none; min-width: 270px; max-width: calc(100vw - 16px);
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.38); font-size: 12px; overflow: hidden; }
+.vn-tip .vn-h { padding: 8px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+.vn-tip .vn-t { color: var(--text-3); font-size: 11px; }
+.vn-tip .vn-tot { display: flex; gap: 14px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.vn-tip .vn-tot b { font-size: 13px; }
+.vn-tip .vn-rows { padding: 4px 0; }
+.vn-tip .vn-r { display: grid; grid-template-columns: 10px minmax(0,1fr) auto auto; gap: 4px 10px; align-items: center; padding: 3px 12px; font-variant-numeric: tabular-nums; }
+.vn-tip .vn-r.vn-other { border-top: 1px solid var(--border); margin-top: 3px; padding-top: 6px; color: var(--text-2); }
+.vn-tip .vn-sw { width: 10px; height: 10px; border-radius: 3px; }
+.vn-tip .vn-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vn-tip .vn-dl { color: #64d2ff; text-align: right; }
+.vn-tip .vn-ul { color: #bf5af2; text-align: right; }
+.vn-tip .vn-z { color: var(--text-3); opacity: .6; }
 .net-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 6px; }
 .net-empty { position: absolute; inset: 18px 0 0; display: none; align-items: center; justify-content: center; font-size: 12px; color: var(--text-3); }
 .net-gauges { display: flex; gap: 4px; flex: none; }

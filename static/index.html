@@ -1103,9 +1103,12 @@
          speedtest-style dials. static/net-header.js -->
     <div id="net-bar">
       <div class="net-chart-wrap">
-        <div class="io-chart-label">Gateway traffic <span id="net-chart-iface"></span>
-          <span class="net-key"><span class="net-sw" style="background:#64d2ff"></span>Download <span class="net-sw" style="background:#bf5af2"></span>Upload</span></div>
+        <div class="io-chart-label"><span id="net-chart-title">Gateway traffic</span> <span id="net-chart-iface"></span>
+          <span class="net-key" id="net-key-gw"><span class="net-sw" style="background:#64d2ff"></span>Download <span class="net-sw" style="background:#bf5af2"></span>Upload</span>
+          <span class="net-key" id="net-key-vn" style="display:none">Upload above, download below · 20 min</span></div>
         <canvas id="net-chart"></canvas>
+        <!-- the top 10 instances, stacked blocks of 5 s: net-header.js -->
+        <canvas id="vn-chart" style="display:none" aria-label="Top instances' network traffic, last 20 minutes"></canvas>
         <div id="net-empty" class="net-empty">No default route: this server has no gateway.</div>
       </div>
       <div class="net-gauges">
