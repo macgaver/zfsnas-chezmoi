@@ -193,6 +193,12 @@
   // ── showing it ──────────────────────────────────────────────────────────
   const cache = {}; // ip → {at, data}
   let card = null, anchor = null, openIP = '', showT = 0, hideT = 0, pollT = 0, mx = 0, my = 0;
+  // The last input was a finger or a pen (iPad, iPhone): the card stays until
+  // a tap elsewhere. iOS also sends mouse events after a tap, and an iPad with
+  // a trackpad says it can hover, so neither of those may close it.
+  let touchMode = !matchMedia('(hover: hover)').matches;
+  document.addEventListener('pointerdown', e => { touchMode = e.pointerType !== 'mouse'; }, true);
+  document.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') touchMode = false; }, { passive: true }); // a real mouse or trackpad
 
   function place() {
     if (!card || !anchor) return;
@@ -220,11 +226,18 @@
   // under the pointer, close when the pointer has gone elsewhere.
   function followAnchor() {
     if (!anchor || document.contains(anchor)) return;
+    if (touchMode) {
+      // no pointer to follow: the same address anywhere on the page, else the
+      // card simply stays where it is
+      const same = [...document.querySelectorAll('.fw-ipi')].find(x => x.dataset.ip === openIP);
+      if (same) anchor = same;
+      return;
+    }
     const el = document.elementFromPoint(mx, my);
     if (el && card.contains(el)) return;
     const a = el && el.closest('.fw-ipi');
     if (a && a.dataset.ip === openIP) anchor = a;
-    else if (matchMedia('(hover: hover)').matches) close();
+    else close();
   }
   async function open(el) {
     const ip = el.dataset.ip;
@@ -232,7 +245,7 @@
       card = document.createElement('div');
       card.className = 'fw-hostcard'; card.style.display = 'none';
       card.addEventListener('mouseenter', () => clearTimeout(hideT));
-      card.addEventListener('mouseleave', () => { hideT = setTimeout(close, 220); });
+      card.addEventListener('mouseleave', () => { if (!touchMode) hideT = setTimeout(close, 220); });
       card.addEventListener('click', e => {
         const g = e.target.closest('[data-hc-go]');
         if (!g) return;
@@ -262,6 +275,7 @@
   }
   document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; }, { passive: true });
   document.addEventListener('mouseover', e => {
+    if (touchMode) return; // iOS's mouse events after a tap
     const a = e.target.closest && e.target.closest('.fw-ipi');
     if (!a) return;
     clearTimeout(hideT); clearTimeout(showT);
@@ -270,6 +284,7 @@
     showT = setTimeout(() => open(a), 280);
   });
   document.addEventListener('mouseout', e => {
+    if (touchMode) return;
     const a = e.target.closest && e.target.closest('.fw-ipi');
     if (!a) return;
     clearTimeout(showT);
@@ -278,11 +293,17 @@
   // Touch screens: a tap opens it, a tap elsewhere closes it. A tap on an
   // address must not also trigger its row.
   document.addEventListener('click', e => {
-    const touch = !matchMedia('(hover: hover)').matches;
+    const touch = touchMode;
     const a = e.target.closest && e.target.closest('.fw-ipi');
     if (a && touch) { e.preventDefault(); e.stopPropagation(); if (a.dataset.ip !== openIP) open(a); return; }
     if (touch && anchor && card && !card.contains(e.target)) close();
   }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && anchor) close(); });
   window.addEventListener('hashchange', close);
+  // another page of the app (the side menu, a link): the card goes with it
+  if (typeof window.showPage === 'function' && !window.showPage._fwHc) {
+    const orig = window.showPage;
+    window.showPage = function () { close(); return orig.apply(this, arguments); };
+    window.showPage._fwHc = true;
+  }
 })();

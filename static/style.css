@@ -4034,6 +4034,21 @@ body.net-header.compact-header #net-eq { display: flex; }
 .net-chart-wrap canvas { display: block; width: 100% !important; height: 110px !important; }
 .net-key { float: right; display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); }
 #vn-chart { cursor: crosshair; }
+/* the stack's legend: busiest lines over its 20 minutes, avg / max */
+.vn-top { flex: none; width: 300px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; font-size: 11px;
+  font-variant-numeric: tabular-nums; border-left: 1px solid var(--border); padding-left: 12px; }
+.vn-top .vt-r { display: grid; grid-template-columns: 9px minmax(0,1fr) 92px 92px; gap: 6px; align-items: center; height: 15px; line-height: 15px; }
+.vn-top .vt-h { color: var(--text-3); font-size: 10px; font-weight: 600; letter-spacing: .02em; margin-bottom: 2px; flex: none; }
+.vn-top .vt-h > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vn-top .vt-r { flex: none; }
+.vn-top .vt-sw { width: 9px; height: 9px; border-radius: 2px; }
+.vn-top .vt-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.vn-top .vt-v { text-align: right; white-space: nowrap; color: var(--text-2); }
+.vn-top .vt-v b { font-weight: 600; }
+.vn-top .vt-ul b { color: #bf5af2; }
+.vn-top .vt-dl b { color: #64d2ff; }
+.vn-top .vt-z { color: var(--text-3); opacity: .6; }
+@media (max-width: 1100px) { .vn-top { display: none !important; } }
 .net-chart-wrap.vn-on .io-chart-label { display: none; }
 .net-chart-wrap.vn-on #vn-chart { flex: 1 1 0; height: 0 !important; min-height: 110px; } /* fills the row; never sized by its own pixels */
 .vn-tip { position: fixed; z-index: 3500; pointer-events: none; min-width: 270px; max-width: calc(100vw - 16px);

@@ -1503,6 +1503,17 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		r.Handle(path, RequireAuthOrAPIKey(http.HandlerFunc(h))).Methods("GET")
 	}
 
+	// --- Pi-hole-compatible statistics (homepage.dev "pihole" widget) ---
+	// The widget's key is a portal API key; see pihole_compat.go.
+	r.HandleFunc("/api/auth", HandlePiholeAuth).Methods("POST")
+	r.HandleFunc("/api/auth", HandlePiholeLogout).Methods("DELETE")
+	r.HandleFunc("/api/stats/summary", HandlePiholeSummary(appCfg)).Methods("GET")
+	r.HandleFunc("/admin/api.php", HandlePiholeV5(appCfg)).Methods("GET")
+	// --- OPNsense-compatible (homepage.dev "opnsense" widget): Basic auth,
+	// username ignored, password = a portal API key; see opnsense_compat.go.
+	r.HandleFunc("/api/diagnostics/activity/getActivity", opnsenseAuth(HandleOPNsenseActivity)).Methods("GET")
+	r.HandleFunc("/api/diagnostics/traffic/interface", opnsenseAuth(HandleOPNsenseInterfaces)).Methods("GET")
+
 	// Catch-all for SPA deep links: serve index.html for any unknown GET that
 	// doesn't start with /api/ or /static/.
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

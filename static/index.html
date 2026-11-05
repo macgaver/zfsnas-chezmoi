@@ -1111,6 +1111,8 @@
         <canvas id="vn-chart" style="display:none" aria-label="Top instances' network traffic, last 20 minutes"></canvas>
         <div id="net-empty" class="net-empty">No default route: this server has no gateway.</div>
       </div>
+      <!-- beside the stack: its busiest lines over the 20 minutes, as many as fit -->
+      <div id="vn-top" class="vn-top" style="display:none" aria-label="Busiest over the last 20 minutes"></div>
       <div class="net-gauges">
         <div class="net-gauge" id="net-gauge-down"></div>
         <div class="net-gauge" id="net-gauge-up"></div>

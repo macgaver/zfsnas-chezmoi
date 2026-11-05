@@ -104,13 +104,26 @@
     last = d;
     if (d.ready) {
       shift(buf.down, d.rx_bps); shift(buf.up, d.tx_bps);
-      if (peak.iface !== d.iface) peak = { iface: d.iface, down: 0, up: 0 };
-      peak.down = Math.max(peak.down, d.rx_bps); peak.up = Math.max(peak.up, d.tx_bps);
-      savePeak();
+      // with the stack shown, the dials and their maximum follow its blocks
+      if (!vnGauges()) notePeak(d.iface, d.rx_bps, d.tx_bps);
     }
     draw();
   }
   function shift(a, v) { a.shift(); a.push(v); }
+  function notePeak(iface, down, up) {
+    if (peak.iface !== iface) peak = { iface, down: 0, up: 0 };
+    peak.down = Math.max(peak.down, down); peak.up = Math.max(peak.up, up);
+    savePeak();
+  }
+  // The dials' value: in Network Focus (full) with the stack shown, the
+  // gateway total of its newest block (same interval, same counters as the
+  // graph and its popup), else the 3 s gateway poll.
+  function vnGauges() { return vnShown() && VN.pts.length > 0; }
+  function gaugeVal(which) {
+    if (vnGauges()) { const p = VN.pts[VN.pts.length - 1]; return (which === 'down' ? p.total_down : p.total_up) || 0; }
+    const d = last || {};
+    return d.ready ? (which === 'down' ? d.rx_bps : d.tx_bps) : 0;
+  }
   function reset() {
     buf.down.fill(null); buf.up.fill(null);
     last = null;
@@ -190,7 +203,7 @@
     const el = document.getElementById('net-gauge-' + which);
     if (!el) return;
     const d = last || {};
-    const v = d.ready ? (which === 'down' ? d.rx_bps : d.tx_bps) : 0;
+    const v = gaugeVal(which);
     const pk = peak.iface === d.iface ? peak[which] : 0;
     const col = which === 'down' ? DL : UL;
     const W = 132, H = 126, cx = 66, cy = 58, r = 48;
@@ -312,11 +325,18 @@
       VN.roster = d.roster; VN.pts = [];
     }
     VN.hosts = d.hosts || []; VN.iface = d.iface || ''; VN.mode = d.mode || '';
-    for (const p of d.data || []) if (p.ts > VN.last) { VN.pts.push(p); VN.last = p.ts; }
+    const fresh = [];
+    for (const p of d.data || []) if (p.ts > VN.last) { VN.pts.push(p); fresh.push(p); VN.last = p.ts; }
     if (VN.pts.length > VN_COLS) VN.pts.splice(0, VN.pts.length - VN_COLS);
     VN.on = !!d.available && VN.hosts.length > 0;
     vnShow();
-    if (VN.on) { vnDraw(); if (VN.hover >= 0) vnTip(); }
+    if (VN.on) {
+      vnDraw(); vnTop(); if (VN.hover >= 0) vnTip();
+      // the dials move with the blocks: same interval, same totals
+      const gw = (last && last.iface) || VN.iface;
+      if (gw === VN.iface) fresh.forEach(p => notePeak(gw, p.total_down || 0, p.total_up || 0));
+      if (vnShown()) { drawGauge('down'); drawGauge('up'); }
+    }
   }
   // the instance stack, or the gateway line chart when there is no instance
   function vnShow() {
@@ -328,6 +348,7 @@
     // is which): it takes that height too
     const wrap = document.querySelector('#net-bar .net-chart-wrap');
     if (wrap) wrap.classList.toggle('vn-on', on);
+    set('vn-top', on ? '' : 'none');
     const t = document.getElementById('net-chart-title');
     if (t) t.textContent = !on ? 'Gateway traffic' : VN.mode === 'devices' ? 'Top devices' : 'Top instances';
     if (!on && mode === 'network-full') drawChart();
@@ -385,6 +406,46 @@
     x.textAlign = 'right'; x.fillText('now', g.W - 3, g.bot - 1);
     x.textAlign = 'left';
   }
+  // A short name: the FQDN's first label, the IP when there is no name.
+  function vnShort(h) {
+    const n = String(h.name || h.ip || '');
+    return /^[\d.]+$/.test(n) || n.includes(':') ? n : n.split('.')[0];
+  }
+  // compact bits/s for the legend: 950k, 12.3M, 1.25G
+  function vnBits(v) {
+    v = Number(v || 0);
+    if (v <= 0) return '0';
+    const [d, u] = v >= 1e9 ? [1e9, 'G'] : v >= 1e6 ? [1e6, 'M'] : [1e3, 'k'];
+    const x = v / d;
+    return (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + u;
+  }
+  // The legend beside the stack: each line's average and highest upload and
+  // download over the blocks shown (weighted by block length), busiest first,
+  // as many rows as the height allows, in the stack's colours.
+  function vnTop() {
+    const el = document.getElementById('vn-top');
+    if (!el || !vnShown() || el.offsetParent === null) return;
+    const n = VN.hosts.length, sumU = new Array(n).fill(0), sumD = new Array(n).fill(0);
+    const maxU = new Array(n).fill(0), maxD = new Array(n).fill(0);
+    let secs = 0;
+    for (const p of VN.pts) {
+      const w = p.step_sec || VN_STEP;
+      secs += w;
+      for (let i = 0; i < n; i++) {
+        const u = p.up[i] || 0, d = p.down[i] || 0;
+        sumU[i] += u * w; sumD[i] += d * w;
+        if (u > maxU[i]) maxU[i] = u;
+        if (d > maxD[i]) maxD[i] = d;
+      }
+    }
+    const rows = VN.hosts.map((h, i) => ({ h, i, au: secs ? sumU[i] / secs : 0, ad: secs ? sumD[i] / secs : 0, mu: maxU[i], md: maxD[i] }))
+      .sort((a, b) => (b.au + b.ad) - (a.au + a.ad) || a.i - b.i);
+    const ROW = 15, fit = Math.max(1, Math.floor((el.clientHeight - ROW - 2) / ROW));
+    const pair = (a, m, cls) => `<span class="vt-v ${cls}">${a > 0 ? `<b>${vnBits(a)}</b>` : '<span class="vt-z">0</span>'} / ${m > 0 ? vnBits(m) : '<span class="vt-z">0</span>'}</span>`;
+    el.innerHTML = `<div class="vt-r vt-h"><span></span><span title="Busiest over the last 20 minutes">Top ${Math.min(fit, rows.length)}</span><span class="vt-v">\u2191 avg / max</span><span class="vt-v">\u2193 avg / max</span></div>`
+      + rows.slice(0, fit).map(r => `<div class="vt-r" title="${esc(r.h.ip && r.h.ip !== r.h.name ? r.h.name + ' · ' + r.h.ip : r.h.name)}${r.h.type === 'server' ? ' (this server)' : ''}">
+        <span class="vt-sw" style="background:${VN_PAL[r.i % VN_PAL.length]}"></span><span class="vt-n">${esc(vnShort(r.h))}</span>${pair(r.au, r.mu, 'vt-ul')}${pair(r.ad, r.md, 'vt-dl')}</div>`).join('');
+  }
   function vnHideTip() {
     VN.hover = -1;
     if (VN.tip) { VN.tip.remove(); VN.tip = null; }
@@ -431,7 +492,7 @@
     cv.addEventListener('pointermove', e => { if (VN.on) vnTip(e); });
     cv.addEventListener('pointerdown', e => { if (VN.on) vnTip(e); });
     cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { vnHideTip(); vnDraw(); } });
-    if (window.ResizeObserver) new ResizeObserver(() => { if (vnShown()) vnDraw(); }).observe(cv);
+    if (window.ResizeObserver) new ResizeObserver(() => { if (vnShown()) { vnDraw(); vnTop(); } }).observe(cv);
   });
   document.addEventListener('click', e => { if (VN.tip && e.target.id !== 'vn-chart') { vnHideTip(); vnDraw(); } });
 
