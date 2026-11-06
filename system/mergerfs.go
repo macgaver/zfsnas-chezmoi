@@ -319,8 +319,8 @@ func UninstallMergerFS(pools []config.MergerFSPool) error {
 	for _, p := range pools {
 		_ = DestroyMergerFS(p) // best-effort
 	}
-	exec.Command("sudo", "apt-get", "remove", "-y", "mergerfs").Run()      //nolint:errcheck
-	exec.Command("sudo", "rm", "-f", "/usr/local/bin/mergerfs").Run()      //nolint:errcheck
+	exec.Command("sudo", "apt-get", "remove", "-y", "mergerfs").Run()            //nolint:errcheck
+	exec.Command("sudo", "rm", "-f", "/usr/local/bin/mergerfs").Run()            //nolint:errcheck
 	exec.Command("sudo", "rm", "-f", "/usr/local/bin/mergerfs-fusermount").Run() //nolint:errcheck
 	// Drop mergerfs from the sticky presence cache so MergerFSInstalled()
 	// reports false without a service restart.
@@ -510,10 +510,10 @@ func setRuntime(ctlFile, key, val string) {
 // Source data untouched.
 func DestroyMergerFS(p config.MergerFSPool) error {
 	unit := mergerfsUnitName(p.Mountpoint)
-	exec.Command("sudo", "systemctl", "disable", "--now", unit).Run() //nolint:errcheck
-	exec.Command("sudo", "umount", p.Mountpoint).Run()                //nolint:errcheck
+	exec.Command("sudo", "systemctl", "disable", "--now", unit).Run()   //nolint:errcheck
+	exec.Command("sudo", "umount", p.Mountpoint).Run()                  //nolint:errcheck
 	exec.Command("sudo", "rm", "-f", "/etc/systemd/system/"+unit).Run() //nolint:errcheck
-	exec.Command("sudo", "systemctl", "daemon-reload").Run()          //nolint:errcheck
+	exec.Command("sudo", "systemctl", "daemon-reload").Run()            //nolint:errcheck
 	return nil
 }
 

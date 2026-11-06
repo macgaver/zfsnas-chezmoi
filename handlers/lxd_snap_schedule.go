@@ -310,11 +310,11 @@ func runLXDSnapshotPolicy(p config.LXDSnapshotPolicy, appCfg *config.AppConfig) 
 	if err != nil {
 		log.Printf("[lxd-snap-sched] %s/%s: %v", p.Instance, snapName, err)
 		audit.Log(audit.Entry{
-			User:   "system",
-			Role:   "system",
-			Action: audit.ActionLXDScheduledSnapshot,
-			Target: p.Instance + "/" + snapName,
-			Result: audit.ResultError,
+			User:    "system",
+			Role:    "system",
+			Action:  audit.ActionLXDScheduledSnapshot,
+			Target:  p.Instance + "/" + snapName,
+			Result:  audit.ResultError,
 			Details: err.Error(),
 		})
 		return

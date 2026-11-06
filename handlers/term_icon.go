@@ -20,8 +20,8 @@ import (
 // once at startup with stdlib image drawing (no external dependencies)
 // and cached as bytes for every subsequent request.
 //
-//   GET /icons/z-terminals.png  — apple-touch-icon, 360×360
-//   GET /icons/z-terminals.svg  — favicon for the browser tab itself
+//	GET /icons/z-terminals.png  — apple-touch-icon, 360×360
+//	GET /icons/z-terminals.svg  — favicon for the browser tab itself
 func ServeZTerminalsIcon(w http.ResponseWriter, r *http.Request) {
 	if bytes := zTerminalsPNG(); bytes != nil {
 		w.Header().Set("Content-Type", "image/png")
@@ -177,9 +177,10 @@ func renderZTerminalsPNG(outW int) []byte {
 
 // bgColorAt returns the radial-gradient background pixel at (x,y) on a
 // canvas of side W. Approximates the SVG radialGradient stops:
-//   r=0   → #0d1633
-//   r=55% → #03071a
-//   r=100%→ #000208
+//
+//	r=0   → #0d1633
+//	r=55% → #03071a
+//	r=100%→ #000208
 func bgColorAt(x, y, W int) color.RGBA {
 	dx := float64(x-W/2) / float64(W/2)
 	dy := float64(y-W/2) / float64(W/2)
@@ -331,10 +332,10 @@ func drawRoundedRectStroke(img *image.RGBA, x0, y0, x1, y1, r, w int, c color.RG
 	// Four corner arcs — approximate with short line segments.
 	const steps = 24
 	for _, corner := range []struct{ cx, cy, start float64 }{
-		{fx0 + fr, fy0 + fr, math.Pi},        // top-left
-		{fx1 - fr, fy0 + fr, 1.5 * math.Pi},  // top-right
-		{fx1 - fr, fy1 - fr, 0},              // bottom-right
-		{fx0 + fr, fy1 - fr, 0.5 * math.Pi},  // bottom-left
+		{fx0 + fr, fy0 + fr, math.Pi},       // top-left
+		{fx1 - fr, fy0 + fr, 1.5 * math.Pi}, // top-right
+		{fx1 - fr, fy1 - fr, 0},             // bottom-right
+		{fx0 + fr, fy1 - fr, 0.5 * math.Pi}, // bottom-left
 	} {
 		for i := 0; i < steps; i++ {
 			a1 := corner.start + float64(i)/float64(steps)*0.5*math.Pi

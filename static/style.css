@@ -4068,7 +4068,26 @@ body.net-header.compact-header #net-eq { display: flex; }
 .vn-tip .vn-z { color: var(--text-3); opacity: .6; }
 .net-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 6px; }
 .net-empty { position: absolute; inset: 18px 0 0; display: none; align-items: center; justify-content: center; font-size: 12px; color: var(--text-3); }
-.net-gauges { display: flex; gap: 4px; flex: none; }
+.net-gauges { display: flex; gap: 4px; flex: none; position: relative; }
+/* Gateway latency, in the empty space at the top between the two dials */
+.net-rtt { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 1; padding: 1px 5px; border: 0; border-radius: 6px;
+  background: none; color: var(--text-2); font: 600 10.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; cursor: pointer;
+  font-variant-numeric: tabular-nums; }
+.net-rtt:hover, .net-rtt:focus-visible { background: var(--surface2); color: var(--text); outline: none; }
+.net-rtt-s { opacity: .45; margin: 0 1px; }
+.net-rtt-u { color: var(--text-3); font-weight: 500; margin-left: 1px; }
+.net-rtt-bad { color: #ff453a; }
+.vn-tip.net-rtt-pop { pointer-events: auto; width: min(400px, calc(100vw - 16px)); }
+.net-rtt-pop .vn-tot { display: flex; gap: 14px; }
+.net-rtt-pop .vn-tot span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-rtt-body { padding: 10px 12px; font-size: 12px; color: var(--text-2); }
+.net-rtt-body p { margin: 8px 0 0; line-height: 1.45; }
+.net-rtt-svg { width: 100%; height: auto; display: block; }
+.net-rtt-line { fill: none; stroke: #64d2ff; stroke-width: 1.5; stroke-linejoin: round; }
+.net-rtt-lost { stroke: #ff453a; stroke-width: 1; opacity: .55; }
+.net-rtt-grid { stroke: var(--border); stroke-width: 1; }
+.net-rtt-ax { fill: var(--text-3); font-size: 9px; font-variant-numeric: tabular-nums; }
+.net-rtt-empty { padding: 26px 0; text-align: center; color: var(--text-3); }
 .net-gauge { width: 132px; display: flex; flex-direction: column; align-items: center; }
 .net-gauge svg { display: block; overflow: visible; }
 .ng-track { fill: none; stroke: rgba(128,128,128,.22); stroke-width: 10; stroke-linecap: round; }

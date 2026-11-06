@@ -47,8 +47,8 @@ type ServiceEntry struct {
 	// you wanted one click away had to be embedded even when embedding was the
 	// wrong way to open it. nil keeps the old behaviour for entries saved before
 	// this existed: embedded services were implicitly pinned. See PinnedOn.
-	Pinned *bool `json:"pinned,omitempty"`
-	IconOverride   string `json:"icon_override,omitempty"`
+	Pinned       *bool  `json:"pinned,omitempty"`
+	IconOverride string `json:"icon_override,omitempty"`
 	// IgnoreTLSErrors controls certificate verification when the upstream is
 	// HTTPS. nil = ignore (the default): self-hosted apps overwhelmingly use
 	// self-signed certificates, and the target is already constrained to an
@@ -60,13 +60,13 @@ type ServiceEntry struct {
 	// IP is the parent instance's address at last discovery. The proxy dials
 	// this value (never anything from the request) and re-validates it, so the
 	// stored record IS the allowlist.
-	IP           string    `json:"ip,omitempty"`
-	DetectedPort int       `json:"detected_port,omitempty"`
+	IP           string `json:"ip,omitempty"`
+	DetectedPort int    `json:"detected_port,omitempty"`
 	// PublishedPorts is every port the container exposes. Surfaced in the gear
 	// so a wrong auto-pick can be corrected by choosing from reality rather
 	// than guessing — a mis-set override silently points the proxy at another
 	// container entirely.
-	PublishedPorts []int  `json:"published_ports,omitempty"`
+	PublishedPorts []int `json:"published_ports,omitempty"`
 	// Reachable records whether the ZNAS host could actually open a TCP
 	// connection to IP:port at last discovery. A guest can be perfectly healthy
 	// yet sit on a VLAN this host has no route to — in that case the proxy can
@@ -74,11 +74,11 @@ type ServiceEntry struct {
 	// NOTE: no omitempty. `false` is the meaningful value here — omitting it
 	// would make "unreachable" indistinguishable from "not reported" in the
 	// API, which silently disabled the unreachable warning in the UI.
-	Reachable         bool   `json:"reachable"`
-	UnreachableReason string `json:"unreachable_reason,omitempty"`
-	Tags         []string  `json:"tags,omitempty"` // replicated from the parent instance
-	LastSeen     time.Time `json:"last_seen,omitempty"`
-	LastState    string    `json:"last_state,omitempty"` // "running" | "exited" | "unknown" | "gone"
+	Reachable         bool      `json:"reachable"`
+	UnreachableReason string    `json:"unreachable_reason,omitempty"`
+	Tags              []string  `json:"tags,omitempty"` // replicated from the parent instance
+	LastSeen          time.Time `json:"last_seen,omitempty"`
+	LastState         string    `json:"last_state,omitempty"` // "running" | "exited" | "unknown" | "gone"
 	// GoneSince is when an authoritative pass first failed to find this
 	// service. Zero means present, or absent for reasons this host cannot
 	// speak to (instance powered off, docker unreachable, discovery disabled).

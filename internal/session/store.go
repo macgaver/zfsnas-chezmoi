@@ -23,9 +23,9 @@ type Session struct {
 	Username       string        `json:"username"`
 	Role           string        `json:"role"`
 	CreatedAt      time.Time     `json:"created_at"`
-	ExpiresAt      time.Time     `json:"expires_at"`        // hard cap (24h or 30d)
-	LastActivityAt time.Time     `json:"last_activity_at"`  // bumped by Touch() on each authenticated request
-	IdleTimeout    time.Duration `json:"idle_timeout"`      // 0 = no idle expiry; >0 = expire after this duration of inactivity
+	ExpiresAt      time.Time     `json:"expires_at"`       // hard cap (24h or 30d)
+	LastActivityAt time.Time     `json:"last_activity_at"` // bumped by Touch() on each authenticated request
+	IdleTimeout    time.Duration `json:"idle_timeout"`     // 0 = no idle expiry; >0 = expire after this duration of inactivity
 }
 
 // Store is an in-memory session store. Optional encrypted persistence is

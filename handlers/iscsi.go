@@ -398,7 +398,7 @@ func HandleCreateISCSIShare(w http.ResponseWriter, r *http.Request) {
 func HandleDeleteISCSIShare(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID       string `json:"id"`
-		IQN      string `json:"iqn"`       // used for orphaned shares
+		IQN      string `json:"iqn"` // used for orphaned shares
 		Orphaned bool   `json:"orphaned"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

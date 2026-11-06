@@ -313,7 +313,9 @@ func EnsureRemoteZFSAccess(remoteURL, sharedSecret, tlsFP string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		var r struct{ Error string `json:"error"` }
+		var r struct {
+			Error string `json:"error"`
+		}
 		json.NewDecoder(resp.Body).Decode(&r) //nolint:errcheck
 		if r.Error != "" {
 			return fmt.Errorf("grant-zfs-access: %s", r.Error)

@@ -36,30 +36,30 @@ type VdevGroup struct {
 
 // Pool represents a ZFS pool.
 type Pool struct {
-	Name                string   `json:"name"`
-	Size                uint64   `json:"size"`         // raw physical size (zpool list)
-	Alloc               uint64   `json:"alloc"`        // allocated bytes (zpool list)
-	Free                uint64   `json:"free"`         // free raw bytes (zpool list)
-	UsableSize          uint64   `json:"usable_size"`  // usable = root used + root avail (zfs list)
-	UsableUsed          uint64   `json:"usable_used"`  // root dataset used (zfs list)
-	UsableAvail         uint64   `json:"usable_avail"` // root dataset avail (zfs list)
-	Health              string   `json:"health"`
-	Members             []string `json:"members"`         // raw device paths as tracked by zpool (may be by-partuuid)
-	MemberDevices       []string `json:"member_devices"`  // resolved canonical /dev/sdX paths
-	MemberRoles         []string `json:"member_roles"`    // per-member vdev role: "stripe"|"mirror"|"raidz1"|"raidz2"|"raidz3"
-	MemberStatuses      []string `json:"member_statuses"` // per-member device state: "ONLINE"|"FAULTED"|etc
-	MemberPresent       []bool   `json:"member_present"`  // per-member: true if the device path exists in /dev
-	CacheDevs           []string `json:"cache_devs"`      // raw L2ARC cache paths (may be by-partuuid)
-	CacheDevices        []string `json:"cache_devices"`   // resolved canonical /dev/sdX paths
-	SpareDevs           []string `json:"spare_devs"`      // raw hot-spare paths (may be by-partuuid)
-	SpareDevices        []string `json:"spare_devices"`   // resolved canonical /dev/sdX paths
-	SpareStatuses       []string `json:"spare_statuses"`  // per-spare state: "AVAIL"|"INUSE"|"FAULTED" etc
-	SparePresent        []bool   `json:"spare_present"`   // per-spare: true if the device path exists in /dev
-	VdevType            string   `json:"vdev_type"`       // "stripe" | "mirror" | "raidz1" | "raidz2" | "raidz3"
-	ReadErrors          int      `json:"read_errors"`     // sum of per-device READ errors across all data vdevs
-	WriteErrors         int      `json:"write_errors"`    // sum of per-device WRITE errors across all data vdevs
-	CksumErrors         int      `json:"cksum_errors"`    // sum of per-device CKSUM errors across all data vdevs
-	DataErrors          bool     `json:"data_errors"`     // true when `zpool status` reports known (permanent) data errors
+	Name           string   `json:"name"`
+	Size           uint64   `json:"size"`         // raw physical size (zpool list)
+	Alloc          uint64   `json:"alloc"`        // allocated bytes (zpool list)
+	Free           uint64   `json:"free"`         // free raw bytes (zpool list)
+	UsableSize     uint64   `json:"usable_size"`  // usable = root used + root avail (zfs list)
+	UsableUsed     uint64   `json:"usable_used"`  // root dataset used (zfs list)
+	UsableAvail    uint64   `json:"usable_avail"` // root dataset avail (zfs list)
+	Health         string   `json:"health"`
+	Members        []string `json:"members"`         // raw device paths as tracked by zpool (may be by-partuuid)
+	MemberDevices  []string `json:"member_devices"`  // resolved canonical /dev/sdX paths
+	MemberRoles    []string `json:"member_roles"`    // per-member vdev role: "stripe"|"mirror"|"raidz1"|"raidz2"|"raidz3"
+	MemberStatuses []string `json:"member_statuses"` // per-member device state: "ONLINE"|"FAULTED"|etc
+	MemberPresent  []bool   `json:"member_present"`  // per-member: true if the device path exists in /dev
+	CacheDevs      []string `json:"cache_devs"`      // raw L2ARC cache paths (may be by-partuuid)
+	CacheDevices   []string `json:"cache_devices"`   // resolved canonical /dev/sdX paths
+	SpareDevs      []string `json:"spare_devs"`      // raw hot-spare paths (may be by-partuuid)
+	SpareDevices   []string `json:"spare_devices"`   // resolved canonical /dev/sdX paths
+	SpareStatuses  []string `json:"spare_statuses"`  // per-spare state: "AVAIL"|"INUSE"|"FAULTED" etc
+	SparePresent   []bool   `json:"spare_present"`   // per-spare: true if the device path exists in /dev
+	VdevType       string   `json:"vdev_type"`       // "stripe" | "mirror" | "raidz1" | "raidz2" | "raidz3"
+	ReadErrors     int      `json:"read_errors"`     // sum of per-device READ errors across all data vdevs
+	WriteErrors    int      `json:"write_errors"`    // sum of per-device WRITE errors across all data vdevs
+	CksumErrors    int      `json:"cksum_errors"`    // sum of per-device CKSUM errors across all data vdevs
+	DataErrors     bool     `json:"data_errors"`     // true when `zpool status` reports known (permanent) data errors
 	// DataErrorCount is the number ZFS reports ("errors: 21 data errors"),
 	// DataErrorFiles the entries `zpool status -v` could resolve, and
 	// DataErrorUnresolved the difference. The two legitimately disagree:
@@ -69,7 +69,7 @@ type Pool struct {
 	DataErrorCount      int      `json:"data_error_count"`
 	DataErrorFiles      []string `json:"data_error_files,omitempty"`
 	DataErrorUnresolved int      `json:"data_error_unresolved"`
-	Operation           string   `json:"operation"`       // "" | "scrubbing" | "resilvering" | "expanding"
+	Operation           string   `json:"operation"` // "" | "scrubbing" | "resilvering" | "expanding"
 	SizeStr             string   `json:"size_str"`
 	AllocStr            string   `json:"alloc_str"`
 	FreeStr             string   `json:"free_str"`

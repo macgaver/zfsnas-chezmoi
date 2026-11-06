@@ -200,10 +200,10 @@ type dbData struct {
 	Tier2 tierStore `json:"tier2"`
 }
 
-// pendingBucket accumulates raw values within the current aggregate window.
+// pendingBucket accumulates samples within the current aggregate window.
 type pendingBucket struct {
 	bucketStart int64 // Unix seconds, truncated to bucket boundary
-	pending     map[string][]float64
+	pending     map[string][]CapSample
 }
 
 // DB is a thread-safe multi-resolution capacity round-robin database.
@@ -226,8 +226,8 @@ func Open(path string) (*DB, error) {
 			Tier1: newTierStore(Tier1Slots),
 			Tier2: newTierStore(Tier2Slots),
 		},
-		t1: pendingBucket{pending: make(map[string][]float64)},
-		t2: pendingBucket{pending: make(map[string][]float64)},
+		t1: pendingBucket{pending: make(map[string][]CapSample)},
+		t2: pendingBucket{pending: make(map[string][]CapSample)},
 	}
 
 	b, err := os.ReadFile(path)
@@ -276,12 +276,33 @@ func (db *DB) Record(key string, value float64, now time.Time) {
 		log.Printf("[rrd] %s: refused impossible value %v", key, value)
 		return
 	}
+	db.record(key, CapSample{Min: value, Avg: value, Max: value, N: 1}, now)
+}
+
+// RecordAgg adds one 5-minute slot that already summarises n readings (for
+// a metric sampled more often than every 5 minutes, e.g. gateway latency):
+// the slot keeps their true spread, and the 30-min and daily tiers roll up
+// min of mins, n-weighted mean and max of maxes.
+func (db *DB) RecordAgg(key string, mn, avg, mx float64, n int, now time.Time) {
+	if n <= 0 {
+		return
+	}
+	for _, v := range []float64{mn, avg, mx} {
+		if !rrd.Plausible(key, v) {
+			log.Printf("[rrd] %s: refused impossible value %v", key, v)
+			return
+		}
+	}
+	db.record(key, CapSample{Min: mn, Avg: avg, Max: mx, N: n}, now)
+}
+
+func (db *DB) record(key string, cs CapSample, now time.Time) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// --- Tier 0: raw 5-min sample ---
-	t0Bucket := now.Unix() / tier0Secs * tier0Secs
-	db.data.Tier0.get(key).push(CapSample{TS: t0Bucket, Min: value, Avg: value, Max: value, N: 1})
+	cs.TS = now.Unix() / tier0Secs * tier0Secs
+	db.data.Tier0.get(key).push(cs)
 
 	// --- Tier 1: 30-min aggregation ---
 	t1Bucket := now.Unix() / tier1Secs * tier1Secs
@@ -293,7 +314,7 @@ func (db *DB) Record(key string, value float64, now time.Time) {
 		db.flushTier1()
 		db.t1.bucketStart = t1Bucket
 	}
-	db.t1.pending[key] = append(db.t1.pending[key], value)
+	db.t1.pending[key] = append(db.t1.pending[key], cs)
 
 	// --- Tier 2: daily aggregation ---
 	t2Bucket := now.Unix() / tier2Secs * tier2Secs
@@ -304,7 +325,7 @@ func (db *DB) Record(key string, value float64, now time.Time) {
 		db.flushTier2()
 		db.t2.bucketStart = t2Bucket
 	}
-	db.t2.pending[key] = append(db.t2.pending[key], value)
+	db.t2.pending[key] = append(db.t2.pending[key], cs)
 }
 
 // flushTier1 computes min/avg/max from pending and writes to Tier1. Must hold mu.
@@ -313,10 +334,9 @@ func (db *DB) flushTier1() {
 		if len(vals) == 0 {
 			continue
 		}
-		s := aggregate(db.t1.bucketStart, vals)
-		db.data.Tier1.get(key).push(s)
+		db.data.Tier1.get(key).push(aggregate(db.t1.bucketStart, vals))
 	}
-	db.t1.pending = make(map[string][]float64)
+	db.t1.pending = make(map[string][]CapSample)
 }
 
 // flushTier2 computes min/avg/max from pending and writes to Tier2. Must hold mu.
@@ -325,25 +345,32 @@ func (db *DB) flushTier2() {
 		if len(vals) == 0 {
 			continue
 		}
-		s := aggregate(db.t2.bucketStart, vals)
-		db.data.Tier2.get(key).push(s)
+		db.data.Tier2.get(key).push(aggregate(db.t2.bucketStart, vals))
 	}
-	db.t2.pending = make(map[string][]float64)
+	db.t2.pending = make(map[string][]CapSample)
 }
 
-// aggregate computes a CapSample from a slice of raw float64 values.
-func aggregate(ts int64, vals []float64) CapSample {
-	mn, mx, sum := vals[0], vals[0], 0.0
+// aggregate rolls samples up: min of mins, n-weighted mean, max of maxes.
+// For plain Record samples (N=1, min=avg=max) that is the usual min/avg/max.
+func aggregate(ts int64, vals []CapSample) CapSample {
+	out := CapSample{TS: ts, Min: vals[0].Min, Max: vals[0].Max}
+	sum := 0.0
 	for _, v := range vals {
-		if v < mn {
-			mn = v
+		n := v.N
+		if n <= 0 {
+			n = 1
 		}
-		if v > mx {
-			mx = v
+		if v.Min < out.Min {
+			out.Min = v.Min
 		}
-		sum += v
+		if v.Max > out.Max {
+			out.Max = v.Max
+		}
+		sum += v.Avg * float64(n)
+		out.N += n
 	}
-	return CapSample{TS: ts, Min: mn, Avg: sum / float64(len(vals)), Max: mx, N: len(vals)}
+	out.Avg = sum / float64(out.N)
+	return out
 }
 
 // Query returns all stored samples for the given tier and key, in chronological order.

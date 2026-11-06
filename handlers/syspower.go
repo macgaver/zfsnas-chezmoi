@@ -32,12 +32,12 @@ func HandleUpdateSystemPower(appCfg *config.AppConfig) http.HandlerFunc {
 
 		// Validate governor
 		validGovernors := map[string]bool{
-			"":              true,
-			"performance":   true,
-			"powersave":     true,
-			"ondemand":      true,
-			"conservative":  true,
-			"schedutil":     true,
+			"":             true,
+			"performance":  true,
+			"powersave":    true,
+			"ondemand":     true,
+			"conservative": true,
+			"schedutil":    true,
 		}
 		if !validGovernors[cfg.CPUGovernor] {
 			jsonErr(w, http.StatusBadRequest, "invalid cpu_governor value")
@@ -46,10 +46,10 @@ func HandleUpdateSystemPower(appCfg *config.AppConfig) http.HandlerFunc {
 
 		// Validate power profile
 		validProfiles := map[string]bool{
-			"":             true,
-			"performance":  true,
-			"balanced":     true,
-			"power-saver":  true,
+			"":            true,
+			"performance": true,
+			"balanced":    true,
+			"power-saver": true,
 		}
 		if !validProfiles[cfg.PowerProfile] {
 			jsonErr(w, http.StatusBadRequest, "invalid power_profile value")

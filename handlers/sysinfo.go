@@ -57,6 +57,13 @@ func HandleGetVMNetLive(appCfg *config.AppConfig) http.HandlerFunc {
 func gatewayNetNamed(g system.GatewayNet, c *sdn.Config) system.GatewayNet {
 	if c != nil {
 		g.Name = c.InterfaceNameByDevice(g.Iface)
+		g.Latency = system.SDNActiveGatewayLatency(func(id string) bool {
+			if gw := c.GatewayByID(id); gw != nil {
+				in := c.InterfaceByID(gw.Interface)
+				return in != nil && in.Kind == "pppoe"
+			}
+			return false
+		})
 	}
 	return g
 }

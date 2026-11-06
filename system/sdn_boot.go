@@ -112,7 +112,7 @@ func SDNInstallUnit(binary, configDir string) error {
 
 // SDNRemoveUnit disables and deletes the boot unit and stops the monitor.
 func SDNRemoveUnit() error {
-	sdnRun.Run(nil, "systemctl", "disable", "--now", sdnGWUnitName)  //nolint:errcheck
+	sdnRun.Run(nil, "systemctl", "disable", "--now", sdnGWUnitName)   //nolint:errcheck
 	sdnRun.Run(nil, "systemctl", "disable", "--now", sdnDNSUnitName)  //nolint:errcheck
 	sdnRun.Run(nil, "systemctl", "disable", "--now", sdnDHCPUnitName) //nolint:errcheck
 	sdnRun.Run(nil, "systemctl", "disable", "--now", sdnIDSUnitName)  //nolint:errcheck

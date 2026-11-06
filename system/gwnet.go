@@ -31,6 +31,43 @@ type GatewayNet struct {
 	MaxRxBps int64     `json:"max_rx_bps,omitempty"`
 	MaxTxBps int64     `json:"max_tx_bps,omitempty"`
 	At       time.Time `json:"at"`
+	// Latency of the gateway carrying the default route, when the Firewall
+	// monitors it (nil otherwise).
+	Latency *GatewayLatency `json:"latency,omitempty"`
+}
+
+// GatewayLatency is the header's latency figure.
+type GatewayLatency struct {
+	GatewayID    string  `json:"gateway_id"`
+	Name         string  `json:"name"`
+	RTTms        float64 `json:"rtt_ms"`         // latest answered ping
+	OK           bool    `json:"ok"`             // the latest ping was answered
+	Loss         int     `json:"loss"`           // % over the last few probes
+	Target       string  `json:"target"`         // address pinged
+	TargetIsPeer bool    `json:"target_is_peer"` // the PPPoE provider's end
+	TS           int64   `json:"ts"`             // when the latest ping ran
+}
+
+// SDNActiveGatewayLatency reads the monitor's state for the gateway
+// carrying the default route, if it is monitored.
+func SDNActiveGatewayLatency(isPPPoE func(gwID string) bool) *GatewayLatency {
+	st := SDNGatewayState()
+	for _, g := range st.Gateways {
+		if !g.Active || !g.Monitor {
+			continue
+		}
+		l := &GatewayLatency{GatewayID: g.ID, Name: g.Name, RTTms: g.RTTms, Loss: g.Loss, Target: g.Target,
+			TargetIsPeer: g.Target != "" && g.Target == g.GatewayIP && isPPPoE != nil && isPPPoE(g.ID)}
+		if ring := SDNGatewayRTT()[g.ID]; len(ring) > 0 {
+			last := ring[len(ring)-1]
+			l.OK, l.TS = last.MS != nil, last.TS
+			if last.MS != nil {
+				l.RTTms = *last.MS
+			}
+		}
+		return l
+	}
+	return nil
 }
 
 // procRouteDefaultIface reads /proc/net/route: the up default route with

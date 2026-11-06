@@ -11,10 +11,10 @@ import "sync"
 // is happy to consume the replay as one chunk; storing post-parse cells
 // would multiply the cost and lose mode/colour state.
 type ringBuf struct {
-	mu  sync.Mutex
-	buf []byte // ring storage, cap = ring capacity
-	pos int    // write position (next byte goes here)
-	full bool  // true once write wrapped past end at least once
+	mu   sync.Mutex
+	buf  []byte // ring storage, cap = ring capacity
+	pos  int    // write position (next byte goes here)
+	full bool   // true once write wrapped past end at least once
 }
 
 func newRingBuf(capacity int) *ringBuf {

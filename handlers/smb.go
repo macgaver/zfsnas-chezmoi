@@ -163,9 +163,9 @@ func HandleUpdateSMBGlobalConfig(appCfg *config.AppConfig) http.HandlerFunc {
 			Details: "SMB global config updated",
 		})
 		jsonOK(w, map[string]interface{}{
-			"message":               "SMB global settings saved",
+			"message":                "SMB global settings saved",
 			"socket_options_changed": socketOptionsChanged,
-			"restarted":             workgroupChanged || homeDatasetChanged || (socketOptionsChanged && restartNow),
+			"restarted":              workgroupChanged || homeDatasetChanged || (socketOptionsChanged && restartNow),
 		})
 	}
 }
@@ -381,11 +381,11 @@ func HandleUpdateShare(w http.ResponseWriter, r *http.Request) {
 
 	sess := MustSession(r)
 	audit.Log(audit.Entry{
-		User:   sess.Username,
-		Role:   sess.Role,
-		Action: audit.ActionEnableShare,
-		Target: name,
-		Result: audit.ResultOK,
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  audit.ActionEnableShare,
+		Target:  name,
+		Result:  audit.ResultOK,
 		Details: "updated",
 	})
 	jsonOK(w, req)

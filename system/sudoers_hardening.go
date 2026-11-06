@@ -1053,9 +1053,9 @@ var sudoersExplanations = map[string]string{
 	"/usr/bin/systemctl restart tgt":                 "Restarts the SCSI target framework daemon (tgt).",
 
 	// ── S3 Object Server (RustFS) install / setup (v6.10.17) ─────────────────
-	"/usr/bin/tee /etc/nfs.conf.d/zfsnas.conf":    "Writes ZNAS's NFS server settings (e.g. trust client groups for Kubernetes fsGroup, threads, NFSv3 off) to its own drop-in; the distro's /etc/nfs.conf is never edited.",
-	"/usr/bin/rm -f /etc/nfs.conf.d/zfsnas.conf":  "Removes ZNAS's NFS drop-in when every server setting is back to its default.",
-	"/usr/bin/mkdir -p /etc/nfs.conf.d":           "Creates the NFS drop-in folder when the distro does not ship it.",
+	"/usr/bin/tee /etc/nfs.conf.d/zfsnas.conf":                                               "Writes ZNAS's NFS server settings (e.g. trust client groups for Kubernetes fsGroup, threads, NFSv3 off) to its own drop-in; the distro's /etc/nfs.conf is never edited.",
+	"/usr/bin/rm -f /etc/nfs.conf.d/zfsnas.conf":                                             "Removes ZNAS's NFS drop-in when every server setting is back to its default.",
+	"/usr/bin/mkdir -p /etc/nfs.conf.d":                                                      "Creates the NFS drop-in folder when the distro does not ship it.",
 	"/usr/bin/tee /usr/local/bin/rustfs":                                                     "Installs the RustFS server binary. The portal downloads the pinned release from GitHub, checks its SHA-256 against the value built into ZNAS, and streams the verified file through tee to this fixed path.",
 	"/usr/bin/chmod 755 /usr/local/bin/rustfs":                                               "Makes the RustFS server binary executable.",
 	"/usr/sbin/useradd --system --home-dir /var/lib/rustfs --shell /usr/sbin/nologin rustfs": "Creates the unprivileged system account the RustFS service runs as.",

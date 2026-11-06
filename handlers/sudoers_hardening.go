@@ -143,11 +143,11 @@ func HandleEnableSudoersHardening(appCfg *config.AppConfig) http.HandlerFunc {
 				return
 			}
 			content := system.BuildSudoersContent(required, nil, nil)
-			appCfg.SudoersAppliedHash    = system.SudoersContentHash(content)
+			appCfg.SudoersAppliedHash = system.SudoersContentHash(content)
 			appCfg.SudoersAppliedContent = content
 			appCfg.SudoersSilencedMissing = []string{}
-			appCfg.SudoersSilencedExtra   = []string{}
-			appCfg.SudoersSilencedLines   = []string{}
+			appCfg.SudoersSilencedExtra = []string{}
+			appCfg.SudoersSilencedLines = []string{}
 			details = "sudoers hardening: enabled; full template applied (all lines approved)"
 		}
 
@@ -249,7 +249,7 @@ func HandleApplySudoers(appCfg *config.AppConfig) http.HandlerFunc {
 		// Forced lines (needed by the Sudoers UI itself) can never be excluded —
 		// silently drop them from any exclusion list the client may have sent.
 		req.SilencedMissing = system.FilterForcedLines(req.SilencedMissing)
-		req.PendingMissing  = system.FilterForcedLines(req.PendingMissing)
+		req.PendingMissing = system.FilterForcedLines(req.PendingMissing)
 
 		required := system.RequiredSudoersContent()
 

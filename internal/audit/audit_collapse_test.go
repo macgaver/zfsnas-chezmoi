@@ -12,15 +12,15 @@ func TestCollapseLoginBursts(t *testing.T) {
 			Action: action, Result: result, User: user, Details: details}
 	}
 	in := []Entry{
-		e(0, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),    // kept — first
-		e(10, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),   // dropped — same key <60s
-		e(20, ActionCreateShare, ResultOK, "demo", "x"),              // kept — not a login
-		e(30, ActionLogin, ResultOK, "demo", "from 192.168.2.50"),    // kept — different IP
-		e(40, ActionLogin, ResultOK, "alice", "from 192.168.2.209"),  // kept — different user
+		e(0, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),           // kept — first
+		e(10, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),          // dropped — same key <60s
+		e(20, ActionCreateShare, ResultOK, "demo", "x"),                     // kept — not a login
+		e(30, ActionLogin, ResultOK, "demo", "from 192.168.2.50"),           // kept — different IP
+		e(40, ActionLogin, ResultOK, "alice", "from 192.168.2.209"),         // kept — different user
 		e(50, ActionLoginFailed, ResultError, "demo", "from 192.168.2.209"), // kept — failures never collapse
-		e(59, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),   // dropped — still within 60s of t0
-		e(61, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),   // kept — new 60s window
-		e(70, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),   // dropped — within window of t61
+		e(59, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),          // dropped — still within 60s of t0
+		e(61, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),          // kept — new 60s window
+		e(70, ActionLogin, ResultOK, "demo", "from 192.168.2.209"),          // dropped — within window of t61
 	}
 	out := collapseLoginBursts(in)
 	wantTimes := []int{0, 20, 30, 40, 50, 61}

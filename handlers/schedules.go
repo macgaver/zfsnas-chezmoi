@@ -109,17 +109,17 @@ func HandleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	for i, existing := range policies {
 		if existing.ID == id {
 			// Preserve all runtime state — only config fields come from the request.
-			p.LastRun     = existing.LastRun
-			p.LastStatus  = existing.LastStatus
-			p.LastError   = existing.LastError
+			p.LastRun = existing.LastRun
+			p.LastStatus = existing.LastStatus
+			p.LastError = existing.LastError
 			p.LastDetails = existing.LastDetails
 			p.LastRepStatus = existing.LastRepStatus
-			p.LastRepError  = existing.LastRepError
-			p.LastRepLog    = existing.LastRepLog
-			p.LastRepSnap   = existing.LastRepSnap
+			p.LastRepError = existing.LastRepError
+			p.LastRepLog = existing.LastRepLog
+			p.LastRepSnap = existing.LastRepSnap
 			p.LastLocalReplStatus = existing.LastLocalReplStatus
-			p.LastLocalReplError  = existing.LastLocalReplError
-			p.LastLocalReplSnap   = existing.LastLocalReplSnap
+			p.LastLocalReplError = existing.LastLocalReplError
+			p.LastLocalReplSnap = existing.LastLocalReplSnap
 			policies[i] = p
 			found = true
 			break
@@ -185,30 +185,30 @@ func HandleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 // HandleRunScheduleNow manually triggers a snapshot policy immediately.
 func HandleRunScheduleNow(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	policies, err := scheduler.LoadPolicies()
-	if err != nil {
-		jsonErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	idx := -1
-	for i := range policies {
-		if policies[i].ID == id {
-			idx = i
-			break
+		id := mux.Vars(r)["id"]
+		policies, err := scheduler.LoadPolicies()
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, err.Error())
+			return
 		}
-	}
-	if idx < 0 {
-		jsonErr(w, http.StatusNotFound, "schedule not found")
-		return
-	}
-	if err := execScheduledSnapshot(&policies[idx], appCfg); err != nil {
+		idx := -1
+		for i := range policies {
+			if policies[i].ID == id {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			jsonErr(w, http.StatusNotFound, "schedule not found")
+			return
+		}
+		if err := execScheduledSnapshot(&policies[idx], appCfg); err != nil {
+			_ = scheduler.SavePolicies(policies)
+			jsonErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		_ = scheduler.SavePolicies(policies)
-		jsonErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	_ = scheduler.SavePolicies(policies)
-	jsonOK(w, map[string]string{"message": "snapshot created"})
+		jsonOK(w, map[string]string{"message": "snapshot created"})
 	}
 }
 
@@ -269,8 +269,8 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 		)
 		return err
 	}
-	p.LastStatus  = "ok"
-	p.LastError   = ""
+	p.LastStatus = "ok"
+	p.LastError = ""
 	p.LastDetails = "Snapshot: " + name
 	audit.Log(audit.Entry{
 		Action:  audit.ActionCreateSnapshot,
@@ -299,9 +299,9 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 		}
 		if localSnap, localErr := system.RunLocalReplication(p.Dataset, name, p.LocalReplDataset, p.LastLocalReplSnap, p.LocalReplRecursive, p.LocalReplCompressed, collectLocal); localErr != nil {
 			log.Printf("[local-replication] policy %s failed: %v", p.ID, localErr)
-			p.LastDetails          = "Snapshot ok · Local replication failed: " + localErr.Error()
-			p.LastLocalReplStatus  = "error"
-			p.LastLocalReplError   = localErr.Error()
+			p.LastDetails = "Snapshot ok · Local replication failed: " + localErr.Error()
+			p.LastLocalReplStatus = "error"
+			p.LastLocalReplError = localErr.Error()
 			audit.Log(audit.Entry{
 				Action:  audit.ActionRunReplication,
 				Target:  p.Dataset,
@@ -315,10 +315,10 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 				fmt.Sprintf("Local replication for dataset '%s' → '%s' (policy %s) failed: %v", p.Dataset, p.LocalReplDataset, p.ID, localErr),
 			)
 		} else {
-			p.LastDetails         = "Snapshot: " + name + " · Local replication: ok"
+			p.LastDetails = "Snapshot: " + name + " · Local replication: ok"
 			p.LastLocalReplStatus = "ok"
-			p.LastLocalReplError  = ""
-			p.LastLocalReplSnap   = localSnap
+			p.LastLocalReplError = ""
+			p.LastLocalReplSnap = localSnap
 			audit.Log(audit.Entry{
 				Action:  audit.ActionRunReplication,
 				Target:  p.Dataset,
@@ -371,11 +371,11 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 		}
 		if repSnap, repErr := system.RunReplication(task, collectLine, name); repErr != nil {
 			log.Printf("[replication] policy %s replication failed: %v", p.ID, repErr)
-			p.LastDetails   = "Snapshot ok · Replication failed: " + repErr.Error()
+			p.LastDetails = "Snapshot ok · Replication failed: " + repErr.Error()
 			p.LastRepStatus = "error"
-			p.LastRepError  = repErr.Error()
-			p.LastRepLog    = repLogBuf.String()
-			p.LastRepSnap   = "" // reset so next run does a full send instead of retrying a stale base
+			p.LastRepError = repErr.Error()
+			p.LastRepLog = repLogBuf.String()
+			p.LastRepSnap = "" // reset so next run does a full send instead of retrying a stale base
 			audit.Log(audit.Entry{
 				Action:  audit.ActionRunReplication,
 				Target:  p.Dataset,
@@ -389,11 +389,11 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 				fmt.Sprintf("Remote replication for dataset '%s' → %s:%s (policy %s) failed: %v", p.Dataset, p.ReplicationHost, p.ReplicationDataset, p.ID, repErr),
 			)
 		} else {
-			p.LastDetails   = "Snapshot: " + name + " · Replication: ok"
+			p.LastDetails = "Snapshot: " + name + " · Replication: ok"
 			p.LastRepStatus = "ok"
-			p.LastRepError  = ""
-			p.LastRepLog    = repLogBuf.String()
-			p.LastRepSnap   = repSnap // persist for incremental send next time
+			p.LastRepError = ""
+			p.LastRepLog = repLogBuf.String()
+			p.LastRepSnap = repSnap // persist for incremental send next time
 			audit.Log(audit.Entry{
 				Action:  audit.ActionRunReplication,
 				Target:  p.Dataset,

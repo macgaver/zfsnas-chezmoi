@@ -18,10 +18,10 @@ func TestFoldShareClients(t *testing.T) {
 		{ID: "vm:noip", Type: "vm", Name: "noip"}, // running but no detected IP
 	}
 	clients := []pendingShareClient{
-		{consumerID: "smb:media", cl: system.ShareClient{IP: "10.0.0.20"}},          // → vm:plex
-		{consumerID: "nfs:1", cl: system.ShareClient{IP: "10.0.0.20"}},              // → vm:plex (2nd share)
-		{consumerID: "smb:media", cl: system.ShareClient{IP: "10.0.0.30"}},          // → container:web
-		{consumerID: "smb:media", cl: system.ShareClient{IP: "10.0.0.20"}},          // dup → no double entry
+		{consumerID: "smb:media", cl: system.ShareClient{IP: "10.0.0.20"}},                   // → vm:plex
+		{consumerID: "nfs:1", cl: system.ShareClient{IP: "10.0.0.20"}},                       // → vm:plex (2nd share)
+		{consumerID: "smb:media", cl: system.ShareClient{IP: "10.0.0.30"}},                   // → container:web
+		{consumerID: "smb:media", cl: system.ShareClient{IP: "10.0.0.20"}},                   // dup → no double entry
 		{consumerID: "smb:media", cl: system.ShareClient{IP: "192.168.1.5", FQDN: "laptop"}}, // → remote
 	}
 

@@ -12,12 +12,12 @@ import (
 
 // SystemPowerAvailability contains current settings and feature availability flags.
 type SystemPowerAvailability struct {
-	Current                config.SystemPowerConfig `json:"current"`
-	CPUFreqAvailable       bool                     `json:"cpufreq_available"`
-	PowerProfilesAvail     bool                     `json:"power_profiles_available"`
-	AvailableGovernors     []string                 `json:"available_governors"`
-	PCIeASPMAvailable      bool                     `json:"pcie_aspm_available"`
-	AvailableASPMPolicies  []string                 `json:"available_aspm_policies"`
+	Current               config.SystemPowerConfig `json:"current"`
+	CPUFreqAvailable      bool                     `json:"cpufreq_available"`
+	PowerProfilesAvail    bool                     `json:"power_profiles_available"`
+	AvailableGovernors    []string                 `json:"available_governors"`
+	PCIeASPMAvailable     bool                     `json:"pcie_aspm_available"`
+	AvailableASPMPolicies []string                 `json:"available_aspm_policies"`
 }
 
 // GetSystemPowerAvailability reads current active settings + detects feature support.

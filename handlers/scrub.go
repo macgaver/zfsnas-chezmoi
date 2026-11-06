@@ -11,10 +11,11 @@ import (
 )
 
 // scrubResolvePool picks the pool the request targets. Priority:
-//   1. `pool` from query (GET) or JSON body (POST) — required on
-//      multi-pool hosts so the UI's selection is honoured.
-//   2. Legacy fallback to system.GetPool() — keeps single-pool
-//      installs working without a frontend change.
+//  1. `pool` from query (GET) or JSON body (POST) — required on
+//     multi-pool hosts so the UI's selection is honoured.
+//  2. Legacy fallback to system.GetPool() — keeps single-pool
+//     installs working without a frontend change.
+//
 // Returns the resolved pool name and an error suitable to surface
 // (the caller already mapped it to JSON; this function never writes
 // to the response itself).

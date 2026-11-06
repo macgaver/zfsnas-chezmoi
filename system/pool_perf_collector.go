@@ -68,9 +68,11 @@ func readDiskTempC(dev string) (int, bool) {
 // StartPoolPerfCollector opens (or creates) the per-pool disk performance RRD
 // and starts a goroutine that samples disk I/O per pool every 5 minutes.
 // Series keys:
-//   read:{pool}:{dev}, write:{pool}:{dev}, busy:{pool}:{dev}
-//   l2size:{pool}      — bytes currently held in L2ARC (system-wide arcstats)
-//   l2hitpct:{pool}    — L2 hit % over the 5-minute window
+//
+//	read:{pool}:{dev}, write:{pool}:{dev}, busy:{pool}:{dev}
+//	l2size:{pool}      — bytes currently held in L2ARC (system-wide arcstats)
+//	l2hitpct:{pool}    — L2 hit % over the 5-minute window
+//
 // L2 series are emitted only for pools that have at least one cache device.
 // Because arcstats expose system-wide L2 counters (no per-pool breakdown), the
 // same numeric values are written for every pool that has L2ARC.
@@ -144,9 +146,9 @@ func StartPoolPerfCollector(configDir string) {
 							if !ok {
 								continue
 							}
-							db.Record("read:"+pool+":"+dev,  readMBps,  now)
+							db.Record("read:"+pool+":"+dev, readMBps, now)
 							db.Record("write:"+pool+":"+dev, writeMBps, now)
-							db.Record("busy:"+pool+":"+dev,  busy,      now)
+							db.Record("busy:"+pool+":"+dev, busy, now)
 						}
 					}
 				}
@@ -243,7 +245,7 @@ func StartPoolPerfCollector(configDir string) {
 				}
 			}
 
-			prevDiskIO  = curDisk
+			prevDiskIO = curDisk
 			prevDiskTime = now
 
 			if err := db.Flush(); err != nil {

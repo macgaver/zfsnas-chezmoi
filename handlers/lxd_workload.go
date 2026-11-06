@@ -155,7 +155,7 @@ type instMetricsDisk struct {
 // by the VM/Container table metric columns (VCPU / RAM / Filesystem / Net /
 // Disk-IO) and their hover popups.
 type instMetricsSummary struct {
-	CPUPct      float64           `json:"cpu_pct"`     // raw: % of one host CPU (frontend normalizes by vCPU count)
+	CPUPct      float64           `json:"cpu_pct"` // raw: % of one host CPU (frontend normalizes by vCPU count)
 	MemUsed     float64           `json:"mem_used"`
 	MemTotal    float64           `json:"mem_total"`
 	MemPct      float64           `json:"mem_pct"`     // 0–100 (0 when total unknown)
@@ -163,7 +163,7 @@ type instMetricsSummary struct {
 	TopFSPct    float64           `json:"top_fs_pct"`
 	TopFSMount  string            `json:"top_fs_mount"`
 	NICs        []instMetricsNIC  `json:"nics"`
-	NetMbps     float64           `json:"net_mbps"`    // Σ non-loopback rx+tx · 8 / 1e6
+	NetMbps     float64           `json:"net_mbps"` // Σ non-loopback rx+tx · 8 / 1e6
 	Disks       []instMetricsDisk `json:"disks"`
 	DiskIOMbps  float64           `json:"diskio_mbps"` // Σ whole-disk r+w / 1e6
 	TS          int64             `json:"ts"`          // unix time of the newest sample seen

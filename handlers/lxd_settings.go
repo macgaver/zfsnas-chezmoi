@@ -54,11 +54,11 @@ func HandleSetLXDGlobalConfig(w http.ResponseWriter, r *http.Request) {
 	if len(changed) > 0 {
 		sess := MustSession(r)
 		audit.Log(audit.Entry{
-			User:    sess.Username,
-			Role:    sess.Role,
-			Action:  audit.ActionLXDGlobalConfigEdit,
-			Target:  strings.Join(changed, ","),
-			Result:  audit.ResultOK,
+			User:   sess.Username,
+			Role:   sess.Role,
+			Action: audit.ActionLXDGlobalConfigEdit,
+			Target: strings.Join(changed, ","),
+			Result: audit.ResultOK,
 		})
 	}
 	jsonOK(w, map[string]any{"changed": changed})

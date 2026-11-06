@@ -16,6 +16,29 @@
   let liveRoutes = null;   // GET /api/sdn/routes
   let appliedRoutes = null; // routes of the applied configuration
 
+  // Firewall event history table, shared with Activity & Events → SDN.
+  const evEsc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const EV_LABEL = {
+    ppp_down: 'PPPoE down', ppp_retry_failed: 'Reconnect failed', ppp_auth_failed: 'Login refused', ppp_up: 'PPPoE up',
+    gw_down: 'Gateway down', gw_up: 'Gateway up', gw_failover: 'Failover', gw_reconnect: 'Forced redial',
+    ddns_ok: 'Dynamic DNS updated', ddns_failed: 'Dynamic DNS failed', safe_mode: 'Safe mode', auto_revert: 'Auto-revert',
+  };
+  const EV_SEV = { info: 'var(--fw-allow, #30d158)', warn: 'var(--accent-warn, #ffd60a)', error: 'var(--accent-danger, #ff453a)' };
+  window._sdnFmtEventTime = function (iso) {
+    const d = new Date(iso), p = n => String(n).padStart(2, '0');
+    const sameYear = d.getFullYear() === new Date().getFullYear();
+    return `${d.toLocaleString('en', { month: 'short' })} ${d.getDate()}${sameYear ? '' : ' ' + d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
+  window._sdnEventsTable = function (events, opts) {
+    if (!events || !events.length) return `<div class="fw-empty">${evEsc((opts && opts.empty) || 'No events recorded yet.')}</div>`;
+    const rows = events.map(e => `<tr>
+      <td class="fw-mono" title="${evEsc(new Date(e.at).toString())}">${evEsc(window._sdnFmtEventTime(e.at))}</td>
+      <td>${evEsc(e.name || '—')}</td>
+      <td><span style="display:inline-flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;flex:none;background:${EV_SEV[e.severity] || EV_SEV.info}"></span>${evEsc(EV_LABEL[e.kind] || e.kind)}</span></td>
+      <td style="white-space:normal;min-width:260px;color:var(--text)">${evEsc(e.text)}</td></tr>`).join('');
+    return `<div class="fw-tscroll"><table class="fw-table"><thead><tr><th>Time</th><th>Gateway / name</th><th>Event</th><th>Details</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  };
+
   const PROTO = { tcp: 'TCP', udp: 'UDP', tcpudp: 'TCP+UDP', any: 'Any', icmp: 'ICMP' };
   const ifaceById = id => F.cfg().interfaces.find(i => i.id === id);
   const gwById = id => F.cfg().gateways.find(g => g.id === id);
@@ -103,7 +126,12 @@
   }
 
   let gwTicks = 0;
+  let gwHistory = null;    // GET /api/sdn/events?category=gateway (newest 50)
   // ── Gateways ───────────────────────────────────────────────────────────
+  async function loadHistory() {
+    const r = await F.api('GET', '/api/sdn/events?category=gateway&limit=50');
+    if (r.ok) gwHistory = (r.data && r.data.events) || [];
+  }
   async function loadGw() {
     const r = await F.api('GET', '/api/sdn/gateways');
     gwState = r.ok ? r.data : null;
@@ -161,16 +189,17 @@
           <button class="fw-icon-btn danger" data-del="${F.E(g.id)}" ${n ? 'disabled' : ''} title="${n ? `Used by ${n} rule${n > 1 ? 's' : ''}` : 'Remove'}">${F.icon('trash', 12)}Remove</button></div>` : ''}
       </div>`;
     }).join('');
-    const events = ((gwState && gwState.events) || []).slice(-8).reverse();
-    const evLabel = e => ({ down: `${e.name} went down`, up: `${e.name} is back up`, failover: `Internet traffic moved to ${e.name}`, reconnect: `${e.name} failed its ping tests: PPPoE reconnecting` }[e.kind] || e.kind);
     return `
       <div class="fw-section-h" style="font-size:15px;font-weight:600;color:var(--text);margin:0 0 8px">Gateways</div>
       ${monitorStale() && st.enabled ? `<div class="fw-safemode" style="background:rgba(255,214,10,.10);border-color:rgba(255,214,10,.4)">${F.icon('info', 16)}<div><b style="color:var(--accent-warn)">The gateway monitor is not reporting</b> — failover is not active. Apply the configuration, or check the <span class="fw-mono">znas-sdn-gw</span> service.</div></div>` : ''}
       <div class="fw-note" style="margin-bottom:10px">Traffic to the Internet uses the first gateway that is online. When a monitored gateway fails its health checks, traffic moves to the next one, and comes back after a minute of good health. A monitored PPPoE link is also hung up and dialled again.</div>
       ${!wanIfaces.length ? `<div class="fw-empty">No interface yet — add one on the Interfaces page to add a gateway.</div>` : ''}
       <div class="fw-cards">${cards}${admin && wanIfaces.length ? `<div class="fw-card fw-add-card" id="fw-add-gw">${F.icon('plus', 22)}<span>New gateway</span><span style="font-size:11.5px">An Internet link on any interface</span></div>` : ''}</div>
-      ${events.length ? `<div class="fw-card" style="margin-top:14px"><b>Recent events</b><div class="fw-gwev">${events.map(e => `<div><span class="fw-dot ${e.kind === 'down' ? 'amber' : ''}"></span>${F.E(evLabel(e))}<span class="fw-t">${F.E(F.fmtTime(e.at, true))}</span></div>`).join('')}</div></div>` : ''}
-      ${routesHTML()}`;
+      ${routesHTML()}
+      <div class="fw-section-h" style="font-size:15px;font-weight:600;color:var(--text);margin:22px 0 8px;display:flex;align-items:center;gap:10px">Gateway Status History
+        <span style="flex:1"></span><a href="#" id="fw-gwh-all" style="font-size:12px;font-weight:500">Show all firewall events</a></div>
+      <div class="fw-note" style="margin-bottom:10px">When an Internet link went down, why, and when it came back. PPPoE links are recorded even when they are not monitored.</div>
+      <div class="fw-card" style="padding:0">${gwHistory === null ? '<div class="fw-empty">Loading…</div>' : window._sdnEventsTable(gwHistory)}</div>`;
   }
 
   // ── Local routes ───────────────────────────────────────────────────────
@@ -306,6 +335,8 @@
   }
 
   function wireGateways(root) {
+    const all = root.querySelector('#fw-gwh-all');
+    if (all) all.onclick = ev => { ev.preventDefault(); window._openSDNEvents && window._openSDNEvents('gateway'); };
     wireRoutes(root);
     const add = root.querySelector('#fw-add-gw');
     if (add) add.onclick = () => editGateway(null);
@@ -715,10 +746,10 @@
     // Shared with sdn-services.js.
     Object.assign(F, { drawer, showErrors, ifaceChips, endpointEditor, cb });
     window.sdnRegisterPage('fw-gateways', {
-      load: async () => { await Promise.all([loadGw(), loadRoutes()]); },
+      load: async () => { await Promise.all([loadGw(), loadRoutes(), loadHistory()]); },
       // Gateway state moves by the second; routes only move on an Apply or a
       // failover, so on slow links they are read every fifth tick (15 s).
-      render: gatewaysHTML, wire: wireGateways, pollMs: 3000, poll: async () => { await Promise.all([loadGw(), ++gwTicks % 5 ? null : loadRoutes()]); },
+      render: gatewaysHTML, wire: wireGateways, pollMs: 3000, poll: async () => { await Promise.all([loadGw(), ++gwTicks % 5 ? null : loadRoutes(), gwTicks % 10 ? null : loadHistory()]); },
     });
     window.sdnRegisterPage('fw-nat', {
       load: async () => { await F.loadCountries(); },

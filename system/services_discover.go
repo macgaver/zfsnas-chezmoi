@@ -230,7 +230,6 @@ func GroupServices(cs []DockerContainer, known func(DockerContainer) bool) []Dis
 	return out
 }
 
-
 // ── Address selection ────────────────────────────────────────────────────────
 //
 // An instance running Docker is almost always multi-homed: its real NIC(s) plus

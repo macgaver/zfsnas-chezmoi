@@ -102,6 +102,7 @@
     } catch (_) { return; }
     if (last && last.iface !== d.iface) reset(); // failover or another server
     last = d;
+    rttNote(d.latency);
     if (d.ready) {
       shift(buf.down, d.rx_bps); shift(buf.up, d.tx_bps);
       // with the stack shown, the dials and their maximum follow its blocks
@@ -127,6 +128,7 @@
   function reset() {
     buf.down.fill(null); buf.up.fill(null);
     last = null;
+    RTT.sum = 0; RTT.n = 0; RTT.ts = 0; RTT.gw = '';
     if (chart) { chart.data.datasets.forEach(ds => { ds.data = []; }); chart.update('none'); }
   }
   // An InterLink switch shows another server: its gateway, its traffic.
@@ -164,6 +166,7 @@
     const empty = document.getElementById('net-empty');
     if (empty) empty.style.display = last && !d.iface ? 'flex' : 'none';
     if (mode === 'network-full') { if (!vnShown()) drawChart(); drawGauge('down'); drawGauge('up'); }
+    rttDraw();
     if (mode === 'network-compact') { drawEq('down'); drawEq('up'); }
   }
 
@@ -284,7 +287,7 @@
 
 
   // ── Network Focus (full): the top 10 devices or instances, stacked blocks ──
-  // One block per 5 s (the first 5 every 2 s, to fill in quickly), 20 minutes
+  // One block per 5 s (the first 5 every 2 s, to fill in quickly), 15 minutes
   // across. Upload above the line, download under it, each line in its own
   // colour, and "Other" (the gateway's traffic those 10 do not explain) in
   // grey, so a column's height is the gateway's traffic. With the Firewall on,
@@ -292,7 +295,7 @@
   // it, the busiest instances. The server chooses them once and keeps them.
   // Hover a column: that moment, the gateway's total and every line.
   const VN = { timer: null, roster: 0, hosts: [], pts: [], last: 0, iface: '', mode: '', on: false, denied: false, hover: -1, tip: null, seq: 0 };
-  const VN_COLS = 240, VN_STEP = 5, VN_FAST = 2, VN_FAST_N = 5;
+  const VN_COLS = 180, VN_STEP = 5, VN_FAST = 2, VN_FAST_N = 5;
   const VN_PAL = ['#ff9f0a', '#30d158', '#ff453a', '#ffd60a', '#5e5ce6', '#ff6fb5', '#63e6be', '#c69c6d', '#b5e853', '#3a7bd5'];
   const VN_OTHER = '#8e8e93';
   function vnShown() { return VN.on && mode === 'network-full'; }
@@ -442,7 +445,7 @@
       .sort((a, b) => (b.au + b.ad) - (a.au + a.ad) || a.i - b.i);
     const ROW = 15, fit = Math.max(1, Math.floor((el.clientHeight - ROW - 2) / ROW));
     const pair = (a, m, cls) => `<span class="vt-v ${cls}">${a > 0 ? `<b>${vnBits(a)}</b>` : '<span class="vt-z">0</span>'} / ${m > 0 ? vnBits(m) : '<span class="vt-z">0</span>'}</span>`;
-    el.innerHTML = `<div class="vt-r vt-h"><span></span><span title="Busiest over the last 20 minutes">Top ${Math.min(fit, rows.length)}</span><span class="vt-v">\u2191 avg / max</span><span class="vt-v">\u2193 avg / max</span></div>`
+    el.innerHTML = `<div class="vt-r vt-h"><span></span><span title="Busiest over the last 15 minutes">Top ${Math.min(fit, rows.length)}</span><span class="vt-v">\u2191 avg / max</span><span class="vt-v">\u2193 avg / max</span></div>`
       + rows.slice(0, fit).map(r => `<div class="vt-r" title="${esc(r.h.ip && r.h.ip !== r.h.name ? r.h.name + ' · ' + r.h.ip : r.h.name)}${r.h.type === 'server' ? ' (this server)' : ''}">
         <span class="vt-sw" style="background:${VN_PAL[r.i % VN_PAL.length]}"></span><span class="vt-n">${esc(vnShort(r.h))}</span>${pair(r.au, r.mu, 'vt-ul')}${pair(r.ad, r.md, 'vt-dl')}</div>`).join('');
   }
@@ -471,7 +474,10 @@
     let body;
     if (!p) body = '<div class="vn-r"><span></span><span class="vn-z">No sample for this moment</span><span></span><span></span></div>';
     else {
-      body = VN.hosts.map((h, i) => `<div class="vn-r"><span class="vn-sw" style="background:${VN_PAL[i % VN_PAL.length]}"></span><span class="vn-n" title="${hint(h)}">${label(h)}</span><span class="vn-dl">↓ ${rate(p.down[i])}</span><span class="vn-ul">↑ ${rate(p.up[i])}</span></div>`).join('')
+      // busiest at that moment first (download + upload); each keeps its colour
+      const tot = i => (p.down[i] || 0) + (p.up[i] || 0);
+      const order = VN.hosts.map((_, i) => i).sort((a, b) => tot(b) - tot(a) || a - b);
+      body = order.map(i => [VN.hosts[i], i]).map(([h, i]) => `<div class="vn-r"><span class="vn-sw" style="background:${VN_PAL[i % VN_PAL.length]}"></span><span class="vn-n" title="${hint(h)}">${label(h)}</span><span class="vn-dl">↓ ${rate(p.down[i])}</span><span class="vn-ul">↑ ${rate(p.up[i])}</span></div>`).join('')
         + `<div class="vn-r vn-other"><span class="vn-sw" style="background:${VN_OTHER}"></span><span class="vn-n" title="The gateway's traffic not explained by the ${VN.mode === 'devices' ? 'devices' : 'instances'} above">Other</span><span class="vn-dl">↓ ${rate(p.other_down)}</span><span class="vn-ul">↑ ${rate(p.other_up)}</span></div>`;
     }
     const nm = (last && last.iface === VN.iface && last.name) || VN.iface || 'Gateway';
@@ -643,6 +649,103 @@
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && TK.pop) tkClose(); });
   window.addEventListener('resize', tkPlace);
+
+  // ── gateway latency between the dials ──
+  // "1.4/3.6ms": the latest ping of the gateway carrying the traffic (when
+  // the Firewall monitors it) / the average of the pings this page has seen
+  // since it was opened. A click shows the last 15 minutes.
+  const RTT = { sum: 0, n: 0, ts: 0, gw: '', pop: null, pts: null, seq: 0 };
+  const fmtMs = v => (v >= 100 ? Math.round(v) : v.toFixed(1));
+  function rttNote(L) {
+    if (!L) return;
+    if (RTT.gw !== L.gateway_id) { RTT.sum = 0; RTT.n = 0; RTT.ts = 0; RTT.gw = L.gateway_id; }
+    if (L.ts && L.ts !== RTT.ts) {
+      RTT.ts = L.ts;
+      if (L.ok) { RTT.sum += L.rtt_ms; RTT.n++; }
+    }
+  }
+  function rttDraw() {
+    const el = document.getElementById('net-rtt');
+    if (!el) return;
+    const L = last && last.latency;
+    if (mode !== 'network-full' || !L) { el.style.display = 'none'; if (RTT.pop) rttClose(); return; }
+    const avg = RTT.n ? fmtMs(RTT.sum / RTT.n) : '—';
+    el.innerHTML = L.ok ? `${fmtMs(L.rtt_ms)}<span class="net-rtt-s">/</span>${avg}<span class="net-rtt-u">ms</span>`
+      : `<span class="net-rtt-bad">—</span><span class="net-rtt-s">/</span>${avg}<span class="net-rtt-u">ms</span>`;
+    el.title = `Latency of ${L.name}: now / average since you opened this page. Click for the last 15 minutes.`;
+    el.style.display = '';
+    if (RTT.pop) rttRender();
+  }
+  async function rttFetch() {
+    const L = last && last.latency;
+    if (!L) return;
+    const seq = ++RTT.seq;
+    try {
+      const r = await fetch('/api/sdn/gateway-rtt?id=' + encodeURIComponent(L.gateway_id));
+      if (!r.ok || seq !== RTT.seq) return;
+      RTT.pts = ((await r.json()) || {}).points || [];
+      if (RTT.pop) rttRender();
+    } catch (_) {}
+  }
+  function rttGraph(pts) {
+    const W = 360, H = 110, PL = 34, PB = 16, PT = 6, now = Math.floor(Date.now() / 1000), from = now - 900;
+    const vals = pts.filter(p => p.ms != null).map(p => p.ms);
+    if (!vals.length) return `<div class="net-rtt-empty">${pts.length ? 'No ping answered in the last 15 minutes.' : 'No ping recorded yet.'}</div>`;
+    const max = Math.max(1, ...vals) * 1.15;
+    const X = ts => PL + (Math.max(from, ts) - from) / 900 * (W - PL - 4), Y = v => PT + (1 - v / max) * (H - PT - PB);
+    let d = '', pen = false, lost = '';
+    pts.forEach(p => {
+      if (p.ts < from) return;
+      if (p.ms == null) { pen = false; lost += `<line x1="${X(p.ts).toFixed(1)}" x2="${X(p.ts).toFixed(1)}" y1="${PT}" y2="${H - PB}" class="net-rtt-lost"/>`; return; }
+      d += (pen ? 'L' : 'M') + X(p.ts).toFixed(1) + ' ' + Y(p.ms).toFixed(1);
+      pen = true;
+    });
+    const grid = [0, 0.5, 1].map(f => { const v = max / 1.15 * f, y = Y(v); return `<line x1="${PL}" x2="${W - 4}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="net-rtt-grid"/><text x="${PL - 4}" y="${(y + 3).toFixed(1)}" class="net-rtt-ax" text-anchor="end">${fmtMs(v)}</text>`; }).join('');
+    const xl = [15, 10, 5, 0].map(m => `<text x="${X(now - m * 60).toFixed(1)}" y="${H - 3}" class="net-rtt-ax" text-anchor="${m === 15 ? 'start' : m ? 'middle' : 'end'}">${m ? '-' + m + ' min' : 'now'}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" class="net-rtt-svg" role="img" aria-label="Gateway latency, last 15 minutes">${grid}${lost}<path d="${d}" class="net-rtt-line"/>${xl}</svg>`;
+  }
+  function rttRender() {
+    const L = last && last.latency;
+    if (!RTT.pop || !L) return;
+    const avg = RTT.n ? fmtMs(RTT.sum / RTT.n) + ' ms' : 'not known yet';
+    const cur = L.ok ? fmtMs(L.rtt_ms) + ' ms' : 'no answer';
+    const tgt = esc(L.target || 'the gateway') + (L.target_is_peer ? ' (the ISP’s side of the PPPoE link)' : '');
+    RTT.pop.innerHTML = `<div class="vn-h"><div class="vn-t">Gateway latency · last 15 minutes</div>
+        <div class="vn-tot"><span>${esc(L.name)}</span><span><b>${esc(cur)}</b> now</span><span><b>${esc(avg)}</b> avg</span></div></div>
+      <div class="net-rtt-body">${RTT.pts ? rttGraph(RTT.pts) : '<div class="net-rtt-empty">Loading…</div>'}
+        <p><b>${esc(cur)}</b> is the current latency: the time the latest ping to ${tgt} took to come back.
+        <b>${esc(avg)}</b> is the average of the pings seen since you opened this page.</p>
+        <p class="vn-z">Loss over the last checks: ${L.loss || 0} %. Red lines are pings that got no answer.</p></div>`;
+  }
+  function rttPlace() {
+    const el = document.getElementById('net-rtt');
+    if (!RTT.pop || !el) return;
+    const r = el.getBoundingClientRect(), w = RTT.pop.offsetWidth;
+    RTT.pop.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8)) + 'px';
+    RTT.pop.style.top = (r.bottom + 6) + 'px';
+  }
+  function rttOpen() {
+    if (RTT.pop) return;
+    if (typeof window._tkClose === 'function') window._tkClose();
+    RTT.pop = document.createElement('div');
+    RTT.pop.className = 'vn-tip net-rtt-pop'; RTT.pop.setAttribute('role', 'dialog'); RTT.pop.setAttribute('aria-label', 'Gateway latency');
+    document.body.appendChild(RTT.pop);
+    RTT.pts = null;
+    rttRender(); rttPlace(); rttFetch();
+    RTT.timer = setInterval(() => { if (!document.hidden) rttFetch(); }, 3000);
+  }
+  function rttClose() {
+    clearInterval(RTT.timer); RTT.seq++;
+    if (RTT.pop) RTT.pop.remove();
+    RTT.pop = null; RTT.pts = null;
+  }
+  document.addEventListener('click', e => {
+    const b = e.target && e.target.closest && e.target.closest('#net-rtt');
+    if (b) { if (RTT.pop) rttClose(); else rttOpen(); return; }
+    if (RTT.pop && !RTT.pop.contains(e.target)) rttClose();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && RTT.pop) rttClose(); });
+  window.addEventListener('resize', rttPlace);
 
   // Apply before first paint (the script sits at the end of <body>).
   applyMode(savedMode());

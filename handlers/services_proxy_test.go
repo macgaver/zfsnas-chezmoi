@@ -365,9 +365,9 @@ func TestRewriteAbsolutePathsIdempotent(t *testing.T) {
 func TestRewriteLocationKeepsWholeHostInsideProxy(t *testing.T) {
 	tgt := ServiceTarget{Scheme: "https", Host: "10.0.0.5", Port: 443, Path: "/g"}
 	cases := map[string]string{
-		"/g/":                       "/s/abc/g/",
+		"/g/":                        "/s/abc/g/",
 		"/cmlogin/login.php?from=/g": "/s/abc/cmlogin/login.php?from=/g",
-		"/other/page":               "/s/abc/other/page",
+		"/other/page":                "/s/abc/other/page",
 	}
 	for in, want := range cases {
 		if got := rewriteLocation(in, tgt, "/s/abc"); got != want {

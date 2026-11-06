@@ -41,7 +41,7 @@ func mergerfsMemberDatasets(p config.MergerFSPool) []string {
 
 // MergerFSSnapshotSet is one logical global snapshot (same name across members).
 type MergerFSSnapshotSet struct {
-	Name         string    `json:"name"`          // the <name> after '@'
+	Name         string    `json:"name"` // the <name> after '@'
 	CreatedAt    time.Time `json:"created_at"`
 	Members      int       `json:"members"`       // member datasets that have this snapshot
 	TotalMembers int       `json:"total_members"` // member datasets in the union

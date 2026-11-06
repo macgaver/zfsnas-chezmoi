@@ -710,8 +710,6 @@ func rewriteLocation(loc string, t ServiceTarget, prefix string) string {
 	return loc
 }
 
-
-
 // absAttrRe matches src="/…" / href="/…" attributes holding a same-origin
 // ABSOLUTE path. The negative lookahead-free construction excludes "//" (which
 // is protocol-relative and belongs to another host) by requiring the character

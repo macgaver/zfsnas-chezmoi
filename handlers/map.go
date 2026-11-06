@@ -83,7 +83,7 @@ type mapDataset struct {
 // itself — df on the FUSE mount, which is what the user actually sees — while
 // DatasetIDs carry the dependency down to the ZFS datasets that back it.
 type mapMergerFS struct {
-	ID         string   `json:"id"`   // "mfs:<name>"
+	ID         string   `json:"id"` // "mfs:<name>"
 	Name       string   `json:"name"`
 	Mountpoint string   `json:"mountpoint"`
 	Mounted    bool     `json:"mounted"`
@@ -103,15 +103,15 @@ type mapConsumer struct {
 	ID         string   `json:"id"`
 	Type       string   `json:"type"` // smb|nfs|iscsi|s3|vm|container
 	Name       string   `json:"name"`
-	DatasetIDs []string `json:"dataset_ids"`     // backing dataset(s)/zvol(s); a VM links to each virtual-disk zvol
+	DatasetIDs []string `json:"dataset_ids"` // backing dataset(s)/zvol(s); a VM links to each virtual-disk zvol
 	// MergerFSIDs is set instead of DatasetIDs when the share's path lives on a
 	// mergerfs mount: the union is what the share presents, and the union itself
 	// carries the link down to the datasets.
 	MergerFSIDs []string `json:"mergerfs_ids,omitempty"`
-	State      string   `json:"state,omitempty"` // vm/container run state
-	Clients    int      `json:"clients"`         // number of connected remotes
-	RateKBps   *float64 `json:"rate_kbps"`       // null ⇒ unknown (no label, flow up)
-	IP         string   `json:"ip,omitempty"`    // vm/container guest IPv4 (used to fold in self-mounts)
+	State       string   `json:"state,omitempty"` // vm/container run state
+	Clients     int      `json:"clients"`         // number of connected remotes
+	RateKBps    *float64 `json:"rate_kbps"`       // null ⇒ unknown (no label, flow up)
+	IP          string   `json:"ip,omitempty"`    // vm/container guest IPv4 (used to fold in self-mounts)
 	// ClientOf lists share consumer IDs this VM/container mounts as a client
 	// (its guest IP matched the SMB/NFS session). Drawn as a lateral up-then-down
 	// link to the share instead of a duplicate remote box at the top.

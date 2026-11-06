@@ -78,13 +78,13 @@ func TestPersistManifestCoversRuntimeWrites(t *testing.T) {
 		// image and /etc/netplan is deliberately not persisted, so the portal's
 		// static-IP and bridge code writes /etc/network/interfaces.
 		"/etc/network/interfaces",
-		"/etc/fstab",                 // mergerfs / mounts
-		"/etc/zfs/zpool.cache",       // pool auto-import
-		"/etc/samba/smb.conf",        // SMB shares
-		"/var/lib/samba",             // SMB user passdb
-		"/etc/nut",                   // UPS
-		"/etc/exports",               // NFS
-		"/etc/tgt",                   // iSCSI
+		"/etc/fstab",           // mergerfs / mounts
+		"/etc/zfs/zpool.cache", // pool auto-import
+		"/etc/samba/smb.conf",  // SMB shares
+		"/var/lib/samba",       // SMB user passdb
+		"/etc/nut",             // UPS
+		"/etc/exports",         // NFS
+		"/etc/tgt",             // iSCSI
 		// S3 (RustFS, v6.10.17+): /etc/default/rustfs, its unit and TLS files are
 		// deliberately NOT persisted — ReapplyS3AtStartup rebuilds them at every
 		// boot from the portal settings (which are persisted).

@@ -18,7 +18,7 @@ import (
 // FolderEntry is one node in the scanned folder tree.
 type FolderEntry struct {
 	Name      string         `json:"name"`
-	Path      string         `json:"path"`      // relative to dataset mountpoint root
+	Path      string         `json:"path"`       // relative to dataset mountpoint root
 	SizeBytes int64          `json:"size_bytes"` // total including all descendants
 	Children  []*FolderEntry `json:"children,omitempty"`
 }

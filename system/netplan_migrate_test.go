@@ -27,11 +27,11 @@ func TestRenderInterfacesFileUsesAuto(t *testing.T) {
 
 func TestParseNetplanYAML(t *testing.T) {
 	cases := []struct {
-		name        string
-		yaml        string
-		wantDevs    []string
-		wantRender  string
-		wantUnsupp  []string
+		name       string
+		yaml       string
+		wantDevs   []string
+		wantRender string
+		wantUnsupp []string
 	}{
 		{
 			// Exactly what Ubuntu's subiquity installer writes (4-space indent).

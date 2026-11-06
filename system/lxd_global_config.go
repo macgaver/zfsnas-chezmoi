@@ -23,8 +23,8 @@ import (
 // user clears a checkbox vs. never having set it.
 type LXDGlobalConfig struct {
 	// Listener / API
-	HTTPSAddress    string `json:"https_address"`     // core.https_address
-	ShutdownTimeout string `json:"shutdown_timeout"`  // core.shutdown_timeout
+	HTTPSAddress    string `json:"https_address"`    // core.https_address
+	ShutdownTimeout string `json:"shutdown_timeout"` // core.shutdown_timeout
 	// Outbound proxy
 	ProxyHTTPS       string `json:"proxy_https"`        // core.proxy_https
 	ProxyHTTP        string `json:"proxy_http"`         // core.proxy_http
@@ -37,7 +37,7 @@ type LXDGlobalConfig struct {
 	// Backups
 	BackupCompression string `json:"backup_compression"` // backups.compression_algorithm
 	// Metrics — managed by the toggle, included here for read-only display
-	MetricsAddress string `json:"metrics_address"`      // core.metrics_address
+	MetricsAddress string `json:"metrics_address"`        // core.metrics_address
 	MetricsAuth    *bool  `json:"metrics_authentication"` // core.metrics_authentication
 }
 
@@ -115,6 +115,7 @@ func GetLXDGlobalConfig() (*LXDGlobalConfig, error) {
 // SetLXDGlobalConfig writes the requested keys. For each field:
 //   - empty string / nil bool → unset the key (let LXD use its default)
 //   - non-empty string / explicit bool → set
+//
 // Returns the list of keys that actually changed (for audit logging).
 func SetLXDGlobalConfig(cur, want *LXDGlobalConfig) ([]string, error) {
 	if cur == nil {
@@ -261,15 +262,15 @@ func boolStr(b bool) string {
 // and the previous one held in lxdRealtimeCache; the first poll for any
 // instance returns null rates and is discarded by the frontend.
 type LXDInstanceRealtime struct {
-	TS        int64    `json:"ts"`         // unix millis
-	CPUPct    *float64 `json:"cpu_pct"`    // 0–100×vCPUs
-	MemUsed   int64    `json:"mem_used"`   // bytes
-	MemTotal  int64    `json:"mem_total"`  // bytes
-	DiskRead  *float64 `json:"disk_r"`     // bytes/s, summed across disks
-	DiskWrite *float64 `json:"disk_w"`     // bytes/s, summed across disks
-	NetRX     *float64 `json:"net_rx"`     // bytes/s, summed across nics
-	NetTX     *float64 `json:"net_tx"`     // bytes/s, summed across nics
-	Status    string   `json:"status"`     // "Running" | "Stopped" | etc.
+	TS        int64    `json:"ts"`        // unix millis
+	CPUPct    *float64 `json:"cpu_pct"`   // 0–100×vCPUs
+	MemUsed   int64    `json:"mem_used"`  // bytes
+	MemTotal  int64    `json:"mem_total"` // bytes
+	DiskRead  *float64 `json:"disk_r"`    // bytes/s, summed across disks
+	DiskWrite *float64 `json:"disk_w"`    // bytes/s, summed across disks
+	NetRX     *float64 `json:"net_rx"`    // bytes/s, summed across nics
+	NetTX     *float64 `json:"net_tx"`    // bytes/s, summed across nics
+	Status    string   `json:"status"`    // "Running" | "Stopped" | etc.
 }
 
 // realtimeSnapshot caches the previous tick's cumulative counters so the
@@ -395,10 +396,10 @@ func GetLXDInstanceRealtime(instance string) (*LXDInstanceRealtime, error) {
 	samples := parsePromText(body)
 
 	var (
-		cpuTotal, netRX, netTX, diskR, diskW           float64
-		memActiveAnon, memAvail, memTotalProm          float64
-		found                                          bool
-		status                                         string
+		cpuTotal, netRX, netTX, diskR, diskW  float64
+		memActiveAnon, memAvail, memTotalProm float64
+		found                                 bool
+		status                                string
 	)
 	for _, s := range samples {
 		if s.labels["name"] != instance {

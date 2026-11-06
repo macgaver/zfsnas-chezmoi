@@ -131,7 +131,7 @@ func WriteExtSSHKey(configDir, id, key string) error {
 
 // RemoveExtSecrets deletes any credential material for a storage id.
 func RemoveExtSecrets(configDir, id string) {
-	os.Remove(ExtCredFile(configDir, id))  //nolint:errcheck
+	os.Remove(ExtCredFile(configDir, id))   //nolint:errcheck
 	os.Remove(ExtSSHKeyFile(configDir, id)) //nolint:errcheck
 }
 

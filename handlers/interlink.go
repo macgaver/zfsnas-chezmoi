@@ -765,9 +765,9 @@ func HandleInterlinkLink(appCfg *config.AppConfig) http.HandlerFunc {
 // counts to render a partial-success badge and Details for the per-peer
 // breakdown in the result modal.
 type interlinkPropagationResult struct {
-	Linked  []string                       `json:"linked"`  // hostnames that joined successfully
-	Skipped []string                       `json:"skipped"` // hostnames already linked locally before propagation
-	Failed  []interlinkPropagationFailure  `json:"failed"`  // hostnames that refused (creds, TOTP, offline, …)
+	Linked  []string                      `json:"linked"`  // hostnames that joined successfully
+	Skipped []string                      `json:"skipped"` // hostnames already linked locally before propagation
+	Failed  []interlinkPropagationFailure `json:"failed"`  // hostnames that refused (creds, TOTP, offline, …)
 }
 
 type interlinkPropagationFailure struct {

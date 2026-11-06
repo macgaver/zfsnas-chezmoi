@@ -27,16 +27,16 @@ func HandleGetSettings(appCfg *config.AppConfig) http.HandlerFunc {
 			composeImg = "debian"
 		}
 		jsonOK(w, map[string]interface{}{
-			"port":                       appCfg.Port,
-			"bind_port_443":              appCfg.BindPort443,
-			"compose_base_image":         composeImg,
-			"storage_unit":               appCfg.StorageUnit,
-			"login_theme":                theme,
-			"live_update_enabled":        appCfg.LiveUpdateEnabled,
-			"max_smbd_processes":         appCfg.MaxSmbdProcesses,
-			"web_session":                appCfg.WebSession,
-			"docker_detect_vms":          appCfg.DockerDetectVMsOn(),
-			"docker_detect_containers":   appCfg.DockerDetectContainersOn(),
+			"port":                     appCfg.Port,
+			"bind_port_443":            appCfg.BindPort443,
+			"compose_base_image":       composeImg,
+			"storage_unit":             appCfg.StorageUnit,
+			"login_theme":              theme,
+			"live_update_enabled":      appCfg.LiveUpdateEnabled,
+			"max_smbd_processes":       appCfg.MaxSmbdProcesses,
+			"web_session":              appCfg.WebSession,
+			"docker_detect_vms":        appCfg.DockerDetectVMsOn(),
+			"docker_detect_containers": appCfg.DockerDetectContainersOn(),
 		})
 	}
 }
@@ -45,16 +45,16 @@ func HandleGetSettings(appCfg *config.AppConfig) http.HandlerFunc {
 func HandleUpdateSettings(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Port              *int    `json:"port"`
-			BindPort443       *bool   `json:"bind_port_443"`
-			ComposeBaseImage  *string `json:"compose_base_image"`
-			StorageUnit       *string `json:"storage_unit"`
-			LoginTheme        *string `json:"login_theme"`
-			LiveUpdateEnabled *bool   `json:"live_update_enabled"`
-			MaxSmbdProcesses  *int    `json:"max_smbd_processes"`
-			WebSession        *config.WebSessionPolicy `json:"web_session"`
-			DockerDetectVMs        *bool `json:"docker_detect_vms"`
-			DockerDetectContainers *bool `json:"docker_detect_containers"`
+			Port                   *int                     `json:"port"`
+			BindPort443            *bool                    `json:"bind_port_443"`
+			ComposeBaseImage       *string                  `json:"compose_base_image"`
+			StorageUnit            *string                  `json:"storage_unit"`
+			LoginTheme             *string                  `json:"login_theme"`
+			LiveUpdateEnabled      *bool                    `json:"live_update_enabled"`
+			MaxSmbdProcesses       *int                     `json:"max_smbd_processes"`
+			WebSession             *config.WebSessionPolicy `json:"web_session"`
+			DockerDetectVMs        *bool                    `json:"docker_detect_vms"`
+			DockerDetectContainers *bool                    `json:"docker_detect_containers"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -281,10 +281,10 @@ func HandleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := MustSession(r)
 	audit.Log(audit.Entry{
-		User:   sess.Username,
-		Role:   sess.Role,
-		Action: audit.ActionUpdateSettings,
-		Result: audit.ResultOK,
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  audit.ActionUpdateSettings,
+		Result:  audit.ResultOK,
 		Details: "API key deleted: " + id,
 	})
 	jsonOK(w, map[string]string{"message": "deleted"})

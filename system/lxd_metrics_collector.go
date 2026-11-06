@@ -47,7 +47,7 @@ var (
 
 	// Cumulative counter cache. Key = "<instance>|<series>". Value = the last
 	// observed counter value. Rates are derived as (now - prev)/dt.
-	lxdMetricsPrev = map[string]float64{}
+	lxdMetricsPrev   = map[string]float64{}
 	lxdMetricsPrevTS time.Time
 
 	// Status fields exposed via /api/lxd/metrics-status.
@@ -75,12 +75,12 @@ func LXDMetricsDir() string { return lxdMetricsDir }
 // LXDMetricsStatus is the live status of the scraper, used by
 // /api/lxd/metrics-status to drive the UI badge.
 type LXDMetricsStatus struct {
-	Enabled        bool   `json:"enabled"`
-	Endpoint       string `json:"endpoint"`
-	LastScrapeTS   int64  `json:"last_scrape_ts"`
-	LastScrapeErr  string `json:"last_scrape_error,omitempty"`
-	LastInstances  int    `json:"last_instances"`
-	LastSeries     int    `json:"last_series"`
+	Enabled       bool   `json:"enabled"`
+	Endpoint      string `json:"endpoint"`
+	LastScrapeTS  int64  `json:"last_scrape_ts"`
+	LastScrapeErr string `json:"last_scrape_error,omitempty"`
+	LastInstances int    `json:"last_instances"`
+	LastSeries    int    `json:"last_series"`
 }
 
 // GetLXDMetricsStatus returns a snapshot of the collector's last-tick state.
@@ -314,8 +314,8 @@ func scrapeLXDMetricsOnce(now time.Time) error {
 
 	// Group samples by instance name and convert to records.
 	type seriesKey struct {
-		instance string
-		series   string
+		instance  string
+		series    string
 		isCounter bool
 	}
 	type rec struct {
@@ -334,19 +334,19 @@ func scrapeLXDMetricsOnce(now time.Time) error {
 	// derived value (MemTotal - MemAvailable). Active_anon is kept as a
 	// fallback for the case where MemTotal hasn't been populated yet.
 	memActiveAnon := map[string]float64{}
-	memAvail      := map[string]float64{}
-	memTotal      := map[string]float64{}
+	memAvail := map[string]float64{}
+	memTotal := map[string]float64{}
 	// Per-filesystem usage, keyed "instance|mountpoint". Real disk filesystems
 	// only — pseudo mounts (tmpfs, overlay, squashfs/loop, proc/sys, lxcfs…) are
 	// dropped so they never enter the RRD or the % chart.
-	fsSize  := map[string]float64{}
+	fsSize := map[string]float64{}
 	fsAvail := map[string]float64{}
-	fsFree  := map[string]float64{}
+	fsFree := map[string]float64{}
 	// Per-instance mountpoint sets used to prune stale pseudo-FS series an older
 	// collector may have stored (tmpfs/loop/dm/flash …). allFsMounts = every
 	// mountpoint reported this scrape; realFsMounts = those that passed the
 	// real-FS filter. The difference is definitively pseudo → DeleteKey.
-	allFsMounts  := map[string]map[string]bool{}
+	allFsMounts := map[string]map[string]bool{}
 	realFsMounts := map[string]map[string]bool{}
 	for _, s := range samples {
 		instance := s.labels["name"]
@@ -422,14 +422,22 @@ func scrapeLXDMetricsOnce(now time.Time) error {
 	// Memory: compute derived "used" so VMs without lxd-agent still get
 	// real values. Active_anon is a fallback when MemTotal is missing.
 	memInstances := map[string]bool{}
-	for k := range memActiveAnon { memInstances[k] = true }
-	for k := range memAvail      { memInstances[k] = true }
-	for k := range memTotal      { memInstances[k] = true }
+	for k := range memActiveAnon {
+		memInstances[k] = true
+	}
+	for k := range memAvail {
+		memInstances[k] = true
+	}
+	for k := range memTotal {
+		memInstances[k] = true
+	}
 	for instance := range memInstances {
 		used := memActiveAnon[instance]
 		if t := memTotal[instance]; t > 0 {
 			if a := memAvail[instance]; t > a {
-				if v := t - a; v > used { used = v }
+				if v := t - a; v > used {
+					used = v
+				}
 			}
 		}
 		recs = append(recs, rec{seriesKey{instance, "mem", false}, used})

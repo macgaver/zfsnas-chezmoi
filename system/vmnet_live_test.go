@@ -77,9 +77,9 @@ func TestVMNetLiveStackAndOther(t *testing.T) {
 	}
 }
 
-func TestVMNetLiveRingIs20Minutes(t *testing.T) {
-	if VMNetLivePoints*VMNetLiveStep != 20*time.Minute {
-		t.Fatalf("timeline = %v, want 20m", VMNetLivePoints*VMNetLiveStep)
+func TestVMNetLiveRingIs15Minutes(t *testing.T) {
+	if VMNetLivePoints*VMNetLiveStep != 15*time.Minute {
+		t.Fatalf("timeline = %v, want 15m", VMNetLivePoints*VMNetLiveStep)
 	}
 }
 

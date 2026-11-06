@@ -18,11 +18,11 @@ import (
 // SWAP tooltip can show RSS alongside the swap bytes for context, while
 // SwapMB / SwapPct are populated for both lists.
 type ProcMemInfo struct {
-	PID      int     `json:"pid"`
-	Name     string  `json:"name"`
-	Cmd      string  `json:"cmd"`
-	MemMB    float64 `json:"mem_mb"`
-	MemPct   float64 `json:"mem_pct"`
+	PID    int     `json:"pid"`
+	Name   string  `json:"name"`
+	Cmd    string  `json:"cmd"`
+	MemMB  float64 `json:"mem_mb"`
+	MemPct float64 `json:"mem_pct"`
 	// ShmemMB is the portion of MemMB backed by tmpfs / memfd / SysV-shm
 	// (= /proc/<pid>/status RssShmem). Surfaced in the MEM tooltip as a
 	// separate column so QEMU's memfd-backed guest RAM is visible
@@ -35,26 +35,26 @@ type ProcMemInfo struct {
 
 // MemProcsSnapshot is the full memory snapshot returned by the API.
 type MemProcsSnapshot struct {
-	SmbPct       float64       `json:"smb_pct"`
-	NfsPct       float64       `json:"nfs_pct"`
-	ZfsPct       float64       `json:"zfs_pct"` // ZFS processes + ARC cache
-	MinioPct     float64       `json:"minio_pct"`
-	ISCSIPct     float64       `json:"iscsi_pct"`
-	VMPct        float64       `json:"vm_pct"`
-	ContainerPct float64       `json:"container_pct"`
-	OtherPct     float64       `json:"other_pct"`
+	SmbPct       float64 `json:"smb_pct"`
+	NfsPct       float64 `json:"nfs_pct"`
+	ZfsPct       float64 `json:"zfs_pct"` // ZFS processes + ARC cache
+	MinioPct     float64 `json:"minio_pct"`
+	ISCSIPct     float64 `json:"iscsi_pct"`
+	VMPct        float64 `json:"vm_pct"`
+	ContainerPct float64 `json:"container_pct"`
+	OtherPct     float64 `json:"other_pct"`
 	// CachePct / CacheMB is the kernel's reclaimable buff/cache (Buffers +
 	// Cached + SReclaimable − Shmem, matching `free`'s "buff/cache" column).
 	// Stacked on top of the categorised RSS+ARC buckets in the MEM gauge so
 	// you can see how much RAM the OS is holding for performance reasons but
 	// could give back on demand. Distinct from ZFS ARC (which lives in the
 	// ZFS bucket already and is reported via arcstats, not /proc/meminfo).
-	CachePct     float64       `json:"cache_pct"`
-	CacheMB      float64       `json:"cache_mb"`
-	ArcMB        float64       `json:"arc_mb"`
-	TotalMB      float64       `json:"total_mb"`
-	UsedMB       float64       `json:"used_mb"`
-	TopProcs     []ProcMemInfo `json:"top_procs"`
+	CachePct float64       `json:"cache_pct"`
+	CacheMB  float64       `json:"cache_mb"`
+	ArcMB    float64       `json:"arc_mb"`
+	TotalMB  float64       `json:"total_mb"`
+	UsedMB   float64       `json:"used_mb"`
+	TopProcs []ProcMemInfo `json:"top_procs"`
 	// Top 10 processes sorted by VmSwap descending (v6.5.3+). Drives the
 	// SWAP topbar tooltip so users can see which processes have the most
 	// pages currently in any swap device.
@@ -80,8 +80,8 @@ type MemProcsSnapshot struct {
 	// drive the bar's overall fill level + the green/yellow/red readout.
 	// All zero when no swap device is configured (SwapTotalMB == 0); the
 	// UI hides the swap bar in that case.
-	SwapTotalMB     float64 `json:"swap_total_mb"`
-	SwapUsedMB      float64 `json:"swap_used_mb"`     // mirrors TotalSwapUsedMB; kept here for the bar's own % math
+	SwapTotalMB float64 `json:"swap_total_mb"`
+	SwapUsedMB  float64 `json:"swap_used_mb"` // mirrors TotalSwapUsedMB; kept here for the bar's own % math
 	// Disk-only / zram-only split (v6.5.3+). The SWAP vertical bar is now
 	// dedicated to real disk swap so it conveys "we're paging out to NVMe"
 	// rather than mixing in compressed-RAM activity. zram details live on
@@ -91,14 +91,14 @@ type MemProcsSnapshot struct {
 	DiskSwapUsedMB   float64 `json:"disk_swap_used_mb"`
 	ZramSwapTotalMB  float64 `json:"zram_swap_total_mb"`
 	ZramSwapUsedMB   float64 `json:"zram_swap_used_mb"`
-	SmbSwapPct      float64 `json:"smb_swap_pct"`
-	NfsSwapPct      float64 `json:"nfs_swap_pct"`
-	ZfsSwapPct      float64 `json:"zfs_swap_pct"`
-	MinioSwapPct    float64 `json:"minio_swap_pct"`
-	ISCSISwapPct    float64 `json:"iscsi_swap_pct"`
-	VMSwapPct       float64 `json:"vm_swap_pct"`
+	SmbSwapPct       float64 `json:"smb_swap_pct"`
+	NfsSwapPct       float64 `json:"nfs_swap_pct"`
+	ZfsSwapPct       float64 `json:"zfs_swap_pct"`
+	MinioSwapPct     float64 `json:"minio_swap_pct"`
+	ISCSISwapPct     float64 `json:"iscsi_swap_pct"`
+	VMSwapPct        float64 `json:"vm_swap_pct"`
 	ContainerSwapPct float64 `json:"container_swap_pct"`
-	OtherSwapPct    float64 `json:"other_swap_pct"`
+	OtherSwapPct     float64 `json:"other_swap_pct"`
 }
 
 var (
@@ -410,9 +410,9 @@ func sampleMemProcs() *MemProcsSnapshot {
 	}
 	usedMB := float64(usedKB) / 1024.0
 	diskSwapTotalMB := float64(diskSwapTotalKB) / 1024.0
-	diskSwapUsedMB  := float64(diskSwapUsedKB) / 1024.0
+	diskSwapUsedMB := float64(diskSwapUsedKB) / 1024.0
 	zramSwapTotalMB := float64(zramSwapTotalKB) / 1024.0
-	zramSwapUsedMB  := float64(zramSwapUsedKB) / 1024.0
+	zramSwapUsedMB := float64(zramSwapUsedKB) / 1024.0
 	// Per-category swap share = % of disk swap capacity, since the bar now
 	// shows only real disk swap. Returns 0 on hosts without disk swap.
 	swapPct := func(kb uint64) float64 {
@@ -423,22 +423,22 @@ func sampleMemProcs() *MemProcsSnapshot {
 	}
 
 	return &MemProcsSnapshot{
-		SmbPct:       pct(catKB[CpuCatSMB]),
-		NfsPct:       pct(catKB[CpuCatNFS]),
-		ZfsPct:       pct(catKB[CpuCatZFS]),
-		MinioPct:     pct(catKB[CpuCatMinIO]),
-		ISCSIPct:     pct(catKB[CpuCatISCSI]),
-		VMPct:        pct(catKB[CpuCatVM]),
-		ContainerPct: pct(catKB[CpuCatContainer]),
-		OtherPct:     pct(catKB[CpuCatOther]),
-		CachePct:     pct(buffCacheKB),
-		CacheMB:      float64(buffCacheKB) / 1024.0,
-		ArcMB:        arcMB,
-		TotalMB:      totalMB,
-		UsedMB:       usedMB,
-		TopProcs:     topProcs,
-		TopSwapProcs: topSwapProcs,
-		At:           time.Now(),
+		SmbPct:          pct(catKB[CpuCatSMB]),
+		NfsPct:          pct(catKB[CpuCatNFS]),
+		ZfsPct:          pct(catKB[CpuCatZFS]),
+		MinioPct:        pct(catKB[CpuCatMinIO]),
+		ISCSIPct:        pct(catKB[CpuCatISCSI]),
+		VMPct:           pct(catKB[CpuCatVM]),
+		ContainerPct:    pct(catKB[CpuCatContainer]),
+		OtherPct:        pct(catKB[CpuCatOther]),
+		CachePct:        pct(buffCacheKB),
+		CacheMB:         float64(buffCacheKB) / 1024.0,
+		ArcMB:           arcMB,
+		TotalMB:         totalMB,
+		UsedMB:          usedMB,
+		TopProcs:        topProcs,
+		TopSwapProcs:    topSwapProcs,
+		At:              time.Now(),
 		ZramActive:      zc.Enabled,
 		ZramPoolMB:      float64(zc.DiskSizeBytes) / mb,
 		ZramOrigMB:      float64(zc.OrigDataBytes) / mb,

@@ -159,19 +159,19 @@ func GetBridgeMembers(bridge string) ([]BridgeMember, error) {
 
 // LXDNetwork represents a single LXD network as returned by lxc network list/show.
 type LXDNetwork struct {
-	Name        string            `json:"name"`
-	Type        string            `json:"type"` // "bridge", "physical", "vlan", etc.
-	Managed     bool              `json:"managed"`
+	Name    string `json:"name"`
+	Type    string `json:"type"` // "bridge", "physical", "vlan", etc.
+	Managed bool   `json:"managed"`
 	// FirewallOwned: the Firewall (SDN) manages this network — Infrastructure
 	// shows it read-only.
-	FirewallOwned bool `json:"firewall_owned,omitempty"`
-	Description string            `json:"description"`
-	State       string            `json:"state"` // "Created" | ""
-	IPv4        string            `json:"ipv4"`
-	IPv6        string            `json:"ipv6"`
-	Config      map[string]string `json:"config"`
-	UsedBy      []string          `json:"used_by"` // raw /1.0/instances/... URIs
-	VMCount     int               `json:"vm_count"`
+	FirewallOwned bool              `json:"firewall_owned,omitempty"`
+	Description   string            `json:"description"`
+	State         string            `json:"state"` // "Created" | ""
+	IPv4          string            `json:"ipv4"`
+	IPv6          string            `json:"ipv6"`
+	Config        map[string]string `json:"config"`
+	UsedBy        []string          `json:"used_by"` // raw /1.0/instances/... URIs
+	VMCount       int               `json:"vm_count"`
 	// Ports are the interfaces enslaved to this bridge (its bridge_ports),
 	// read from the kernel. Without them the bridges table cannot say WHICH
 	// physical NIC a bridge is actually carrying traffic on — the appliance

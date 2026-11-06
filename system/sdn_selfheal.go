@@ -130,11 +130,33 @@ type sdnHealer struct {
 	changes  map[string]SDNHealPeer
 	ddnsTry  sdnHealRetry
 	ddnsAddr map[string]string
+	ddnsSeen map[string]SDNDDNSHost // hostname → last cache entry seen
+	cfgDir   string                 // "" = do not write the history (tests)
+}
+
+// ddnsChange turns a ddclient cache entry that changed into a history event.
+// The first sighting of a name only sets the baseline: it is not news.
+func ddnsChange(name string, prev SDNDDNSHost, seen bool, cur SDNDDNSHost, now time.Time) *SDNEvent {
+	if !seen || (prev.IP == cur.IP && prev.Status == cur.Status) {
+		return nil
+	}
+	good := cur.Status == "good" || cur.Status == "nochg"
+	switch {
+	case good && prev.IP != cur.IP && prev.IP != "":
+		return &SDNEvent{At: now, Kind: "ddns_ok", Severity: "info", Name: name, Text: name + " updated: " + prev.IP + " → " + cur.IP}
+	case good && prev.IP != cur.IP:
+		return &SDNEvent{At: now, Kind: "ddns_ok", Severity: "info", Name: name, Text: name + " updated: now " + cur.IP}
+	case good:
+		return &SDNEvent{At: now, Kind: "ddns_ok", Severity: "info", Name: name, Text: name + " update works again (" + cur.IP + ")"}
+	case cur.Status != "" && cur.Status != prev.Status:
+		return &SDNEvent{At: now, Kind: "ddns_failed", Severity: "error", Name: name, Text: name + " update failed: the provider answered \"" + cur.Status + "\""}
+	}
+	return nil
 }
 
 func newSDNHealer() *sdnHealer {
 	return &sdnHealer{tunnels: map[string]*sdnHealRetry{}, errs: map[string]string{}, nudged: map[string]time.Time{},
-		changes: map[string]SDNHealPeer{}, ddnsAddr: map[string]string{}}
+		changes: map[string]SDNHealPeer{}, ddnsAddr: map[string]string{}, ddnsSeen: map[string]SDNDDNSHost{}}
 }
 
 // cycle repairs what it can for config c, and returns the state to publish.
@@ -324,6 +346,25 @@ func (h *sdnHealer) ddns(c *sdn.Config, now time.Time) {
 		return
 	}
 	cache := parseDDClientCache(string(b))
+	for _, e := range c.DDNS {
+		pv, ok := sdn.DDNSProviders[e.Provider]
+		if !e.Enabled || !ok {
+			continue
+		}
+		for _, name := range e.Hostnames {
+			cur, known := cache[strings.TrimSuffix(name, pv.Suffix)]
+			if !known {
+				continue
+			}
+			prev, seen := h.ddnsSeen[name]
+			h.ddnsSeen[name] = cur
+			if ev := ddnsChange(name, prev, seen, cur, now); ev != nil && h.cfgDir != "" {
+				if err := SDNRecordEvent(h.cfgDir, *ev); err != nil {
+					log.Printf("[sdn-events] %v", err)
+				}
+			}
+		}
+	}
 	var why []string
 	for _, e := range c.DDNS {
 		pv, ok := sdn.DDNSProviders[e.Provider]
@@ -375,6 +416,7 @@ func (h *sdnHealer) ddns(c *sdn.Config, now time.Time) {
 // sdnHealLoop runs the repairs for as long as the daemon lives.
 func sdnHealLoop(st sdn.Store) {
 	h := newSDNHealer()
+	h.cfgDir = st.Dir
 	routeErrs := "[]"
 	for {
 		state, _ := st.LoadState()

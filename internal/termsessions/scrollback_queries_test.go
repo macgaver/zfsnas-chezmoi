@@ -13,11 +13,11 @@ import (
 // "12;2$y". stripScrollbackQueries must drop the DECRQM request from the replay.
 func TestStripScrollbackDropsDECRQM(t *testing.T) {
 	cases := [][]byte{
-		[]byte("\x1b[?12$p"),       // the reported case (cursor blink)
-		[]byte("\x1b[?2026$p"),     // synchronized output
-		[]byte("\x1b[?2004$p"),     // bracketed paste
+		[]byte("\x1b[?12$p"),        // the reported case (cursor blink)
+		[]byte("\x1b[?2026$p"),      // synchronized output
+		[]byte("\x1b[?2004$p"),      // bracketed paste
 		[]byte("\x1b[?1049;2004$p"), // multi-parameter
-		[]byte("\x1b[4$p"),         // ANSI (non-private) DECRQM
+		[]byte("\x1b[4$p"),          // ANSI (non-private) DECRQM
 	}
 	for _, q := range cases {
 		in := append(append([]byte("hello "), q...), []byte(" world")...)
@@ -49,10 +49,10 @@ func TestStripScrollbackKeepsStrippingKnownQueries(t *testing.T) {
 // particular real SGR/mode sequences and literal text must not be touched.
 func TestStripScrollbackPreservesNormalOutput(t *testing.T) {
 	keep := [][]byte{
-		[]byte("\x1b[?25h"),   // show cursor (mode set, not a query)
-		[]byte("\x1b[?1049h"), // alt-screen enter
-		[]byte("\x1b[0m"),     // SGR reset
-		[]byte("\x1b[2J"),     // clear screen
+		[]byte("\x1b[?25h"),                 // show cursor (mode set, not a query)
+		[]byte("\x1b[?1049h"),               // alt-screen enter
+		[]byte("\x1b[0m"),                   // SGR reset
+		[]byte("\x1b[2J"),                   // clear screen
 		[]byte("price is 12$ and 2$y left"), // literal text with $ and $y
 	}
 	for _, k := range keep {

@@ -2,9 +2,9 @@
 // for ZNAS v6.5.30+. A Session keeps its PTY alive across WebSocket
 // disconnects so the user can close the browser, come back, and resume the
 // same shell. Lifetime is bounded by:
-//   1. PTY EOF (target process exits — VM reboot, `exit` typed, etc.)
-//   2. Explicit Terminate (user clicks the "x" on a tab)
-//   3. TerminateUser (web session evicted — idle timeout, logout, hard cap)
+//  1. PTY EOF (target process exits — VM reboot, `exit` typed, etc.)
+//  2. Explicit Terminate (user clicks the "x" on a tab)
+//  3. TerminateUser (web session evicted — idle timeout, logout, hard cap)
 //
 // Server restarts are NOT survived — PTYs are kernel resources owned by
 // the ZNAS process; a restart wipes them all. This is a documented limit
@@ -75,10 +75,10 @@ func stripScrollbackQueries(b []byte) []byte {
 // Session reason constants — passed to Terminate / surfaced in the final
 // scrollback line so the UI can render an honest reason.
 const (
-	ReasonProcessExit   = "process_exit"     // PTY EOF (VM down, exit typed, host shell quit)
-	ReasonUserClose     = "user_close"       // explicit close from the UI
-	ReasonSessionExpire = "session_expired"  // web session evicted
-	ReasonReplaced      = "replaced_by_new"  // (unused today, reserved)
+	ReasonProcessExit   = "process_exit"    // PTY EOF (VM down, exit typed, host shell quit)
+	ReasonUserClose     = "user_close"      // explicit close from the UI
+	ReasonSessionExpire = "session_expired" // web session evicted
+	ReasonReplaced      = "replaced_by_new" // (unused today, reserved)
 	ReasonShutdown      = "server_shutdown"
 )
 
@@ -143,16 +143,16 @@ type Session struct {
 	id, userID, kind, target, title string
 	createdAt                       time.Time
 
-	mu          sync.Mutex
-	lastActive  time.Time
-	ptmx        *os.File
-	cmd         *exec.Cmd
-	scrollback  *ringBuf
-	viewers     map[*viewer]struct{} // every attached browser window (mirrors + controller)
-	controller  *viewer              // the viewer whose input reaches the PTY (nil ⇒ uncontrolled)
-	cols, rows  uint16               // PTY geometry — tracks the controller's viewport
-	terminated  bool
-	termReason  string
+	mu           sync.Mutex
+	lastActive   time.Time
+	ptmx         *os.File
+	cmd          *exec.Cmd
+	scrollback   *ringBuf
+	viewers      map[*viewer]struct{} // every attached browser window (mirrors + controller)
+	controller   *viewer              // the viewer whose input reaches the PTY (nil ⇒ uncontrolled)
+	cols, rows   uint16               // PTY geometry — tracks the controller's viewport
+	terminated   bool
+	termReason   string
 	evictedTimer *time.Timer
 }
 
@@ -270,10 +270,10 @@ func ctrlMsgType(data []byte) string {
 
 // Store is the per-process session registry.
 type Store struct {
-	mu            sync.Mutex
-	sessions      map[string]*Session
-	scrollbackKB  int // 256 by default
-	maxPerUser    int // 20 by default
+	mu           sync.Mutex
+	sessions     map[string]*Session
+	scrollbackKB int // 256 by default
+	maxPerUser   int // 20 by default
 }
 
 // Default is the global store; main.go configures it at startup.
@@ -516,10 +516,10 @@ func (s *Store) Get(id string) *Session {
 // 10+ minutes silently has its WS killed by the OS/NAT and neither the
 // browser nor the server notice until the next write fails — which is
 // exactly the "frozen terminal" the user reported. With ping/pong:
-//   • server pings every pingInterval
-//   • browser auto-replies pong (built-in WebSocket behaviour)
-//   • server's read deadline gets extended on each pong via PongHandler
-//   • if pongs stop, read deadline expires → conn errors → onclose fires
+//   - server pings every pingInterval
+//   - browser auto-replies pong (built-in WebSocket behaviour)
+//   - server's read deadline gets extended on each pong via PongHandler
+//   - if pongs stop, read deadline expires → conn errors → onclose fires
 //     on the browser → the client-side auto-reconnect kicks in.
 const (
 	pingInterval = 25 * time.Second
@@ -729,7 +729,10 @@ func (sess *Session) UserID() string { return sess.userID }
 
 // ── small helpers ─────────────────────────────────────────────────────────────
 
-type sliceReaderT struct{ b []byte; pos int }
+type sliceReaderT struct {
+	b   []byte
+	pos int
+}
 
 func sliceReader(b []byte) io.Reader { return &sliceReaderT{b: b} }
 

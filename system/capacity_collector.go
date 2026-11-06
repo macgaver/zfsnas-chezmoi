@@ -47,9 +47,9 @@ func sampleCapacity(db *capacityrrd.DB, now time.Time) {
 	}
 	for _, p := range pools {
 		pfx := "pool:" + p.Name + ":"
-		db.Record(pfx+"used",   float64(p.UsableUsed),  now)
-		db.Record(pfx+"avail",  float64(p.UsableAvail), now)
-		db.Record(pfx+"usable", float64(p.UsableSize),  now)
+		db.Record(pfx+"used", float64(p.UsableUsed), now)
+		db.Record(pfx+"avail", float64(p.UsableAvail), now)
+		db.Record(pfx+"usable", float64(p.UsableSize), now)
 		if cr := parseComprRatio(p.Compression); cr > 0 {
 			db.Record(pfx+"compratio", cr, now)
 		}
@@ -62,7 +62,7 @@ func sampleCapacity(db *capacityrrd.DB, now time.Time) {
 	}
 	for _, d := range datasets {
 		pfx := "ds:" + d.Name + ":"
-		db.Record(pfx+"used",  float64(d.Used),  now)
+		db.Record(pfx+"used", float64(d.Used), now)
 		db.Record(pfx+"avail", float64(d.Avail), now)
 		if d.Quota > 0 {
 			db.Record(pfx+"quota", float64(d.Quota), now)

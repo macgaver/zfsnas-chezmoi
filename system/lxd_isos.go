@@ -395,9 +395,18 @@ func LXDISOFetchJobGet(id string) *LXDISOFetchJob {
 		j := v.(*LXDISOFetchJob)
 		j.mu.Lock()
 		defer j.mu.Unlock()
-		// Return a value copy so callers can't race the writer.
-		cp := *j
-		return &cp
+		// Return a field snapshot so callers can't race the writer. Copy
+		// fields explicitly: `*j` would also copy the held mutex and cancel.
+		return &LXDISOFetchJob{
+			URL:        j.URL,
+			Pool:       j.Pool,
+			Name:       j.Name,
+			BytesDone:  j.BytesDone,
+			TotalBytes: j.TotalBytes,
+			Status:     j.Status,
+			Error:      j.Error,
+			StartedAt:  j.StartedAt,
+		}
 	}
 	return nil
 }

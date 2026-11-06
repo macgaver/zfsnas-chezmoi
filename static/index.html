@@ -1105,15 +1105,17 @@
       <div class="net-chart-wrap">
         <div class="io-chart-label"><span id="net-chart-title">Gateway traffic</span> <span id="net-chart-iface"></span>
           <span class="net-key" id="net-key-gw"><span class="net-sw" style="background:#64d2ff"></span>Download <span class="net-sw" style="background:#bf5af2"></span>Upload</span>
-          <span class="net-key" id="net-key-vn" style="display:none">Upload above, download below · 20 min</span></div>
+          <span class="net-key" id="net-key-vn" style="display:none">Upload above, download below · 15 min</span></div>
         <canvas id="net-chart"></canvas>
         <!-- the top 10 instances, stacked blocks of 5 s: net-header.js -->
-        <canvas id="vn-chart" style="display:none" aria-label="Top instances' network traffic, last 20 minutes"></canvas>
+        <canvas id="vn-chart" style="display:none" aria-label="Top instances' network traffic, last 15 minutes"></canvas>
         <div id="net-empty" class="net-empty">No default route: this server has no gateway.</div>
       </div>
-      <!-- beside the stack: its busiest lines over the 20 minutes, as many as fit -->
-      <div id="vn-top" class="vn-top" style="display:none" aria-label="Busiest over the last 20 minutes"></div>
+      <!-- beside the stack: its busiest lines over the 15 minutes, as many as fit -->
+      <div id="vn-top" class="vn-top" style="display:none" aria-label="Busiest over the last 15 minutes"></div>
       <div class="net-gauges">
+        <!-- gateway latency now / average since the page opened (net-header.js) -->
+        <button type="button" id="net-rtt" class="net-rtt" style="display:none" aria-haspopup="dialog"></button>
         <div class="net-gauge" id="net-gauge-down"></div>
         <div class="net-gauge" id="net-gauge-up"></div>
       </div>
@@ -1130,6 +1132,8 @@
         <!-- Tab bar flush at top (Global + one tab per pool, built dynamically) -->
         <div id="dash-tab-bar" style="display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid var(--border);margin-left:-32px;margin-right:-32px;padding:0 32px;">
           <button class="cap-tab active" id="perf-tab-btn-global" onclick="switchPerfTab('global')">Global</button>
+          <!-- Networking tab (Firewall on): the network graphs + gateway latency -->
+          <button class="cap-tab" id="perf-tab-btn-networking" onclick="switchPerfTab('networking')" style="display:none;">Networking</button>
           <!-- Workload tab (revealed when LXD/Incus is available) -->
           <button class="cap-tab" id="perf-tab-btn-workload" onclick="switchPerfTab('workload')" style="display:none;">Workload</button>
         </div>
@@ -1176,7 +1180,7 @@
           <div style="font-size:13px;">Charts will fill in over the next 5 minutes.</div>
         </div>
         <div id="dash-charts" class="hidden">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;">
+          <div id="dash-sys-grid-1" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;">
             <div class="card-sm" style="position:relative;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">CPU Usage</div>
@@ -1206,19 +1210,19 @@
               </div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:16px;">
+          <!-- Disk Busy % and Disk I/O side by side, half the width each -->
+          <div id="dash-sys-grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:16px;">
             <div class="card-sm" style="position:relative;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Network I/O</div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Disk Busy %</div>
                 <div style="display:flex;align-items:center;gap:8px;">
-                  <span id="dash-max-net" style="font-size:11px;color:var(--text-3);"></span>
-                  <i class="info-tip tip-left" data-tip="Per-interface throughput (external interfaces only).&#10;Source: /proc/net/dev, sampled every 5 min.&#10;&#10;RX: bits received → Mbit/s&#10;TX: bits sent → Mbit/s&#10;&#10;Loopback and virtual interfaces (docker, veth, tun…) are excluded."></i>
+                  <span id="dash-max-busy" style="font-size:11px;color:var(--text-3);"></span>
+                  <i class="info-tip tip-left" data-tip="Average % of time pool disks had I/O in flight (utilisation).&#10;Source: /proc/diskstats io_ticks field, sampled every 5 min.&#10;&#10;100% means a disk was fully saturated for the entire 5-min interval. Averaged across all pool member disks."></i>
                 </div>
               </div>
-              <div id="dash-net-legend" style="display:none;"></div>
-              <div style="position:relative;height:120px;overflow:visible;">
-                <canvas id="dash-chart-net"></canvas>
-                <div id="global-zoom-sel-dash-chart-net" style="position:absolute;top:0;left:0;background:rgba(100,210,255,0.15);border:1px solid rgba(100,210,255,0.5);pointer-events:none;display:none;"></div>
+              <div style="position:relative;height:142px;">
+                <canvas id="dash-chart-busy"></canvas>
+                <div id="global-zoom-sel-dash-chart-busy" style="position:absolute;top:0;left:0;background:rgba(100,210,255,0.15);border:1px solid rgba(100,210,255,0.5);pointer-events:none;display:none;"></div>
               </div>
             </div>
             <div class="card-sm" style="position:relative;">
@@ -1239,21 +1243,23 @@
               </div>
             </div>
           </div>
-          <div style="margin-top:16px;">
-            <div class="card-sm" style="position:relative;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Disk Busy %</div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span id="dash-max-busy" style="font-size:11px;color:var(--text-3);"></span>
-                  <i class="info-tip tip-left" data-tip="Average % of time pool disks had I/O in flight (utilisation).&#10;Source: /proc/diskstats io_ticks field, sampled every 5 min.&#10;&#10;100% means a disk was fully saturated for the entire 5-min interval. Averaged across all pool member disks."></i>
-                </div>
-              </div>
-              <div style="position:relative;height:90px;">
-                <canvas id="dash-chart-busy"></canvas>
-                <div id="global-zoom-sel-dash-chart-busy" style="position:absolute;top:0;left:0;background:rgba(100,210,255,0.15);border:1px solid rgba(100,210,255,0.5);pointer-events:none;display:none;"></div>
+          <!-- Network I/O: one full-width graph per interface (built by _renderGlobalPerfCharts) -->
+          <!-- Gateway latency (Firewall, monitored gateways): first in the Networking tab -->
+          <div id="dash-gwrtt-card" class="card-sm" style="position:relative;display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);">Gateway Latency</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span id="dash-max-gwrtt" style="font-size:11px;color:var(--text-3);"></span>
+                <i class="info-tip tip-left" data-tip="Ping time of each monitored gateway, in milliseconds.&#10;Each 5-minute point summarises every ping answered in those 5 minutes: Avg, Min or Max follows the selector above.&#10;&#10;Recorded only while gateway monitoring is on (Firewall → Routing). Pings that got no answer are left out."></i>
               </div>
             </div>
+            <div id="dash-gwrtt-legend" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;"></div>
+            <div style="position:relative;height:140px;">
+              <canvas id="dash-chart-gwrtt"></canvas>
+              <div id="global-zoom-sel-dash-chart-gwrtt" style="position:absolute;top:0;left:0;background:rgba(100,210,255,0.15);border:1px solid rgba(100,210,255,0.5);pointer-events:none;display:none;"></div>
+            </div>
           </div>
+          <div id="dash-net-list"></div>
         </div>
         </div><!-- end perf-tab-global -->
 
@@ -1800,6 +1806,7 @@
         <!-- Tab strip (journal tabs are revealed only when journalctl is available) -->
         <div style="display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
           <button class="cap-tab active" data-atab="events" onclick="switchActivityTab('events')">Activity &amp; Events</button>
+          <button class="cap-tab" data-atab="sdn" id="act-tab-sdn" onclick="switchActivityTab('sdn')" style="display:none;" title="Firewall events: Internet links down and back, failovers, dynamic DNS, safe mode">SDN</button>
           <button class="cap-tab" data-atab="kernel" id="act-tab-kernel" onclick="switchActivityTab('kernel')" style="display:none;">Kernel Logs</button>
           <button class="cap-tab" data-atab="zfsnas" id="act-tab-zfsnas" onclick="switchActivityTab('zfsnas')" style="display:none;">ZNAS Service</button>
           <button class="cap-tab" data-atab="samba"  id="act-tab-samba"  onclick="switchActivityTab('samba')"  style="display:none;">Samba</button>
@@ -1813,6 +1820,22 @@
             <div style="color:var(--text-3);text-align:center;padding:24px;">Loading…</div>
           </div>
           <div id="audit-pagination" style="display:none;display:flex;align-items:center;justify-content:center;gap:12px;padding:16px 0;"></div>
+        </div>
+
+        <!-- Pane: SDN (Firewall event history: GET /api/sdn/events) -->
+        <div id="act-pane-sdn" style="display:none;">
+          <div id="sdn-ev-filters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+            <button class="btn btn-sm sdn-ev-f" data-cat="all" onclick="_sdnEvSetCat('all')">All</button>
+            <button class="btn btn-sm sdn-ev-f" data-cat="gateway" onclick="_sdnEvSetCat('gateway')">Gateways</button>
+            <button class="btn btn-sm sdn-ev-f" data-cat="ddns" onclick="_sdnEvSetCat('ddns')">Dynamic DNS</button>
+            <button class="btn btn-sm sdn-ev-f" data-cat="system" onclick="_sdnEvSetCat('system')">System</button>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;" id="sdn-ev-wrap">
+            <div style="color:var(--text-3);text-align:center;padding:24px;">Loading…</div>
+          </div>
+          <div style="display:flex;justify-content:center;padding:14px 0;">
+            <button class="btn btn-ghost btn-sm" id="sdn-ev-more" style="display:none;" onclick="_sdnEvMore()">Load more</button>
+          </div>
         </div>
 
         <!-- Pane: Journal (shared across the kernel/zfsnas/incus/all tabs) -->
@@ -17556,8 +17579,41 @@ const _JRNL_PRIO = {
   6:['var(--text-3)','INFO','var(--text)'], 7:['var(--text-3)','DEBUG','var(--text-3)'],
 };
 
+// ── Activity & Events → SDN: the Firewall event history ──
+let _sdnEvCat = 'all', _sdnEvLimit = 200, _sdnEvPending = null;
+function _sdnEvSetCat(cat) { _sdnEvCat = cat; _sdnEvLimit = 200; _sdnEvLoad(true); }
+function _sdnEvMore() { _sdnEvLimit = Math.min(_sdnEvLimit + 200, 1000); _sdnEvLoad(false); }
+async function _sdnEvLoad(cold) {
+  document.querySelectorAll('#sdn-ev-filters .sdn-ev-f').forEach(b => {
+    const on = b.dataset.cat === _sdnEvCat;
+    b.classList.toggle('btn-primary', on); b.classList.toggle('btn-ghost', !on);
+  });
+  const wrap = document.getElementById('sdn-ev-wrap'), more = document.getElementById('sdn-ev-more');
+  if (cold) wrap.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">Loading…</div>';
+  try {
+    const r = await fetch('/api/sdn/events?category=' + encodeURIComponent(_sdnEvCat) + '&limit=' + _sdnEvLimit);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { wrap.innerHTML = `<div style="color:var(--text-3);text-align:center;padding:24px;">${esc(d.error || 'Could not load the firewall events')}</div>`; more.style.display = 'none'; return; }
+    const evs = d.events || [];
+    wrap.innerHTML = typeof window._sdnEventsTable === 'function'
+      ? window._sdnEventsTable(evs, { empty: 'No firewall event recorded yet.' }) : '';
+    more.style.display = evs.length >= _sdnEvLimit && _sdnEvLimit < 1000 ? '' : 'none';
+  } catch (_) {
+    wrap.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:24px;">The server is not reachable</div>';
+  }
+}
+// Opens Activity & Events on the SDN tab (the Routing page's "Show all").
+window._openSDNEvents = function (cat) {
+  _sdnEvCat = cat || 'all'; _sdnEvLimit = 200; _sdnEvPending = 'sdn';
+  showPage('activity');
+};
+
 async function _activityPageEnter() {
-  switchActivityTab('events');
+  const sdnBtn = document.getElementById('act-tab-sdn');
+  if (sdnBtn) sdnBtn.style.display = window._sdnEnabled ? '' : 'none';
+  const first = _sdnEvPending && window._sdnEnabled ? _sdnEvPending : 'events';
+  _sdnEvPending = null;
+  switchActivityTab(first);
   loadAudit();
   // Probe journal availability once per session and reveal the relevant tabs.
   if (!_journalChecked) {
@@ -17586,13 +17642,15 @@ function switchActivityTab(tab) {
   _activityTab = tab;
   document.querySelectorAll('#page-activity .cap-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.atab === tab));
-  const isEvents = tab === 'events';
+  const isEvents = tab === 'events', isSDN = tab === 'sdn';
   document.getElementById('act-pane-events').style.display   = isEvents ? '' : 'none';
-  document.getElementById('act-pane-journal').style.display  = isEvents ? 'none' : '';
+  document.getElementById('act-pane-sdn').style.display      = isSDN ? '' : 'none';
+  document.getElementById('act-pane-journal').style.display  = isEvents || isSDN ? 'none' : '';
   document.getElementById('act-events-controls').style.display  = isEvents ? 'flex' : 'none';
-  document.getElementById('act-journal-controls').style.display = isEvents ? 'none' : 'flex';
-  if (isEvents) {
+  document.getElementById('act-journal-controls').style.display = isEvents || isSDN ? 'none' : 'flex';
+  if (isEvents || isSDN) {
     _journalStopLive();
+    if (isSDN) _sdnEvLoad(true);
     return;
   }
   // Switching between journal tabs: stop any live loop, load the new source.
@@ -35715,6 +35773,8 @@ async function loadDashboard() {
   let target = 'global';
   if (_perfActiveTab === 'global') {
     target = 'global';
+  } else if (_perfActiveTab === 'networking' && _perfNetSplit()) {
+    target = 'networking';
   } else if (_perfActiveTab === 'ups' && document.getElementById('perf-tab-btn-ups')) {
     target = 'ups';
   } else if (_perfPools.includes(_perfActiveTab)) {
@@ -35726,7 +35786,7 @@ async function loadDashboard() {
 
 // Reload the currently visible performance tab.
 function _reloadActivePerfTab() {
-  if (_perfActiveTab === 'global')        _loadGlobalPerfData();
+  if (_perfActiveTab === 'global' || _perfActiveTab === 'networking') _loadGlobalPerfData();
   else if (_perfActiveTab === 'ups')      _loadUPSPerfData();
   else if (_perfActiveTab === 'workload') _loadWorkloadPerfData();
   else                                    _loadPoolPerfData(_perfActiveTab);
@@ -36116,7 +36176,13 @@ async function _loadGlobalPerfData() {
     if (!r.ok) return;
     const data   = await r.json();
     const series = data.series || {};
-    const ifaces = data.ifaces || [];
+    // WAN (the default-route interface) first, then the bridges (vmbr*),
+    // then the rest in the server's order
+    let wan = '';
+    try { const g = await fetch('/api/sysinfo/gatewaynet'); if (g.ok) wan = (await g.json()).iface || ''; } catch (_) {}
+    const rank = n => n === wan ? 0 : /^vmbr/.test(n) ? 1 : 2;
+    const ifaces = (data.ifaces || []).map((n, i) => [n, i])
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(x => x[0]);
 
     const hasData = Object.values(series).some(arr => arr && arr.length > 0);
     if (!hasData) {
@@ -36127,11 +36193,11 @@ async function _loadGlobalPerfData() {
     collectEl.classList.add('hidden');
     chartsEl.classList.remove('hidden');
 
-    _renderGlobalPerfCharts(series, ifaces);
+    _renderGlobalPerfCharts(series, ifaces, data.gateways || {});
   } catch (_) {}
 }
 
-function _renderGlobalPerfCharts(series, ifaces) {
+function _renderGlobalPerfCharts(series, ifaces, gateways = {}) {
   const since  = _perfSinceTs();
   const oldest = _perfOldestTs['global'] || 0;
   const nowMs  = Date.now();
@@ -36234,41 +36300,8 @@ function _renderGlobalPerfCharts(series, ifaces) {
   const memMaxEl = document.getElementById('dash-max-mem');
   if (memMaxEl) memMaxEl.textContent = memPeak > 0 ? 'max ' + memPeak.toFixed(1) + '%' : '';
 
-  // Network (multi-NIC, not stacked)
-  const _NIC_RX = ['#32d74b', '#64d2ff', '#ff453a', '#a78bfa'];
-  const _NIC_TX = ['#ff9f0a', '#bf5af2', '#ffd60a', '#34d399'];
-  let netDs = []; let legendHtml = '';
-  // Negate y values for the RX/Write direction so the chart mirrors
-  // around y=0 (TX/Read above, RX/Write below). The point objects carry
-  // x as well, so we map a shallow copy with `y: -y`.
+  // Mirror helper: RX / Write plot below 0, TX / Read above.
   const negatePts = pts => pts.map(p => p && p.y != null ? { x: p.x, y: -p.y } : p);
-  ifaces.forEach((iface, i) => {
-    const rxColor = _NIC_RX[i % _NIC_RX.length];
-    const txColor = _NIC_TX[i % _NIC_TX.length];
-    netDs.push({ label: ifLabel(iface) + ' RX', data: negatePts(makePts('net_' + iface + '_rx')), fill: 'origin', borderColor: rxColor, backgroundColor: rxColor + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true });
-    netDs.push({ label: ifLabel(iface) + ' TX', data:           makePts('net_' + iface + '_tx'),  fill: 'origin', borderColor: txColor, backgroundColor: txColor + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true });
-    legendHtml += `<span style="font-size:11px;color:${rxColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${esc(ifLabel(iface))} RX</span> `;
-    legendHtml += `<span style="font-size:11px;color:${txColor};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg> ${esc(ifLabel(iface))} TX</span> `;
-  });
-  // Network chart uses external tooltip (overflows card bounds, sorted by value)
-  (function() {
-    const canvas = document.getElementById('dash-chart-net');
-    if (!canvas) return;
-    if (_dashCharts['dash-chart-net']) { _dashCharts['dash-chart-net'].destroy(); }
-    // Mirrored=true → y-axis straddles 0, dark 0-gridline, abs tick labels.
-    const opts = _perfChartOpts('Mbit/s', null, xMin, xMax, tickFmt, false, null, true);
-    opts.plugins.tooltip = Object.assign({}, opts.plugins.tooltip, {
-      enabled: false,
-      external: _netExternalTooltip,
-      _znasSortByMag: true, // RX/TX entries sorted by |y|, near-zero rows hidden
-    });
-    _dashCharts['dash-chart-net'] = new Chart(canvas, {
-      type: 'line',
-      data: { datasets: netDs.length ? netDs : [] },
-      options: opts,
-      plugins: [_netTooltipPlugin],
-    });
-  })();
   // Max label uses absolute magnitudes so the RX-mirror doesn't pull peak negative.
   const peakAbs = datasets => {
     let pk = 0;
@@ -36280,9 +36313,79 @@ function _renderGlobalPerfCharts(series, ifaces) {
         }
     return pk;
   };
-  const netMax = peakAbs(netDs);
-  const netMaxEl = document.getElementById('dash-max-net');
-  if (netMaxEl) netMaxEl.textContent = netMax > 0 ? 'max ' + netMax.toFixed(1) + ' Mbit/s' : '';
+
+  // Gateway latency (Firewall): one line per monitored gateway, ms. Shown
+  // first in the Networking tab, and only once there is data.
+  const GW_COLS = ['#64d2ff', '#bf5af2', '#30d158', '#ff9f0a', '#ff375f', '#ffd60a'];
+  const gwCard = document.getElementById('dash-gwrtt-card');
+  if (gwCard) {
+    const keys = Object.keys(gateways).filter(k => (series[k] || []).length)
+      .sort((a, b) => String(gateways[a]).localeCompare(String(gateways[b])));
+    gwCard.dataset.has = keys.length ? '1' : '';
+    if (keys.length) {
+      const ds = keys.map((k, i) => ({ label: gateways[k], data: makePts(k), fill: false, borderColor: GW_COLS[i % GW_COLS.length],
+        backgroundColor: GW_COLS[i % GW_COLS.length] + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: false }));
+      const lg = document.getElementById('dash-gwrtt-legend');
+      if (lg) lg.innerHTML = ds.map(d => `<span style="font-size:11px;color:${d.borderColor};display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:3px;border-radius:2px;background:${d.borderColor};display:inline-block;"></span><span style="color:var(--text-2);">${esc(d.label)}</span></span>`).join('');
+      makeChart('dash-chart-gwrtt', ds, 'ms', null, false, ctx => '  ' + ctx.dataset.label + ':  ' + (ctx.parsed.y ?? 0).toFixed(1) + ' ms');
+      const pk = peakMax(ds.map(d => ({ data: inRange(d.data) })));
+      const mxEl = document.getElementById('dash-max-gwrtt');
+      if (mxEl) mxEl.textContent = pk > 0 ? 'max ' + pk.toFixed(1) + ' ms' : '';
+      _wireGlobalPerfZoom('dash-chart-gwrtt');
+    }
+    _perfApplyNetSplit();
+  }
+
+  // Network: one full-width graph per interface, TX (upload) above the
+  // line and RX (download) below. The cards are rebuilt only when the list
+  // of interfaces changes.
+  const NET_RX = '#32d74b', NET_TX = '#ff9f0a';
+  const netList = document.getElementById('dash-net-list');
+  if (netList) {
+    const sig = ifaces.join('\n');
+    if (netList.dataset.sig !== sig) {
+      Object.keys(_dashCharts).filter(k => k.startsWith('dash-chart-net-')).forEach(k => { _dashCharts[k].destroy(); delete _dashCharts[k]; });
+      const line = c => `<span style="font-size:11px;color:${c};"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12h18"/></svg>`;
+      netList.innerHTML = ifaces.map((iface, i) => `
+          <div class="card-sm" style="position:relative;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Network I/O · <span style="text-transform:none;color:var(--text-2);" title="${esc(iface)}">${esc(ifLabel(iface))}</span></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span id="dash-max-net-${i}" style="font-size:11px;color:var(--text-3);"></span>
+                <i class="info-tip tip-left" data-tip="Throughput of this interface.&#10;Source: /proc/net/dev, sampled every 5 min.&#10;&#10;TX (above): bits sent → Mbit/s&#10;RX (below): bits received → Mbit/s"></i>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;margin-bottom:6px;">${line(NET_TX)} TX</span>${line(NET_RX)} RX</span></div>
+            <div style="position:relative;height:120px;overflow:visible;">
+              <canvas id="dash-chart-net-${i}"></canvas>
+              <div id="global-zoom-sel-dash-chart-net-${i}" style="position:absolute;top:0;left:0;background:rgba(100,210,255,0.15);border:1px solid rgba(100,210,255,0.5);pointer-events:none;display:none;"></div>
+            </div>
+          </div>`).join('');
+      netList.dataset.sig = sig;
+      ifaces.forEach((_, i) => _wireGlobalPerfZoom('dash-chart-net-' + i));
+    }
+    ifaces.forEach((iface, i) => {
+      const id = 'dash-chart-net-' + i;
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      if (_dashCharts[id]) _dashCharts[id].destroy();
+      const ds = [
+        { label: ifLabel(iface) + ' TX', data:           makePts('net_' + iface + '_tx'),  fill: 'origin', borderColor: NET_TX, backgroundColor: NET_TX + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true },
+        { label: ifLabel(iface) + ' RX', data: negatePts(makePts('net_' + iface + '_rx')), fill: 'origin', borderColor: NET_RX, backgroundColor: NET_RX + '1a', borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true },
+      ];
+      // Mirrored=true → y-axis straddles 0, dark 0-gridline, abs tick labels.
+      const opts = _perfChartOpts('Mbit/s', null, xMin, xMax, tickFmt, false, null, true);
+      opts.plugins.tooltip = Object.assign({}, opts.plugins.tooltip, {
+        enabled: false,
+        external: _netExternalTooltip,
+        _znasSortByMag: true,
+      });
+      _dashCharts[id] = new Chart(canvas, { type: 'line', data: { datasets: ds }, options: opts, plugins: [_netTooltipPlugin] });
+      const mx = peakAbs(ds);
+      const mxEl = document.getElementById('dash-max-net-' + i);
+      if (mxEl) mxEl.textContent = mx > 0 ? 'max ' + mx.toFixed(1) + ' Mbit/s' : '';
+    });
+  }
 
   // Disk I/O (mirrored: writes plot below 0)
   const dskR = makePts('disk_read');
@@ -36313,18 +36416,22 @@ function _renderGlobalPerfCharts(series, ifaces) {
 function _initGlobalPerfZoom() {
   if (_perfZoomReady['global']) return;
   _perfZoomReady['global'] = true;
-  const ids = ['dash-chart-cpu', 'dash-chart-mem', 'dash-chart-net', 'dash-chart-disk', 'dash-chart-busy'];
-  for (const id of ids) {
-    const canvas = document.getElementById(id);
-    const sel    = document.getElementById('global-zoom-sel-' + id);
-    if (!canvas || !sel) continue;
-    canvas.style.cursor = 'crosshair';
-    canvas.addEventListener('mousedown', e => {
-      if (e.button !== 0) return;
-      const rect = canvas.getBoundingClientRect();
-      _perfDragState = { pool: 'global', metric: id, canvas, sel, startX: e.clientX - rect.left, rect };
-    });
-  }
+  for (const id of ['dash-chart-cpu', 'dash-chart-mem', 'dash-chart-disk', 'dash-chart-busy']) _wireGlobalPerfZoom(id);
+}
+
+// Drag-to-zoom on one Global chart (the per-interface network charts are
+// wired as they are built).
+function _wireGlobalPerfZoom(id) {
+  const canvas = document.getElementById(id);
+  const sel    = document.getElementById('global-zoom-sel-' + id);
+  if (!canvas || !sel || canvas.dataset.zoomWired) return;
+  canvas.dataset.zoomWired = '1';
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const rect = canvas.getBoundingClientRect();
+    _perfDragState = { pool: 'global', metric: id, canvas, sel, startX: e.clientX - rect.left, rect };
+  });
 }
 
 // Build a full 288-slot (24h) timeline ending now, mapping sample data into it.
@@ -36631,8 +36738,8 @@ function _renderDashboardCharts(data, ifaceIPs = {}) {
   } else {
     netLabels = _dashBuild24h([[]]).labels;
   }
-  document.getElementById('dash-net-legend').innerHTML = legendHtml;
-  _makeDashChartNet('dash-chart-net', netDatasets, netLabels);
+  const _nl = document.getElementById('dash-net-legend'); if (_nl) _nl.innerHTML = legendHtml;
+  if (document.getElementById('dash-chart-net')) _makeDashChartNet('dash-chart-net', netDatasets, netLabels);
 
   // Disk I/O: same mirror treatment — Write below, Read above.
   const negateArr = arr => arr.map(v => v == null ? null : -v);
@@ -36655,7 +36762,7 @@ function _renderDashboardCharts(data, ifaceIPs = {}) {
 
   // Network: max across all datasets (all RX + TX curves)
   const netMax  = netDatasets.reduce((m, ds) => Math.max(m, _arrMax(ds.data)), 0);
-  document.getElementById('dash-max-net').textContent = netMax > 0 ? 'max ' + netMax.toFixed(2) + ' Mbit/s' : '';
+  const _nm = document.getElementById('dash-max-net'); if (_nm) _nm.textContent = netMax > 0 ? 'max ' + netMax.toFixed(2) + ' Mbit/s' : '';
 
   // Disk I/O: max of the higher of read or write
   const diskMax = Math.max(_arrMax(dskD.dataArrays[0]), _arrMax(dskD.dataArrays[1]));
@@ -37073,7 +37180,27 @@ function _initUPSPerfZoom() {
   });
 }
 
+// With the Firewall on, the network graphs live in their own Networking tab
+// (gateway latency first); Global keeps CPU, memory and disks.
+function _perfNetSplit() { return !!window._sdnEnabled; }
+function _perfApplyNetSplit() {
+  const split = _perfNetSplit(), net = _perfActiveTab === 'networking';
+  const btn = document.getElementById('perf-tab-btn-networking');
+  if (btn) btn.style.display = split ? '' : 'none';
+  ['dash-sys-grid-1', 'dash-sys-grid-2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = split && net ? 'none' : 'grid';
+  });
+  const nl = document.getElementById('dash-net-list');
+  if (nl) nl.style.display = split && !net ? 'none' : '';
+  const gw = document.getElementById('dash-gwrtt-card');
+  if (gw) gw.style.display = net && gw.dataset.has === '1' ? '' : 'none';
+  // the latency card is first: no gap above it, the net cards keep theirs
+  if (gw) gw.style.marginTop = '0';
+}
+
 function switchPerfTab(name) {
+  if (name === 'networking' && !_perfNetSplit()) name = 'global';
   _perfActiveTab = name;
 
   // Update tab button active states.
@@ -37082,8 +37209,11 @@ function switchPerfTab(name) {
   if (activeBtn) activeBtn.classList.add('active');
 
   // Show/hide content.
-  document.getElementById('perf-tab-global').classList.toggle('hidden', name !== 'global');
-  document.getElementById('perf-pool-tabs').classList.toggle('hidden', name === 'global' || name === 'ups' || name === 'workload');
+  // Networking is a view of the Global data: same controls, network graphs only.
+  const globalView = name === 'global' || name === 'networking';
+  document.getElementById('perf-tab-global').classList.toggle('hidden', !globalView);
+  _perfApplyNetSplit();
+  document.getElementById('perf-pool-tabs').classList.toggle('hidden', globalView || name === 'ups' || name === 'workload');
   const upsTab = document.getElementById('perf-tab-ups');
   if (upsTab) upsTab.classList.toggle('hidden', name !== 'ups');
   const wlTab = document.getElementById('perf-tab-workload');
@@ -37100,7 +37230,7 @@ function setPerfRange(range) {
   _perfRange = range;
   _perfZoom  = null;
   try { localStorage.setItem(PERF_LS_RANGE, range); } catch(_) {}
-  const zb = document.getElementById('perf-reset-zoom-btn-' + _perfActiveTab);
+  const zb = document.getElementById('perf-reset-zoom-btn-' + (_perfActiveTab === 'networking' ? 'global' : _perfActiveTab));
   if (zb) zb.classList.add('hidden');
   document.querySelectorAll('.perf-range-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.range === range);

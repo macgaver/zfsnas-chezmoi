@@ -294,8 +294,8 @@ func LogPoolHealthEvents(pool *system.Pool) {
 
 	prevHealth := healthEvPoolStates[pool.Name]
 	currHealth := pool.Health
-	currBad    := isBadPoolHealth(currHealth)
-	prevBad    := isBadPoolHealth(prevHealth)
+	currBad := isBadPoolHealth(currHealth)
+	prevBad := isBadPoolHealth(prevHealth)
 
 	if currBad && prevHealth != currHealth {
 		audit.Log(audit.Entry{
@@ -368,12 +368,12 @@ func StartHealthPoller(configDir string) {
 	healthEvMu.Unlock()
 
 	go func() {
-		lastWearoutAlerted  := map[string]time.Time{}
-		lastSmartAlerted    := map[string]time.Time{}
-		lastScrubState      := map[string]string{}   // pool → last seen scrub state
-		lastPoolDataErrors  := map[string]bool{}     // pool → had permanent data errors last poll
+		lastWearoutAlerted := map[string]time.Time{}
+		lastSmartAlerted := map[string]time.Time{}
+		lastScrubState := map[string]string{}   // pool → last seen scrub state
+		lastPoolDataErrors := map[string]bool{} // pool → had permanent data errors last poll
 		lastSecUpdatesCheck := time.Time{}
-		secUpdatesArmed     := true // fires on first occurrence; re-arms once updates are gone
+		secUpdatesArmed := true // fires on first occurrence; re-arms once updates are gone
 
 		time.Sleep(30 * time.Second)
 		runHealthCheck(lastWearoutAlerted, lastSmartAlerted, lastScrubState, lastPoolDataErrors, &lastSecUpdatesCheck, &secUpdatesArmed, configDir)
@@ -395,12 +395,12 @@ func anyTargetWantsEvent(cfg *alerts.AlertConfig, key alerts.EventKey) bool {
 }
 
 func runHealthCheck(
-	lastWearoutAlerted  map[string]time.Time,
-	lastSmartAlerted    map[string]time.Time,
-	lastScrubState      map[string]string,
-	lastPoolDataErrors  map[string]bool,
+	lastWearoutAlerted map[string]time.Time,
+	lastSmartAlerted map[string]time.Time,
+	lastScrubState map[string]string,
+	lastPoolDataErrors map[string]bool,
 	lastSecUpdatesCheck *time.Time,
-	secUpdatesArmed     *bool,
+	secUpdatesArmed *bool,
 	configDir string,
 ) {
 	cfg, err := alerts.Load()
@@ -438,9 +438,9 @@ func runHealthCheck(
 	}
 
 	// --- Disk SMART + wearout ---
-	checkSmart   := anyTargetWantsEvent(cfg, alerts.EventSmartError)
+	checkSmart := anyTargetWantsEvent(cfg, alerts.EventSmartError)
 	checkWearout := anyTargetWantsEvent(cfg, alerts.EventWearoutExceeded)
-	_, wearThr   := alerts.MinWearoutThreshold(cfg)
+	_, wearThr := alerts.MinWearoutThreshold(cfg)
 
 	if checkSmart || checkWearout {
 		disks, diskErr := system.ListDisks(configDir)

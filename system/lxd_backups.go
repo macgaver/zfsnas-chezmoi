@@ -173,7 +173,7 @@ type LXDDiskUsage struct {
 type LXDInstanceMetrics struct {
 	Name      string         `json:"name"`
 	Running   bool           `json:"running"`
-	CPUPct    float64        `json:"cpu_pct"`    // core-equivalent % (100 = one core)
+	CPUPct    float64        `json:"cpu_pct"` // core-equivalent % (100 = one core)
 	MemUsage  uint64         `json:"mem_usage"`
 	MemTotal  uint64         `json:"mem_total"`
 	Processes int            `json:"processes"`
@@ -983,16 +983,17 @@ var unknownVolatileKeysToStrip = map[string]bool{
 //     stores the storage-pool descriptor) is rewritten to dstPool so the
 //     embedded pool descriptor matches the destination pool. Without
 //     this, recover fails with "pool name mismatch in its backup file".
+//
 // restoreStripDevs decides which non-root disk devices to drop from a backup.yaml
 // on restore so `incus admin recover` doesn't abort on something the restore
 // can't satisfy. Two cases are stripped:
-//   1. Host-path disk devices (source begins with "/") — a cdrom/ISO or a bind
-//      mount. The path is specific to the SOURCE host and isn't part of the
-//      backup, so it won't exist on the restore target; recover otherwise fails
-//      with `Missing source path "…" for disk "…"`. The user re-attaches any
-//      ISO/host mount after restoring.
-//   2. Custom-volume disks whose backing volume wasn't captured in this backup
-//      (absent from volRemap).
+//  1. Host-path disk devices (source begins with "/") — a cdrom/ISO or a bind
+//     mount. The path is specific to the SOURCE host and isn't part of the
+//     backup, so it won't exist on the restore target; recover otherwise fails
+//     with `Missing source path "…" for disk "…"`. The user re-attaches any
+//     ISO/host mount after restoring.
+//  2. Custom-volume disks whose backing volume wasn't captured in this backup
+//     (absent from volRemap).
 //
 // The root disk (path "/") is always kept. Returns an empty map when volRemap is
 // nil (the legacy "keep everything" behaviour for callers that don't restore
@@ -1938,11 +1939,11 @@ func DeleteLocalBackup(vmID, datastore, snapshotName string) error {
 //
 // v6.5.19+: tries TWO layouts before giving up:
 //
-//	1. Workload layout (canonical):  <srcDatastore>/ZNAS-Backups-Workload/<kind>/<bkup>
-//	   `srcDatastore` here is a ZFS pool name (e.g. "BIGRAID5").
-//	2. Legacy Incus layout:          <pool-source>/<kind>/<bkup>
-//	   `srcDatastore` is an Incus storage-pool name whose source
-//	   attribute resolves to "<zfs-pool>/<incus-dataset>".
+//  1. Workload layout (canonical):  <srcDatastore>/ZNAS-Backups-Workload/<kind>/<bkup>
+//     `srcDatastore` here is a ZFS pool name (e.g. "BIGRAID5").
+//  2. Legacy Incus layout:          <pool-source>/<kind>/<bkup>
+//     `srcDatastore` is an Incus storage-pool name whose source
+//     attribute resolves to "<zfs-pool>/<incus-dataset>".
 //
 // Returns one entry per dataset that should be replicated together to
 // fully restore the backup. `kind` ("virtual-machines"|"containers") and

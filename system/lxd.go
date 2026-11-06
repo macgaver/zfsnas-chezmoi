@@ -1874,11 +1874,11 @@ type LXDNICConfig struct {
 	// IPSource: "" the guest reports it, "host" seen by this host (DHCP lease
 	// or neighbour table) because the guest reports nothing for this card.
 	IPSource string `json:"ip_source,omitempty"`
-	IPv4Mode    string `json:"ipv4_mode,omitempty"`  // "dhcp" | "static" | "none"
-	IPv4Addr    string `json:"ipv4_addr,omitempty"`  // e.g. "10.0.0.10/24"
-	IPv4GW      string `json:"ipv4_gw,omitempty"`    // gateway IP
-	DNS1        string `json:"dns1,omitempty"`       // primary DNS (static only)
-	DNS2        string `json:"dns2,omitempty"`       // secondary DNS (static only)
+	IPv4Mode string `json:"ipv4_mode,omitempty"` // "dhcp" | "static" | "none"
+	IPv4Addr string `json:"ipv4_addr,omitempty"` // e.g. "10.0.0.10/24"
+	IPv4GW   string `json:"ipv4_gw,omitempty"`   // gateway IP
+	DNS1     string `json:"dns1,omitempty"`      // primary DNS (static only)
+	DNS2     string `json:"dns2,omitempty"`      // secondary DNS (static only)
 	// Routes is the live list of extra static IPv4 routes read back from
 	// the container's persistent network config (container NICs only).
 	Routes []LXDStaticRoute `json:"routes,omitempty"`

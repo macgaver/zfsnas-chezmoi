@@ -141,33 +141,33 @@ type SDNHostIDS struct {
 
 // SDNHostInfo is the whole card.
 type SDNHostInfo struct {
-	IP         string           `json:"ip"`
-	Name       string           `json:"name,omitempty"`
-	FQDN       string           `json:"fqdn,omitempty"`
-	Role       string           `json:"role"` // this-server | gateway | instance | vpn | device
-	MAC        string           `json:"mac,omitempty"`
-	MACSource  string           `json:"mac_source,omitempty"`
-	Vendor     string           `json:"vendor,omitempty"`
-	MACPrivate bool             `json:"mac_private,omitempty"`
+	IP         string `json:"ip"`
+	Name       string `json:"name,omitempty"`
+	FQDN       string `json:"fqdn,omitempty"`
+	Role       string `json:"role"` // this-server | gateway | instance | vpn | device
+	MAC        string `json:"mac,omitempty"`
+	MACSource  string `json:"mac_source,omitempty"`
+	Vendor     string `json:"vendor,omitempty"`
+	MACPrivate bool   `json:"mac_private,omitempty"`
 	// MACHypervisor: a VM or container's MAC prefix, and no instance of this
 	// server has it: the card asks the InterLink peers (/api/sdn/hostinfo/owner).
-	MACHypervisor bool `json:"mac_hypervisor,omitempty"`
-	State      string           `json:"state,omitempty"` // REACHABLE, STALE… from the neighbour table
-	Device     string           `json:"device,omitempty"`
-	Via        string           `json:"via,omitempty"` // router it is reached through
-	Network    *SDNHostNet      `json:"network,omitempty"`
-	DHCP       *SDNHostDHCP     `json:"dhcp,omitempty"`
-	Instance   *SDNHostInstance `json:"instance,omitempty"`
-	VPNPeer    string           `json:"vpn_peer,omitempty"`
-	VirtualIP  bool             `json:"virtual_ip,omitempty"`
-	Groups     []string         `json:"groups"`
-	DNSNames   []string         `json:"dns_names"`
-	Forwards   []SDNHostForward `json:"forwards"`
-	Rules      []SDNHostRule    `json:"rules"`
-	Live       SDNHostLive      `json:"live"`
-	Traffic    SDNHostTraffic   `json:"traffic"`
-	DNS        SDNHostDNS       `json:"dns"`
-	IDS        SDNHostIDS       `json:"ids"`
+	MACHypervisor bool             `json:"mac_hypervisor,omitempty"`
+	State         string           `json:"state,omitempty"` // REACHABLE, STALE… from the neighbour table
+	Device        string           `json:"device,omitempty"`
+	Via           string           `json:"via,omitempty"` // router it is reached through
+	Network       *SDNHostNet      `json:"network,omitempty"`
+	DHCP          *SDNHostDHCP     `json:"dhcp,omitempty"`
+	Instance      *SDNHostInstance `json:"instance,omitempty"`
+	VPNPeer       string           `json:"vpn_peer,omitempty"`
+	VirtualIP     bool             `json:"virtual_ip,omitempty"`
+	Groups        []string         `json:"groups"`
+	DNSNames      []string         `json:"dns_names"`
+	Forwards      []SDNHostForward `json:"forwards"`
+	Rules         []SDNHostRule    `json:"rules"`
+	Live          SDNHostLive      `json:"live"`
+	Traffic       SDNHostTraffic   `json:"traffic"`
+	DNS           SDNHostDNS       `json:"dns"`
+	IDS           SDNHostIDS       `json:"ids"`
 }
 
 // Hooks (tests replace them). Neither needs root.

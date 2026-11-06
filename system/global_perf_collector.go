@@ -17,7 +17,7 @@ func GetGlobalPerfDB() *capacityrrd.DB {
 // StartGlobalPerfCollector opens (or creates) the global system performance RRD
 // and starts a goroutine that samples CPU, memory, network, and disk I/O every 5 minutes.
 // Series keys: cpu, mem_app, mem_cache, net_{iface}_rx, net_{iface}_tx,
-// disk_read, disk_write, disk_busy
+// disk_read, disk_write, disk_busy, gwrtt_{gatewayID} (ms)
 func StartGlobalPerfCollector(configDir string) {
 	dbPath := filepath.Join(configDir, "global_perf.rrd.json")
 	db, err := capacityrrd.Open(dbPath)
@@ -66,10 +66,10 @@ func StartGlobalPerfCollector(configDir string) {
 					}
 				}
 				appOnly := app - vmPct - containerPct
-			if appOnly < 0 {
-				appOnly = 0
-			}
-			db.Record("mem_app", appOnly, now)
+				if appOnly < 0 {
+					appOnly = 0
+				}
+				db.Record("mem_app", appOnly, now)
 				db.Record("mem_vm", vmPct, now)
 				db.Record("mem_container", containerPct, now)
 				db.Record("mem_arc", arc, now)
@@ -95,6 +95,10 @@ func StartGlobalPerfCollector(configDir string) {
 			}
 			prevNet = curNet
 			prevNetTime = now
+
+			// Gateway latency (Firewall, monitored gateways only): the true
+			// min/avg/max of the pings answered in the last 5 minutes.
+			recordGatewayRTT(db, now)
 
 			// Disk I/O (aggregate across all pool member disks)
 			poolDevs = poolMemberBaseNames()
@@ -131,4 +135,14 @@ func StartGlobalPerfCollector(configDir string) {
 			}
 		}
 	}()
+}
+
+// recordGatewayRTT stores gwrtt_<gateway ID> from the gateway daemon's
+// 15-minute rings; nothing when no ping was answered (an outage is not 0 ms).
+func recordGatewayRTT(db *capacityrrd.DB, now time.Time) {
+	for id, pts := range SDNGatewayRTT() {
+		if mn, avg, mx, n := RTTWindow(pts, now.Unix()-300, now.Unix()); n > 0 {
+			db.RecordAgg("gwrtt_"+id, mn, avg, mx, n, now)
+		}
+	}
 }

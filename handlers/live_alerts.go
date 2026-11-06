@@ -99,7 +99,7 @@ func deriveLiveAlerts(appCfg *config.AppConfig) []LiveAlert {
 			alerts = append(alerts, LiveAlert{
 				ID: "smb-service", Severity: "danger",
 				Label: "SMB service is down",
-				Page: "shares", System: hostname,
+				Page:  "shares", System: hostname,
 			})
 		}
 	}
@@ -110,7 +110,7 @@ func deriveLiveAlerts(appCfg *config.AppConfig) []LiveAlert {
 			alerts = append(alerts, LiveAlert{
 				ID: "nfs-service", Severity: "danger",
 				Label: "NFS service is down",
-				Page: "nfs", System: hostname,
+				Page:  "nfs", System: hostname,
 			})
 		}
 	}
@@ -122,7 +122,7 @@ func deriveLiveAlerts(appCfg *config.AppConfig) []LiveAlert {
 			alerts = append(alerts, LiveAlert{
 				ID: "iscsi-service", Severity: "danger",
 				Label: "iSCSI service is down",
-				Page: "iscsi", System: hostname,
+				Page:  "iscsi", System: hostname,
 			})
 		}
 	}

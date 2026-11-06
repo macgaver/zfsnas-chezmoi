@@ -455,7 +455,6 @@ func parseIniKV(line string) (k, v string, ok bool) {
 	return
 }
 
-
 // ConfigureNUTDaemon writes the NUT daemon infrastructure files:
 // nut.conf (MODE=<mode>), upsd.conf (LISTEN <listenIP> <listenPort>),
 // and upsd.users (full-access monitor user with the given password).
@@ -668,7 +667,6 @@ NOTIFYFLAG LOWBATT SYSLOG+WALL
 	return nil
 }
 
-
 // OnUPSShutdown is an optional callback invoked immediately BEFORE a
 // threshold-triggered shutdown. main.go wires it to alerts.SendSync — the dep
 // is kept indirect because internal/alerts already imports this package via the
@@ -807,11 +805,11 @@ func StartUPSShutdownWatcher(appCfg *config.AppConfig) {
 		if onBatterySince.IsZero() {
 			onBatterySince = time.Now()
 			audit.Log(audit.Entry{
-				User:   "system",
-				Role:   "system",
-				Action: audit.ActionUPSOnBattery,
-				Result: audit.ResultOK,
-				Target: ups.UPSName,
+				User:    "system",
+				Role:    "system",
+				Action:  audit.ActionUPSOnBattery,
+				Result:  audit.ResultOK,
+				Target:  ups.UPSName,
 				Details: fmt.Sprintf("UPS switched to battery power — AC lost; shutdown policy active: %v", ups.ShutdownPolicy.Enabled),
 			})
 			deviceName := ups.UPSName

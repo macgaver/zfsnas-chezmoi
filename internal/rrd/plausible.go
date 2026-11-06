@@ -35,6 +35,8 @@ func Plausible(key string, v float64) bool {
 		limit = maxDiskMBps
 	case key == "disk_busy", key == "disk_busy_pct", strings.HasPrefix(key, "busy:"): // %
 		return v >= 0 && v <= 100
+	case strings.HasPrefix(key, "gwrtt_"): // gateway ping time, ms
+		return v >= 0 && v <= 10000
 	default:
 		return true
 	}

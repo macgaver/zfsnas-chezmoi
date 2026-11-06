@@ -91,11 +91,11 @@ func TestIconSlugCandidatesAreSafe(t *testing.T) {
 // Favicon discovery: prefer a declared <link rel=icon>, else /favicon.ico.
 func TestParseFaviconHref(t *testing.T) {
 	cases := map[string]string{
-		`<link rel="icon" href="/favicon-96.png">`:                    "/favicon-96.png",
-		`<link rel="shortcut icon" href="static/fav.ico">`:            "static/fav.ico",
-		`<link rel="apple-touch-icon" href="/apple.png">`:             "/apple.png",
+		`<link rel="icon" href="/favicon-96.png">`:                         "/favicon-96.png",
+		`<link rel="shortcut icon" href="static/fav.ico">`:                 "static/fav.ico",
+		`<link rel="apple-touch-icon" href="/apple.png">`:                  "/apple.png",
 		`<link rel="stylesheet" href="/a.css"><link rel=icon href=/b.png>`: "/b.png",
-		`<html><head></head></html>`:                                  "",
+		`<html><head></head></html>`:                                       "",
 	}
 	for in, want := range cases {
 		if got := ParseFaviconHref([]byte(in)); got != want {

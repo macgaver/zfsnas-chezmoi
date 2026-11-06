@@ -8,7 +8,7 @@ import (
 // TestBuildPCIQEMUArgXVGAOn — production-incident regression test. Picking
 // "On" in the x-vga dropdown (frontend stores "1") used to emit
 //
-//   -device vfio-pci,host=0000:00:02.0,x-vga=1
+//	-device vfio-pci,host=0000:00:02.0,x-vga=1
 //
 // and QEMU 10.x rejected with "Parameter 'x-vga' expects 'on' or 'off'",
 // preventing iGPU passthrough from starting. After v6.5.19 the emitter

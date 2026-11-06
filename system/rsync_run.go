@@ -36,12 +36,12 @@ type RsyncJob struct {
 	Direction   string    `json:"direction"` // "pull" | "push"
 	StartedAt   time.Time `json:"started_at"`
 	FinishedAt  time.Time `json:"finished_at,omitempty"`
-	Status      string    `json:"status"` // "running" | "done" | "error" | "canceled" | "paused"
+	Status      string    `json:"status"`              // "running" | "done" | "error" | "canceled" | "paused"
 	PausedBy    string    `json:"paused_by,omitempty"` // "user" | "window" (Status=="paused")
 	Error       string    `json:"error,omitempty"`
-	Progress    float64   `json:"progress"`  // 0-100 (overall, from --info=progress2)
-	Bytes       int64     `json:"bytes"`     // total transferred file size (from --stats)
-	BytesDone   int64     `json:"bytes_done"` // live transferred-so-far (progress2)
+	Progress    float64   `json:"progress"`        // 0-100 (overall, from --info=progress2)
+	Bytes       int64     `json:"bytes"`           // total transferred file size (from --stats)
+	BytesDone   int64     `json:"bytes_done"`      // live transferred-so-far (progress2)
 	Speed       string    `json:"speed,omitempty"` // live rate, e.g. "10.23MB/s"
 	ETA         string    `json:"eta,omitempty"`   // rsync's remaining-time estimate "0:01:23"
 

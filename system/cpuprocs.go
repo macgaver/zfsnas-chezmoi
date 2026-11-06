@@ -26,7 +26,7 @@ const (
 type ProcCPUInfo struct {
 	PID      int     `json:"pid"`
 	Name     string  `json:"name"`
-	Cmd      string  `json:"cmd"`  // full command line from /proc/[pid]/cmdline
+	Cmd      string  `json:"cmd"` // full command line from /proc/[pid]/cmdline
 	CpuPct   float64 `json:"cpu_pct"`
 	Category string  `json:"category"`
 }

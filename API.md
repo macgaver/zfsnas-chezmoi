@@ -178,6 +178,30 @@ Requires a valid session cookie. Admin-only endpoints are marked **[admin]**.
 | `POST` | `/api/system/shutdown` | **[admin]** Shut down the host |
 | `GET` | `/api/audit` | Append-only activity log |
 
+### Firewall (SDN) — gateway latency and event history
+
+Need the Firewall view permission. Session cookie only (internal API).
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/sdn/gateway-rtt` | Latency of the gateway carrying the default route over the last 15 minutes, from the gateway monitor's own checks (no extra pings). `?id=<gateway id>` for another gateway, `?points=0` to leave the points out. 404 when no gateway carries the default route. |
+| `GET` | `/api/sdn/events` | Firewall event history, newest first: PPPoE down (with the reason) / reconnect failed / up (downtime, new IP), gateway monitor down/up/failover, dynamic DNS updates, safe mode, auto-revert. `?category=all\|gateway\|ddns\|system`, `?limit=` (default 200, max 1000). |
+
+`/api/sdn/gateway-rtt` response (`*_ms` are `null` when nothing answered; `points[].ms` is `null` for a check that got no answer; with checks every `probe_every` seconds there are about 900/probe_every points):
+
+```json
+{
+  "gateway_id": "09115dfb", "name": "BELL-PPPoE", "monitored": true, "active": true,
+  "target": "10.11.16.145", "target_is_peer": true,
+  "now_ms": 1.4, "ts": 1793980000,
+  "avg_ms": 1.6, "min_ms": 0.9, "max_ms": 3.2,
+  "loss_pct": 0, "checks": 45, "window_s": 900,
+  "points": [{ "ts": 1793979100, "ms": 1.5 }, { "ts": 1793979120, "ms": null }]
+}
+```
+
+When the gateway is not monitored, `monitored` is `false` and there are no figures: monitoring is turned on per gateway in Firewall → Routing (and applied).
+
 ### Prerequisites & Binary Updates
 
 | Method | Path | Description |

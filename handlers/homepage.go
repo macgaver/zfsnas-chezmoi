@@ -201,18 +201,18 @@ func HandleHomepageSnapshots(w http.ResponseWriter, r *http.Request) {
 			"snapshot_name": s.SnapName,
 			"properties": map[string]interface{}{
 				"creation": map[string]interface{}{
-					"value":   s.Creation.Format("Mon Jan  2 15:04 2006"),
+					"value":    s.Creation.Format("Mon Jan  2 15:04 2006"),
 					"rawvalue": strconv.FormatInt(s.Creation.Unix(), 10),
 				},
 				"used": map[string]interface{}{
-					"value":   s.UsedStr,
+					"value":    s.UsedStr,
 					"rawvalue": strconv.FormatUint(s.Used, 10),
-					"parsed":  s.Used,
+					"parsed":   s.Used,
 				},
 				"refer": map[string]interface{}{
-					"value":   s.ReferStr,
+					"value":    s.ReferStr,
 					"rawvalue": strconv.FormatUint(s.Refer, 10),
-					"parsed":  s.Refer,
+					"parsed":   s.Refer,
 				},
 			},
 		})
@@ -230,23 +230,23 @@ func HandleHomepageSnapshotTasks(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]interface{}, 0, len(policies))
 	for _, p := range policies {
 		out = append(out, map[string]interface{}{
-			"id":          p.ID,
-			"dataset":     p.Dataset,
-			"recursive":   false,
+			"id":             p.ID,
+			"dataset":        p.Dataset,
+			"recursive":      false,
 			"lifetime_value": p.Retention,
 			"lifetime_unit":  "COUNT",
-			"enabled":     p.Enabled,
-			"naming_schema": p.Label + "-%Y%m%d-%H%M",
+			"enabled":        p.Enabled,
+			"naming_schema":  p.Label + "-%Y%m%d-%H%M",
 			"schedule": map[string]interface{}{
-				"minute":  strconv.Itoa(p.Minute),
-				"hour":    strconv.Itoa(p.Hour),
-				"dom":     strconv.Itoa(p.DayOfMonth),
-				"month":   "*",
-				"dow":     strconv.Itoa(p.Weekday),
+				"minute": strconv.Itoa(p.Minute),
+				"hour":   strconv.Itoa(p.Hour),
+				"dom":    strconv.Itoa(p.DayOfMonth),
+				"month":  "*",
+				"dow":    strconv.Itoa(p.Weekday),
 			},
 			"state": map[string]interface{}{
-				"state":     p.LastStatus,
-				"last_run":  p.LastRun,
+				"state":    p.LastStatus,
+				"last_run": p.LastRun,
 			},
 		})
 	}
@@ -295,13 +295,13 @@ func HandleHomepageSMBShares(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]interface{}, 0, len(shares))
 	for i, s := range shares {
 		out = append(out, map[string]interface{}{
-			"id":       i + 1,
-			"name":     s.Name,
-			"path":     s.Path,
-			"comment":  s.Comment,
-			"ro":       s.ReadOnly,
-			"browsable": s.Browseable,
-			"guestok":  s.GuestOK,
+			"id":          i + 1,
+			"name":        s.Name,
+			"path":        s.Path,
+			"comment":     s.Comment,
+			"ro":          s.ReadOnly,
+			"browsable":   s.Browseable,
+			"guestok":     s.GuestOK,
 			"timemachine": s.TimeMachine,
 		})
 	}
@@ -318,11 +318,11 @@ func HandleHomepageNFSShares(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]interface{}, 0, len(shares))
 	for _, s := range shares {
 		out = append(out, map[string]interface{}{
-			"id":      s.ID,
-			"paths":   []string{s.Path},
-			"comment": s.Comment,
-			"ro":      s.ReadOnly,
-			"hosts":   []string{s.Client},
+			"id":             s.ID,
+			"paths":          []string{s.Path},
+			"comment":        s.Comment,
+			"ro":             s.ReadOnly,
+			"hosts":          []string{s.Client},
 			"maproot_squash": !s.NoRootSquash,
 		})
 	}
@@ -337,7 +337,7 @@ func HandleHomepageServices(w http.ResponseWriter, r *http.Request) {
 	nfsState := serviceState(system.NFSStatus())
 	jsonOK(w, []map[string]interface{}{
 		{"id": 1, "service": "cifs", "state": smbState, "enable": smbState == "RUNNING"},
-		{"id": 2, "service": "nfs",  "state": nfsState, "enable": nfsState == "RUNNING"},
+		{"id": 2, "service": "nfs", "state": nfsState, "enable": nfsState == "RUNNING"},
 	})
 }
 

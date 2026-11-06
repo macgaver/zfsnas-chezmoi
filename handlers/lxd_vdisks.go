@@ -21,10 +21,10 @@ import (
 )
 
 type vdiskRow struct {
-	Name      string `json:"name"`      // full zfs path
-	Leaf      string `json:"leaf"`      // display name (last path segment)
-	SizeBytes uint64 `json:"size"`      // configured volsize
-	UsedBytes uint64 `json:"used"`      // consumed on pool
+	Name      string `json:"name"` // full zfs path
+	Leaf      string `json:"leaf"` // display name (last path segment)
+	SizeBytes uint64 `json:"size"` // configured volsize
+	UsedBytes uint64 `json:"used"` // consumed on pool
 	CompRatio string `json:"comp_ratio"`
 	Creation  int64  `json:"creation"`  // unix seconds
 	LastSnap  int64  `json:"last_snap"` // newest snapshot creation; 0 = none

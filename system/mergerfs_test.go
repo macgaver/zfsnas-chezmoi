@@ -53,10 +53,10 @@ func TestMergerfsPathAllowed(t *testing.T) {
 
 func TestResolveBranchDataset(t *testing.T) {
 	ds := map[string]string{
-		"tank":         "/tank",
-		"tank/media":   "/tank/media",
+		"tank":          "/tank",
+		"tank/media":    "/tank/media",
 		"tank/media/tv": "/tank/media/tv",
-		"bigraid/data": "/bigraid/data",
+		"bigraid/data":  "/bigraid/data",
 	}
 	// Deepest prefix wins.
 	if got := resolveBranchDataset("/tank/media/tv/show", ds); got != "tank/media/tv" {
@@ -103,7 +103,7 @@ func TestMergerfsOptsString(t *testing.T) {
 func TestMergerfsUnitContent(t *testing.T) {
 	p := config.MergerFSPool{
 		Name: "media", Mountpoint: "/mnt/media",
-		Branches: []config.MergerFSBranch{{Path: "/tank/media"}, {Path: "/bigraid/media"}},
+		Branches:     []config.MergerFSBranch{{Path: "/tank/media"}, {Path: "/bigraid/media"}},
 		CreatePolicy: "mfs", AllowOther: true,
 	}
 	u := mergerfsUnitContent(p)

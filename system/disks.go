@@ -56,11 +56,11 @@ type lsblkOutput struct {
 }
 
 type lsblkDev struct {
-	Name        string     `json:"name"`
-	Size        uint64     `json:"size"`
-	Rota        any        `json:"rota"`
-	Tran        string     `json:"tran"`
-	Type        string     `json:"type"`
+	Name string `json:"name"`
+	Size uint64 `json:"size"`
+	Rota any    `json:"rota"`
+	Tran string `json:"tran"`
+	Type string `json:"type"`
 	// Support both old lsblk (mountpoint, string) and new lsblk ≥2.37 (mountpoints, array).
 	Mountpoint  string     `json:"mountpoint"`
 	Mountpoints []string   `json:"mountpoints"`
@@ -150,13 +150,13 @@ func ListDisks(configDir string) ([]DiskInfo, error) {
 
 		if c, ok := cached[dev.Name]; ok {
 			info.WearoutPct = c.WearoutPct
-			info.TempC      = c.TempC
-			info.SmartOK    = c.SmartOK
-			info.SmartMsg   = c.SmartMsg
+			info.TempC = c.TempC
+			info.SmartOK = c.SmartOK
+			info.SmartMsg = c.SmartMsg
 			info.SmartAttrs = c.SmartAttrs
-			info.Serial     = c.Serial
-			info.UpdatedAt  = c.UpdatedAt
-			info.RPM        = c.RPM
+			info.Serial = c.Serial
+			info.UpdatedAt = c.UpdatedAt
+			info.RPM = c.RPM
 		}
 		// PowerState first — hdparm -C is read-only and never wakes the disk.
 		// We need it BEFORE deciding whether to call smartctl for RPM, so a
@@ -399,15 +399,15 @@ func querySMARTNVMe(info *DiskInfo) {
 		worn = nlog.PercentUsed
 	}
 	info.SmartAttrs = []SmartAttr{
-		{ID: 0, Name: "Critical_Warning",   Value: nlog.CriticalWarning, Raw: fmt.Sprintf("0x%02x", nlog.CriticalWarning)},
-		{ID: 1, Name: "Avail_Spare",        Value: nlog.AvailSpare,        Raw: strconv.Itoa(nlog.AvailSpare) + "%"},
-		{ID: 2, Name: "Avail_Spare_Thresh", Value: nlog.AvailSpareThresh,  Raw: strconv.Itoa(nlog.AvailSpareThresh) + "%"},
-		{ID: 3, Name: "Percentage_Used",    Value: worn,                   Raw: strconv.Itoa(worn) + "%"},
-		{ID: 4, Name: "Power_Cycles",       Value: nlog.PowerCycles,       Raw: strconv.Itoa(nlog.PowerCycles)},
-		{ID: 5, Name: "Power_On_Hours",     Value: nlog.PowerOnHours,      Raw: strconv.Itoa(nlog.PowerOnHours) + " h"},
-		{ID: 6, Name: "Unsafe_Shutdowns",   Value: nlog.UnsafeShutdowns,   Raw: strconv.Itoa(nlog.UnsafeShutdowns)},
-		{ID: 7, Name: "Media_Errors",       Value: nlog.MediaErrors,       Raw: strconv.Itoa(nlog.MediaErrors)},
-		{ID: 8, Name: "Num_Err_Log_Entries",Value: nlog.NumErrLogEntries,  Raw: strconv.Itoa(nlog.NumErrLogEntries)},
+		{ID: 0, Name: "Critical_Warning", Value: nlog.CriticalWarning, Raw: fmt.Sprintf("0x%02x", nlog.CriticalWarning)},
+		{ID: 1, Name: "Avail_Spare", Value: nlog.AvailSpare, Raw: strconv.Itoa(nlog.AvailSpare) + "%"},
+		{ID: 2, Name: "Avail_Spare_Thresh", Value: nlog.AvailSpareThresh, Raw: strconv.Itoa(nlog.AvailSpareThresh) + "%"},
+		{ID: 3, Name: "Percentage_Used", Value: worn, Raw: strconv.Itoa(worn) + "%"},
+		{ID: 4, Name: "Power_Cycles", Value: nlog.PowerCycles, Raw: strconv.Itoa(nlog.PowerCycles)},
+		{ID: 5, Name: "Power_On_Hours", Value: nlog.PowerOnHours, Raw: strconv.Itoa(nlog.PowerOnHours) + " h"},
+		{ID: 6, Name: "Unsafe_Shutdowns", Value: nlog.UnsafeShutdowns, Raw: strconv.Itoa(nlog.UnsafeShutdowns)},
+		{ID: 7, Name: "Media_Errors", Value: nlog.MediaErrors, Raw: strconv.Itoa(nlog.MediaErrors)},
+		{ID: 8, Name: "Num_Err_Log_Entries", Value: nlog.NumErrLogEntries, Raw: strconv.Itoa(nlog.NumErrLogEntries)},
 	}
 
 	if worn < 0 {
@@ -477,17 +477,17 @@ type smartctlOutput struct {
 }
 
 type nvmeSmartLog struct {
-	CriticalWarning    int `json:"critical_warning"`
-	PercentageUsed     int `json:"percentage_used"` // nvme-cli 1.x field name
-	PercentUsed        int `json:"percent_used"`    // nvme-cli 2.x field name
-	Temperature        int `json:"temperature"`     // Kelvin (nvme smart-log)
-	AvailSpare         int `json:"avail_spare"`
-	AvailSpareThresh   int `json:"spare_thresh"`
-	PowerCycles        int `json:"power_cycles"`
-	PowerOnHours       int `json:"power_on_hours"`
-	UnsafeShutdowns    int `json:"unsafe_shutdowns"`
-	MediaErrors        int `json:"media_errors"`
-	NumErrLogEntries   int `json:"num_err_log_entries"`
+	CriticalWarning  int `json:"critical_warning"`
+	PercentageUsed   int `json:"percentage_used"` // nvme-cli 1.x field name
+	PercentUsed      int `json:"percent_used"`    // nvme-cli 2.x field name
+	Temperature      int `json:"temperature"`     // Kelvin (nvme smart-log)
+	AvailSpare       int `json:"avail_spare"`
+	AvailSpareThresh int `json:"spare_thresh"`
+	PowerCycles      int `json:"power_cycles"`
+	PowerOnHours     int `json:"power_on_hours"`
+	UnsafeShutdowns  int `json:"unsafe_shutdowns"`
+	MediaErrors      int `json:"media_errors"`
+	NumErrLogEntries int `json:"num_err_log_entries"`
 }
 
 // ---- Cache helpers ----
@@ -569,8 +569,8 @@ func zfsPoolDiskNames() map[string]bool {
 }
 
 var (
-	reNVMePart  = regexp.MustCompile(`^(nvme\d+n\d+)p\d+$`)
-	reSATAPart  = regexp.MustCompile(`^([a-z]+)\d+$`)
+	reNVMePart = regexp.MustCompile(`^(nvme\d+n\d+)p\d+$`)
+	reSATAPart = regexp.MustCompile(`^([a-z]+)\d+$`)
 )
 
 // diskPowerState returns the current ATA power mode for dev via
@@ -745,7 +745,7 @@ func WipeDisk(device string) error {
 
 	// Step 5: tell the kernel the partition table changed and wait for udev
 	// to remove stale by-partuuid symlinks before returning.
-	exec.Command("sudo", "partprobe", device).Run()              //nolint
+	exec.Command("sudo", "partprobe", device).Run()                //nolint
 	exec.Command("sudo", "udevadm", "settle", "--timeout=5").Run() //nolint
 
 	return nil

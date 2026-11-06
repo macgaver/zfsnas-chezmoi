@@ -699,6 +699,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 	r.Handle("/api/sdn/hostinfo", fwView(HandleSDNHostInfo(appCfg))).Methods("GET")
 	r.Handle("/api/sdn/hostinfo/owner", fwView(HandleSDNHostOwner(appCfg))).Methods("GET")
 	r.Handle("/api/sdn/topology", fwView(HandleSDNTopology(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/events", fwView(HandleSDNEvents(appCfg))).Methods("GET")
+	r.Handle("/api/sdn/gateway-rtt", fwView(HandleSDNGatewayRTT(appCfg))).Methods("GET")
 	r.Handle("/api/sdn/unnamed-hosts", fwView(HandleSDNUnnamedHosts(appCfg))).Methods("GET")
 	// VM/CT editor: where an instance's port forwards can be published.
 	r.Handle("/api/sdn/forward-interfaces",

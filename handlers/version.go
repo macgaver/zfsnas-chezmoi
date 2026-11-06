@@ -45,12 +45,12 @@ func HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 		"mergerfs_installed":  system.MergerFSInstalled(),
 		"mergerfs_enabled":    mergerfsEnabled,
 		// v6.8.1 — gates the Services category (Compute section) and the in-panel embed.
-		"services_enabled":       servicesEnabled,
-		"service_proxy_enabled":  serviceProxyEnabled,
+		"services_enabled":      servicesEnabled,
+		"service_proxy_enabled": serviceProxyEnabled,
 		// v6.5.19: changed across polls means the server restarted or was
 		// upgraded — frontend shows a "Server Restarted" popup with a
 		// Refresh button.
-		"startup_time_unix":   version.StartedAt.Unix(),
+		"startup_time_unix": version.StartedAt.Unix(),
 		// v6.8.28: appliance-mode fields for the SPA boot globals.
 		"appliance":         system.ApplianceMode(),
 		"appliance_release": applianceReleaseString(),

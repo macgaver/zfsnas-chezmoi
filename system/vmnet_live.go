@@ -1,7 +1,7 @@
 package system
 
 // Live traffic stack for the Network Focus (full) header: one block per 5 s,
-// 20 minutes wide (the first 5 blocks come every 2 s so the graph fills in
+// 15 minutes wide (the first 5 blocks come every 2 s so the graph fills in
 // quickly). Two sources:
 //
 //   - devices (the Firewall is on): the 10 inside devices using the gateway
@@ -33,7 +33,7 @@ const (
 	VMNetLiveStep      = 5 * time.Second
 	VMNetLiveFastStep  = 2 * time.Second // the first blocks
 	VMNetLiveFastCount = 5
-	VMNetLivePoints    = 240 // 20 minutes of 5 s blocks
+	VMNetLivePoints    = 180 // 15 minutes of 5 s blocks
 	VMNetLiveTop       = 10
 	vmNetLiveIdle      = time.Minute      // stop sampling this long after the last viewer
 	vmNetLiveRefresh   = 60 * time.Second // re-read interfaces / names

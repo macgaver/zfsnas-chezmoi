@@ -45,6 +45,8 @@ func runSDNOneShot(configDir string, boot bool, revertTarget string, revertDelay
 		}
 		if r := system.SDNSafeModeReason(); r != "" {
 			log.Printf("[sdn] SAFE MODE: %s", r)
+			_ = system.SDNRecordEvent(abs, system.SDNEvent{At: time.Now(), Kind: "safe_mode", Severity: "error",
+				Text: "Firewall started in safe mode (management access only, no routing): " + r})
 		}
 		return 0
 	}
@@ -73,6 +75,12 @@ func runSDNOneShot(configDir string, boot bool, revertTarget string, revertDelay
 		res, details = audit.ResultError, details+": "+err.Error()
 		log.Printf("[sdn] revert: %v", err)
 	}
+	sev := "warn"
+	if err != nil {
+		sev = "error"
+	}
+	_ = system.SDNRecordEvent(abs, system.SDNEvent{At: time.Now(), Kind: "auto_revert", Severity: sev,
+		Text: "Firewall change rolled back automatically: " + details})
 	audit.Log(audit.Entry{User: "system", Role: "system", Action: audit.ActionSDNAutoRevert, Target: "firewall", Result: res, Details: details})
 	// This process exits right after: wait for delivery (bounded).
 	if _, _, aerr := alerts.SendSync(alerts.EventFirewall, "Firewall change auto-reverted", "Firewall Auto-Revert",

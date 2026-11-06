@@ -150,7 +150,9 @@ func SendAcceptLink(url, tlsFP string, req AcceptLinkRequest) (*AcceptLinkRespon
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		var e struct{ Error string `json:"error"` }
+		var e struct {
+			Error string `json:"error"`
+		}
 		json.NewDecoder(resp.Body).Decode(&e) //nolint:errcheck
 		if e.Error != "" {
 			return nil, fmt.Errorf("remote rejected credentials: %s", e.Error)

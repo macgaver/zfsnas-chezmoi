@@ -82,11 +82,23 @@ var sdnPing = func(dev, target string, mark uint32, count int) (bool, time.Durat
 	if err != nil {
 		return false, 0
 	}
-	if m := pingRTTRe.FindSubmatch(out); m != nil {
-		ms, _ := strconv.ParseFloat(string(m[1]), 64)
-		return true, time.Duration(ms * float64(time.Millisecond))
+	return true, pingMeanRTT(out)
+}
+
+// pingMeanRTT is the mean time of the replies one check got: a check of 3
+// pings is one latency point, not 3 (and not just its first reply).
+func pingMeanRTT(out []byte) time.Duration {
+	sum, n := 0.0, 0
+	for _, m := range pingRTTRe.FindAllSubmatch(out, -1) {
+		if ms, err := strconv.ParseFloat(string(m[1]), 64); err == nil {
+			sum += ms
+			n++
+		}
 	}
-	return true, 0
+	if n == 0 {
+		return 0
+	}
+	return time.Duration(sum / float64(n) * float64(time.Millisecond))
 }
 
 // sdnPPPHangup makes pppd drop the session of ifname and dial again: SIGHUP,
@@ -152,6 +164,76 @@ type gwMonitor struct {
 	lastPlan   string
 	active     string
 	events     []GWEvent
+	rtt        GWRTTFile            // last 15 min of pings per monitored gateway
+	configDir  string               // "" = do not write the history (tests)
+	downSince  map[string]time.Time // gateway ID → when the monitor declared it down
+}
+
+// recordRTT adds this cycle's probes to the 15-minute rings and publishes
+// them; rings of gateways no longer monitored are dropped.
+func (m *gwMonitor) recordRTT(c *sdn.Config, probed []bool, res func(i int) (bool, time.Duration), now time.Time) {
+	if m.rtt == nil {
+		m.rtt = GWRTTFile{}
+	}
+	keep := map[string]bool{}
+	changed := false
+	for i, g := range c.Gateways {
+		if !g.Monitor {
+			continue
+		}
+		keep[g.ID] = true
+		if !probed[i] {
+			continue
+		}
+		changed = true
+		p := RTTPoint{TS: now.Unix()}
+		if ok, d := res(i); ok {
+			v := float64(d.Microseconds()) / 1000
+			p.MS = &v
+		}
+		m.rtt[g.ID] = pushRTT(m.rtt[g.ID], p)
+	}
+	for id := range m.rtt {
+		if !keep[id] {
+			delete(m.rtt, id)
+			changed = true
+		}
+	}
+	if changed {
+		writeGWRTT(m.rtt)
+	}
+}
+
+// addEvent publishes a monitor event and writes it to the history.
+func (m *gwMonitor) addEvent(e GWEvent) {
+	m.events = append(m.events, e)
+	if m.configDir == "" {
+		return
+	}
+	if m.downSince == nil {
+		m.downSince = map[string]time.Time{}
+	}
+	h := SDNEvent{At: e.At, Kind: "gw_" + e.Kind, GatewayID: e.ID, Name: e.Name}
+	switch e.Kind {
+	case "down":
+		m.downSince[e.ID] = e.At
+		h.Severity, h.Text = "warn", "Gateway down: it stopped answering its ping tests"
+	case "up":
+		h.Severity, h.Text = "info", "Gateway back up: its ping tests pass again"
+		if t, ok := m.downSince[e.ID]; ok && e.At.After(t) {
+			d := e.At.Sub(t)
+			h.DownFor = int64(d.Round(time.Second) / time.Second)
+			h.Text += ", down for " + fmtDowntime(d)
+			delete(m.downSince, e.ID)
+		}
+	case "failover":
+		h.Severity, h.Text = "warn", "Internet traffic now goes through this gateway"
+	case "reconnect":
+		h.Severity, h.Text = "warn", "PPPoE link hung up to redial: its ping tests failed"
+	}
+	if err := SDNRecordEvent(m.configDir, h); err != nil {
+		log.Printf("[sdn-events] %v", err)
+	}
 }
 
 func newGWMonitor(prev GWStateFile) *gwMonitor {
@@ -217,6 +299,8 @@ func (m *gwMonitor) cycle(c *sdn.Config, now time.Time) GWStateFile {
 	}
 	wg.Wait()
 
+	m.recordRTT(c, probed, func(i int) (bool, time.Duration) { return results[i].ok, results[i].rtt }, now)
+
 	up := map[string]bool{}
 	var wentDown []int
 	for i, g := range c.Gateways {
@@ -229,7 +313,7 @@ func (m *gwMonitor) cycle(c *sdn.Config, now time.Time) GWStateFile {
 		if g.Monitor && probed[i] {
 			if tr.Add(sdn.GWSample{OK: results[i].ok, RTT: results[i].rtt, At: now}) {
 				kind := map[bool]string{true: "up", false: "down"}[tr.Up]
-				m.events = append(m.events, GWEvent{At: now, Kind: kind, ID: g.ID, Name: g.Name})
+				m.addEvent(GWEvent{At: now, Kind: kind, ID: g.ID, Name: g.Name})
 				if !tr.Up {
 					wentDown = append(wentDown, i)
 				}
@@ -275,7 +359,7 @@ func (m *gwMonitor) cycle(c *sdn.Config, now time.Time) GWStateFile {
 		if g := c.GatewayByID(plan.Active); g != nil {
 			name = g.Name
 		}
-		m.events = append(m.events, GWEvent{At: now, Kind: "failover", ID: plan.Active, Name: name, Active: plan.Active})
+		m.addEvent(GWEvent{At: now, Kind: "failover", ID: plan.Active, Name: name, Active: plan.Active})
 	}
 	if plan.Active != "" {
 		m.active = plan.Active
@@ -346,7 +430,7 @@ func (m *gwMonitor) maybeReconnect(c *sdn.Config, g sdn.Gateway, tr *sdn.GWTrack
 		return
 	}
 	log.Printf("[sdn] %s failed its ping tests: PPPoE link hung up, redialling", g.Name)
-	m.events = append(m.events, GWEvent{At: now, Kind: "reconnect", ID: g.ID, Name: g.Name})
+	m.addEvent(GWEvent{At: now, Kind: "reconnect", ID: g.ID, Name: g.Name})
 }
 
 // sortedFields makes a list built from a map comparable.
@@ -390,7 +474,10 @@ func writeGWState(st GWStateFile) {
 // SDNGatewayMonitor is the daemon loop (never returns).
 func SDNGatewayMonitor(st sdn.Store) {
 	go sdnHealLoop(st)
+	go sdnPPPWatchLoop(st)
 	m := newGWMonitor(SDNGatewayState())
+	m.configDir = st.Dir
+	m.rtt = SDNGatewayRTT() // a restart (upgrade) keeps the last 15 minutes
 	var cfg *sdn.Config
 	var cfgTime time.Time
 	rulesFor := ""

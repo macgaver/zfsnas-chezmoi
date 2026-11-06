@@ -228,9 +228,9 @@ func StartLXDStateWatcher() {
 }
 
 var (
-	lxdStateOnce sync.Once
-	lxdStateMu   sync.Mutex
-	lxdStateMap  = map[string]string{}
+	lxdStateOnce   sync.Once
+	lxdStateMu     sync.Mutex
+	lxdStateMap    = map[string]string{}
 	lxdStatePrimed bool
 )
 

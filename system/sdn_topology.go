@@ -187,7 +187,7 @@ type sdnTopoInstance struct {
 }
 type sdnTopoNIC struct {
 	Name, MAC, Bridge string
-	IPs         []string
+	IPs               []string
 }
 
 // sdnTopoNeigh is one line of the kernel's neighbour table.

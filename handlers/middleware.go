@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/subtle"
 	"net/http"
-	"sync/atomic"
 	"strings"
+	"sync/atomic"
 	"time"
 	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
@@ -123,30 +123,54 @@ func RequirePermission(perm string) func(http.Handler) http.Handler {
 
 func permEnabled(p *config.StandardPermissions, perm string) bool {
 	switch perm {
-	case "terminal":            return p.Terminal
-	case "review_sudoers":      return p.ReviewSudoers
-	case "browse_files":        return p.BrowseFiles
-	case "manage_pool_dataset": return p.ManagePoolDataset
-	case "manage_smb":          return p.ManageSMB
-	case "manage_nfs":          return p.ManageNFS
-	case "manage_iscsi":        return p.ManageISCSI
-	case "manage_protection":   return p.ManageProtection
-	case "manage_snapshots":    return p.ManageSnapshots
-	case "edit_settings":       return p.EditSettings
-	case "manage_interlink":    return p.ManageInterlink
-	case "manage_docker_detect": return p.ManageDockerDetect
-	case "manage_networking":   return p.ManageNetworking
-	case "view_virtualization":     return p.ViewVirtualization
-	case "create_vm":               return p.CreateVM
-	case "create_container":        return p.CreateContainer
-	case "edit_instances":          return p.EditInstances
-	case "control_instances":       return p.ControlInstances
-	case "delete_instances":        return p.DeleteInstances
-	case "manage_instance_backups": return p.ManageInstanceBackups
-	case "view_networking":         return p.ViewNetworking
-	case "view_firewall":           return p.ViewFirewall
-	case "view_services":           return p.ViewServices
-	case "manage_services":         return p.ManageServices
+	case "terminal":
+		return p.Terminal
+	case "review_sudoers":
+		return p.ReviewSudoers
+	case "browse_files":
+		return p.BrowseFiles
+	case "manage_pool_dataset":
+		return p.ManagePoolDataset
+	case "manage_smb":
+		return p.ManageSMB
+	case "manage_nfs":
+		return p.ManageNFS
+	case "manage_iscsi":
+		return p.ManageISCSI
+	case "manage_protection":
+		return p.ManageProtection
+	case "manage_snapshots":
+		return p.ManageSnapshots
+	case "edit_settings":
+		return p.EditSettings
+	case "manage_interlink":
+		return p.ManageInterlink
+	case "manage_docker_detect":
+		return p.ManageDockerDetect
+	case "manage_networking":
+		return p.ManageNetworking
+	case "view_virtualization":
+		return p.ViewVirtualization
+	case "create_vm":
+		return p.CreateVM
+	case "create_container":
+		return p.CreateContainer
+	case "edit_instances":
+		return p.EditInstances
+	case "control_instances":
+		return p.ControlInstances
+	case "delete_instances":
+		return p.DeleteInstances
+	case "manage_instance_backups":
+		return p.ManageInstanceBackups
+	case "view_networking":
+		return p.ViewNetworking
+	case "view_firewall":
+		return p.ViewFirewall
+	case "view_services":
+		return p.ViewServices
+	case "manage_services":
+		return p.ManageServices
 	}
 	return false
 }
@@ -390,9 +414,6 @@ func containsHTML(s string) bool {
 	return false
 }
 
-
-
-
 // portalPort records the port the main portal listens on, so proxy responses
 // can name it as an allowed framing ancestor.
 var portalPort atomic.Int32
@@ -412,5 +433,3 @@ func serviceFrameAncestors(r *http.Request) string {
 	// 'self' is sufficient everywhere.
 	return "frame-ancestors 'self'; "
 }
-
-

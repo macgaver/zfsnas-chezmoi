@@ -21,7 +21,9 @@ func twoGateways() *sdn.Config {
 
 func fakePing(t *testing.T, down map[string]bool) {
 	old := sdnPing
-	sdnPing = func(dev, target string, mark uint32, count int) (bool, time.Duration) { return !down[dev], 3 * time.Millisecond }
+	sdnPing = func(dev, target string, mark uint32, count int) (bool, time.Duration) {
+		return !down[dev], 3 * time.Millisecond
+	}
 	t.Cleanup(func() { sdnPing = old })
 }
 

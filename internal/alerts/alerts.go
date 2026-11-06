@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,35 +26,35 @@ import (
 type EventKey string
 
 const (
-	EventPoolDegraded    EventKey = "pool_degraded"
+	EventPoolDegraded EventKey = "pool_degraded"
 	// EventPoolDataErrors covers a pool that is ONLINE with every counter at
 	// zero yet has permanently lost file data. pool_degraded never fires for it.
-	EventPoolDataErrors  EventKey = "pool_data_errors"
-	EventSmartError      EventKey = "smart_error"
-	EventWearoutExceeded EventKey = "wearout_exceeded"
-	EventFailedLogin     EventKey = "failed_login_alert"
-	EventSecurityUpdates EventKey = "security_updates"
-	EventScrubErrors     EventKey = "scrub_errors"
-	EventSnapshotFailure    EventKey = "snapshot_failure"
-	EventReplicationFailure EventKey = "replication_failure"
-	EventUserCreated        EventKey = "user_created_deleted"
-	EventShareCreated    EventKey = "share_created_deleted"
-	EventPoolActions     EventKey = "pool_actions"
-	EventVMStartFailure     EventKey = "vm_start_failure"
-	EventVMUnexpectedStop   EventKey = "vm_unexpected_stop"
-	EventVMCreatedDeleted   EventKey = "vm_created_deleted"
-	EventVMSnapshotFailure  EventKey = "vm_snapshot_failure"
-	EventVMBackupFailure    EventKey = "vm_backup_failure"
-	EventVMDiskFull         EventKey = "vm_disk_full"
-	EventVMHostSaturation   EventKey = "vm_host_saturation"
+	EventPoolDataErrors       EventKey = "pool_data_errors"
+	EventSmartError           EventKey = "smart_error"
+	EventWearoutExceeded      EventKey = "wearout_exceeded"
+	EventFailedLogin          EventKey = "failed_login_alert"
+	EventSecurityUpdates      EventKey = "security_updates"
+	EventScrubErrors          EventKey = "scrub_errors"
+	EventSnapshotFailure      EventKey = "snapshot_failure"
+	EventReplicationFailure   EventKey = "replication_failure"
+	EventUserCreated          EventKey = "user_created_deleted"
+	EventShareCreated         EventKey = "share_created_deleted"
+	EventPoolActions          EventKey = "pool_actions"
+	EventVMStartFailure       EventKey = "vm_start_failure"
+	EventVMUnexpectedStop     EventKey = "vm_unexpected_stop"
+	EventVMCreatedDeleted     EventKey = "vm_created_deleted"
+	EventVMSnapshotFailure    EventKey = "vm_snapshot_failure"
+	EventVMBackupFailure      EventKey = "vm_backup_failure"
+	EventVMDiskFull           EventKey = "vm_disk_full"
+	EventVMHostSaturation     EventKey = "vm_host_saturation"
 	EventComposeUpdateFailure EventKey = "compose_update_failure"
 	EventInterlinkUnreachable EventKey = "interlink_unreachable"
 	EventUPSPowerChanged      EventKey = "ups_power_changed"
 	// Firewall (SDN): gateway down/up/failover, auto-revert, safe mode.
 	EventFirewall EventKey = "firewall_events"
 	// Firewall intrusion detection: Suricata alerts at or above the chosen severity.
-	EventIDS EventKey = "ids_alerts"
-	EventTest            EventKey = "test" // always passes filter
+	EventIDS  EventKey = "ids_alerts"
+	EventTest EventKey = "test" // always passes filter
 )
 
 // matchesEvent reports whether the event key is enabled in the given EventConfig.
@@ -62,30 +63,54 @@ func matchesEvent(key EventKey, ev EventConfig) bool {
 		return true
 	}
 	switch key {
-	case EventPoolDegraded:    return ev.PoolDegraded
-	case EventPoolDataErrors:  return ev.PoolDataErrors
-	case EventSmartError:      return ev.SmartError
-	case EventWearoutExceeded: return ev.WearoutExceeded
-	case EventFailedLogin:     return ev.FailedLoginAlert
-	case EventSecurityUpdates: return ev.SecurityUpdates
-	case EventScrubErrors:     return ev.ScrubErrors
-	case EventSnapshotFailure:    return ev.SnapshotFailure
-	case EventReplicationFailure: return ev.ReplicationFailure
-	case EventUserCreated:        return ev.UserCreatedDeleted
-	case EventShareCreated:    return ev.ShareCreatedDeleted
-	case EventPoolActions:     return ev.PoolActions
-	case EventVMStartFailure:    return ev.VMStartFailure
-	case EventVMUnexpectedStop:  return ev.VMUnexpectedStop
-	case EventVMCreatedDeleted:  return ev.VMCreatedDeleted
-	case EventVMSnapshotFailure: return ev.VMSnapshotFailure
-	case EventVMBackupFailure:   return ev.VMBackupFailure
-	case EventVMDiskFull:        return ev.VMDiskFull
-	case EventVMHostSaturation:  return ev.VMHostSaturation
-	case EventComposeUpdateFailure: return ev.ComposeUpdateFailure
-	case EventInterlinkUnreachable: return ev.InterlinkUnreachable
-	case EventFirewall:             return ev.FirewallEvents
-	case EventIDS:                  return ev.IDSAlerts
-	case EventUPSPowerChanged:      return ev.UPSPowerChanged
+	case EventPoolDegraded:
+		return ev.PoolDegraded
+	case EventPoolDataErrors:
+		return ev.PoolDataErrors
+	case EventSmartError:
+		return ev.SmartError
+	case EventWearoutExceeded:
+		return ev.WearoutExceeded
+	case EventFailedLogin:
+		return ev.FailedLoginAlert
+	case EventSecurityUpdates:
+		return ev.SecurityUpdates
+	case EventScrubErrors:
+		return ev.ScrubErrors
+	case EventSnapshotFailure:
+		return ev.SnapshotFailure
+	case EventReplicationFailure:
+		return ev.ReplicationFailure
+	case EventUserCreated:
+		return ev.UserCreatedDeleted
+	case EventShareCreated:
+		return ev.ShareCreatedDeleted
+	case EventPoolActions:
+		return ev.PoolActions
+	case EventVMStartFailure:
+		return ev.VMStartFailure
+	case EventVMUnexpectedStop:
+		return ev.VMUnexpectedStop
+	case EventVMCreatedDeleted:
+		return ev.VMCreatedDeleted
+	case EventVMSnapshotFailure:
+		return ev.VMSnapshotFailure
+	case EventVMBackupFailure:
+		return ev.VMBackupFailure
+	case EventVMDiskFull:
+		return ev.VMDiskFull
+	case EventVMHostSaturation:
+		return ev.VMHostSaturation
+	case EventComposeUpdateFailure:
+		return ev.ComposeUpdateFailure
+	case EventInterlinkUnreachable:
+		return ev.InterlinkUnreachable
+	case EventFirewall:
+		return ev.FirewallEvents
+	case EventIDS:
+		return ev.IDSAlerts
+	case EventUPSPowerChanged:
+		return ev.UPSPowerChanged
 	}
 	return false
 }
@@ -137,15 +162,15 @@ type EventConfig struct {
 	// Virtualization events — only meaningful when the optional LXD/Incus
 	// feature is installed. Hidden in the UI on servers without it but kept
 	// in the persisted JSON so subscriptions survive an LXD reinstall.
-	VMStartFailure          bool `json:"vm_start_failure"`
-	VMUnexpectedStop        bool `json:"vm_unexpected_stop"`
-	VMCreatedDeleted        bool `json:"vm_created_deleted"`
-	VMSnapshotFailure       bool `json:"vm_snapshot_failure"`
-	VMBackupFailure         bool `json:"vm_backup_failure"`
-	VMDiskFull              bool `json:"vm_disk_full"`
-	VMDiskFullThresholdPct  int  `json:"vm_disk_full_threshold_pct"`
-	VMHostSaturation        bool `json:"vm_host_saturation"`
-	ComposeUpdateFailure    bool `json:"compose_update_failure"`
+	VMStartFailure         bool `json:"vm_start_failure"`
+	VMUnexpectedStop       bool `json:"vm_unexpected_stop"`
+	VMCreatedDeleted       bool `json:"vm_created_deleted"`
+	VMSnapshotFailure      bool `json:"vm_snapshot_failure"`
+	VMBackupFailure        bool `json:"vm_backup_failure"`
+	VMDiskFull             bool `json:"vm_disk_full"`
+	VMDiskFullThresholdPct int  `json:"vm_disk_full_threshold_pct"`
+	VMHostSaturation       bool `json:"vm_host_saturation"`
+	ComposeUpdateFailure   bool `json:"compose_update_failure"`
 }
 
 type EmailTarget struct {
@@ -184,10 +209,10 @@ type PushoverTarget struct {
 type SyslogTarget struct {
 	Enabled  bool        `json:"enabled"`
 	Host     string      `json:"host"`
-	Port     int         `json:"port"`      // default 514
-	Protocol string      `json:"protocol"`  // udp | tcp
-	Facility string      `json:"facility"`  // user | daemon | local0–local7
-	Tag      string      `json:"tag"`       // syslog tag / app name
+	Port     int         `json:"port"`     // default 514
+	Protocol string      `json:"protocol"` // udp | tcp
+	Facility string      `json:"facility"` // user | daemon | local0–local7
+	Tag      string      `json:"tag"`      // syslog tag / app name
 	Events   EventConfig `json:"events"`
 }
 
@@ -416,12 +441,24 @@ func MinFailedLoginThreshold(cfg *AlertConfig) (enabled bool, threshold int) {
 
 func allEnabledEvents(cfg *AlertConfig) []EventConfig {
 	var evs []EventConfig
-	if cfg.Email.Enabled     { evs = append(evs, cfg.Email.Events) }
-	if cfg.Ntfy.Enabled      { evs = append(evs, cfg.Ntfy.Events) }
-	if cfg.Gotify.Enabled    { evs = append(evs, cfg.Gotify.Events) }
-	if cfg.Pushover.Enabled  { evs = append(evs, cfg.Pushover.Events) }
-	if cfg.Syslog.Enabled    { evs = append(evs, cfg.Syslog.Events) }
-	if cfg.WebSocket.Enabled { evs = append(evs, cfg.WebSocket.Events) }
+	if cfg.Email.Enabled {
+		evs = append(evs, cfg.Email.Events)
+	}
+	if cfg.Ntfy.Enabled {
+		evs = append(evs, cfg.Ntfy.Events)
+	}
+	if cfg.Gotify.Enabled {
+		evs = append(evs, cfg.Gotify.Events)
+	}
+	if cfg.Pushover.Enabled {
+		evs = append(evs, cfg.Pushover.Events)
+	}
+	if cfg.Syslog.Enabled {
+		evs = append(evs, cfg.Syslog.Events)
+	}
+	if cfg.WebSocket.Enabled {
+		evs = append(evs, cfg.WebSocket.Events)
+	}
 	return evs
 }
 
@@ -668,7 +705,7 @@ func sendSMTP(t *EmailTarget, subject, htmlBody string) error {
 }
 
 func sendSMTPToRecipients(t *EmailTarget, recipients []string, subject, htmlBody string) error {
-	addr := fmt.Sprintf("%s:%d", t.SMTP.Host, t.SMTP.Port)
+	addr := hostPort(t.SMTP.Host, t.SMTP.Port)
 	msg := buildMIME(t.SMTP.From, recipients, subject, htmlBody)
 
 	switch t.SMTP.AuthMode {
@@ -835,17 +872,32 @@ func sendPushover(t PushoverTarget, subject, event, details, hostname string) er
 func syslogPRI(facility string) int {
 	fac := 3 // daemon
 	switch facility {
-	case "user":   fac = 1
-	case "local0": fac = 16
-	case "local1": fac = 17
-	case "local2": fac = 18
-	case "local3": fac = 19
-	case "local4": fac = 20
-	case "local5": fac = 21
-	case "local6": fac = 22
-	case "local7": fac = 23
+	case "user":
+		fac = 1
+	case "local0":
+		fac = 16
+	case "local1":
+		fac = 17
+	case "local2":
+		fac = 18
+	case "local3":
+		fac = 19
+	case "local4":
+		fac = 20
+	case "local5":
+		fac = 21
+	case "local6":
+		fac = 22
+	case "local7":
+		fac = 23
 	}
 	return (fac * 8) + 4 // severity 4 = Warning
+}
+
+// hostPort joins host and port for net.Dial, bracketing IPv6 literals
+// ("fd00::10" → "[fd00::10]:514"); a plain "%s:%d" is undialable for IPv6.
+func hostPort(host string, port int) string {
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 func sendSyslogMsg(t SyslogTarget, subject, event, details, hostname string) error {
@@ -868,7 +920,7 @@ func sendSyslogMsg(t SyslogTarget, subject, event, details, hostname string) err
 		hostname, _ = os.Hostname()
 	}
 
-	addr := fmt.Sprintf("%s:%d", t.Host, port)
+	addr := hostPort(t.Host, port)
 	conn, err := net.DialTimeout(proto, addr, 5*time.Second)
 	if err != nil {
 		return fmt.Errorf("syslog dial %s %s: %w", proto, addr, err)
@@ -876,7 +928,7 @@ func sendSyslogMsg(t SyslogTarget, subject, event, details, hostname string) err
 	defer conn.Close()
 
 	// RFC 3164: <PRI>TIMESTAMP HOSTNAME TAG[PID]: MSG
-	ts  := time.Now().Format("Jan _2 15:04:05")
+	ts := time.Now().Format("Jan _2 15:04:05")
 	msg := fmt.Sprintf("%s | event=%s | details=%s", notifTitle(hostname, subject), event, details)
 	pkt := fmt.Sprintf("<%d>%s %s %s[%d]: %s\n",
 		syslogPRI(t.Facility), ts, hostname, tag, os.Getpid(), msg)

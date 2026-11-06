@@ -12,13 +12,13 @@ func TestParsePoolTarget(t *testing.T) {
 		in         string
 		kind, name string
 	}{
-		{"", "", ""},                              // default
-		{"zfs:tank", "zfs", "tank"},               // zpool
-		{"mergerfs:media", "mergerfs", "media"},   // union
-		{"zfs:", "", ""},                          // empty name → default
-		{"mergerfs:", "", ""},                     // empty name → default
-		{"tank", "", ""},                          // no kind prefix → default
-		{"bogus:x", "", ""},                       // unknown kind → default
+		{"", "", ""},                            // default
+		{"zfs:tank", "zfs", "tank"},             // zpool
+		{"mergerfs:media", "mergerfs", "media"}, // union
+		{"zfs:", "", ""},                        // empty name → default
+		{"mergerfs:", "", ""},                   // empty name → default
+		{"tank", "", ""},                        // no kind prefix → default
+		{"bogus:x", "", ""},                     // unknown kind → default
 		{"zfs:pool:with:colons", "zfs", "pool:with:colons"}, // name may contain colons
 	}
 	for _, c := range cases {
@@ -41,13 +41,13 @@ func TestValidatePoolTarget(t *testing.T) {
 	}
 
 	invalid := []string{
-		"zfs:nope",       // no such zpool
-		"mergerfs:nope",  // no such union
-		"mergerfs:tank",  // right name, wrong kind
-		"zfs:media",      // right name, wrong kind
-		"tank",           // missing kind prefix
-		"bogus:tank",     // unknown kind
-		"zfs:",           // missing name
+		"zfs:nope",      // no such zpool
+		"mergerfs:nope", // no such union
+		"mergerfs:tank", // right name, wrong kind
+		"zfs:media",     // right name, wrong kind
+		"tank",          // missing kind prefix
+		"bogus:tank",    // unknown kind
+		"zfs:",          // missing name
 	}
 	for _, v := range invalid {
 		if err := validatePoolTarget(v, zpools, mergerfs); err == nil {

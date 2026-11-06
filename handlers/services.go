@@ -122,22 +122,22 @@ func runServiceDiscovery(appCfg *config.AppConfig) error {
 			// can never load — the field failure that motivated this.
 			ip, reachable, reason := resolveServiceAddr(inst, svc.Port)
 			discovered = append(discovered, config.ServiceEntry{
-				ID:           config.ServiceID(inst.Name, svc.Project, svc.Container),
-				Source:       "discovered",
-				Instance:     inst.Name,
-				InstanceType: inst.Type,
-				Project:      svc.Project,
-				Container:    svc.Container,
-				ContainerID:  svc.ContainerID,
-				Image:        svc.Image,
+				ID:                config.ServiceID(inst.Name, svc.Project, svc.Container),
+				Source:            "discovered",
+				Instance:          inst.Name,
+				InstanceType:      inst.Type,
+				Project:           svc.Project,
+				Container:         svc.Container,
+				ContainerID:       svc.ContainerID,
+				Image:             svc.Image,
 				IP:                ip,
 				DetectedPort:      svc.Port,
 				PublishedPorts:    svc.AllPorts,
 				Reachable:         reachable,
 				UnreachableReason: reason,
-				Tags:         inst.Tags,
-				LastSeen:     now,
-				LastState:    svc.State,
+				Tags:              inst.Tags,
+				LastSeen:          now,
+				LastState:         svc.State,
 			})
 		}
 	}
@@ -149,10 +149,10 @@ func runServiceDiscovery(appCfg *config.AppConfig) error {
 // frontend never has to re-derive the URL or open mode.
 type serviceOut struct {
 	config.ServiceEntry
-	DisplayName string `json:"display_name"`
-	URL         string `json:"url"`          // direct app URL (new tab / window)
-	ProxyURL    string `json:"proxy_url"`    // same-origin proxied URL (panel)
-	Openable    bool   `json:"openable"`     // false when no port is known
+	DisplayName       string `json:"display_name"`
+	URL               string `json:"url"`       // direct app URL (new tab / window)
+	ProxyURL          string `json:"proxy_url"` // same-origin proxied URL (panel)
+	Openable          bool   `json:"openable"`  // false when no port is known
 	EffectiveOpenMode string `json:"effective_open_mode"`
 	// Resolved form of the Pinned pointer, so the UI never has to know about
 	// the "unset means follow open_mode" rule.
@@ -298,13 +298,13 @@ func HandleUpdateService(appCfg *config.AppConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := mux.Vars(r)["id"]
 		var req struct {
-			Name           *string `json:"name"`
-			PortOverride   *int    `json:"port_override"`
-			SchemeOverride *string `json:"scheme_override"`
-			PathOverride   *string `json:"path_override"`
-			URLOverride    *string `json:"url_override"`
-			OpenMode       *string `json:"open_mode"`
-			Hidden         *bool   `json:"hidden"`
+			Name            *string `json:"name"`
+			PortOverride    *int    `json:"port_override"`
+			SchemeOverride  *string `json:"scheme_override"`
+			PathOverride    *string `json:"path_override"`
+			URLOverride     *string `json:"url_override"`
+			OpenMode        *string `json:"open_mode"`
+			Hidden          *bool   `json:"hidden"`
 			IconOverride    *string `json:"icon_override"`
 			IgnoreTLSErrors *bool   `json:"ignore_tls_errors"`
 			Pinned          *bool   `json:"pinned"`
@@ -566,7 +566,6 @@ func HandleSetServiceSettings(appCfg *config.AppConfig) http.HandlerFunc {
 		})
 	}
 }
-
 
 // resolveServiceAddr picks the instance address that actually answers on the
 // service's port. It returns the chosen IP plus whether anything answered and,

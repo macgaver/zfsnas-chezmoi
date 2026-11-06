@@ -108,13 +108,13 @@ func HandleEditReplicationTask(w http.ResponseWriter, r *http.Request) {
 	found := false
 	for i, t := range cfg.Replication {
 		if t.ID == id {
-			cfg.Replication[i].Name          = req.Name
+			cfg.Replication[i].Name = req.Name
 			cfg.Replication[i].SourceDataset = req.SourceDataset
-			cfg.Replication[i].RemoteHost    = req.RemoteHost
-			cfg.Replication[i].RemoteUser    = req.RemoteUser
+			cfg.Replication[i].RemoteHost = req.RemoteHost
+			cfg.Replication[i].RemoteUser = req.RemoteUser
 			cfg.Replication[i].RemoteDataset = req.RemoteDataset
-			cfg.Replication[i].Recursive     = req.Recursive
-			cfg.Replication[i].Compressed    = req.Compressed
+			cfg.Replication[i].Recursive = req.Recursive
+			cfg.Replication[i].Compressed = req.Compressed
 			found = true
 			break
 		}

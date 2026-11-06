@@ -62,9 +62,21 @@ func HandleGetGlobalPerfData(w http.ResponseWriter, r *http.Request) {
 		result[key] = samples
 	}
 
+	// Gateway latency series (Firewall): gwrtt_<id> → the gateway's name.
+	gateways := map[string]string{}
+	names := system.SDNGatewayNames()
+	for _, k := range db.Keys() {
+		if id, ok := strings.CutPrefix(k, "gwrtt_"); ok {
+			if n, known := names[id]; known {
+				gateways[k] = n
+			}
+		}
+	}
+
 	jsonOK(w, map[string]interface{}{
-		"series": result,
-		"ifaces": ifaces,
+		"series":   result,
+		"ifaces":   ifaces,
+		"gateways": gateways,
 	})
 }
 

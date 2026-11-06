@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strings"
 	"os/exec"
+	"strings"
 )
 
 // ChronyStatus holds the parsed output of `chronyc tracking`.

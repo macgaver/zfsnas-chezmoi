@@ -18,14 +18,14 @@ import (
 // Every field is best-effort; missing values come back as empty strings or zero
 // so the frontend can simply hide rows it doesn't have data for.
 type DetailedSystemInfo struct {
-	CPU          DetailedCPUInfo          `json:"cpu"`
-	Memory       DetailedMemoryInfo       `json:"memory"`
-	Motherboard  DetailedMotherboardInfo  `json:"motherboard"`
-	BIOS         DetailedBIOSInfo         `json:"bios"`
-	Controllers  []DetailedDiskController `json:"controllers"`
-	GPUs         []DetailedGPU            `json:"gpus"`
-	USBDevices   []DetailedUSBDevice      `json:"usb_devices"`
-	System       DetailedSystemSummary    `json:"system"`
+	CPU         DetailedCPUInfo          `json:"cpu"`
+	Memory      DetailedMemoryInfo       `json:"memory"`
+	Motherboard DetailedMotherboardInfo  `json:"motherboard"`
+	BIOS        DetailedBIOSInfo         `json:"bios"`
+	Controllers []DetailedDiskController `json:"controllers"`
+	GPUs        []DetailedGPU            `json:"gpus"`
+	USBDevices  []DetailedUSBDevice      `json:"usb_devices"`
+	System      DetailedSystemSummary    `json:"system"`
 	// UptimeSeconds is the host uptime from /proc/uptime; 0 when unreadable
 	// (or when the response comes from a peer running an older build).
 	UptimeSeconds int64 `json:"uptime_seconds"`
@@ -33,12 +33,12 @@ type DetailedSystemInfo struct {
 
 // DetailedGPU is a display/3D adapter from lspci, with best-effort VRAM.
 type DetailedGPU struct {
-	Slot        string `json:"slot"`         // PCI BDF, e.g. "01:00.0"
-	Class       string `json:"class"`        // "VGA compatible controller" / "3D controller" / "Display controller"
+	Slot        string `json:"slot"`  // PCI BDF, e.g. "01:00.0"
+	Class       string `json:"class"` // "VGA compatible controller" / "3D controller" / "Display controller"
 	Vendor      string `json:"vendor"`
 	Model       string `json:"model"`
-	Driver      string `json:"driver,omitempty"`       // kernel driver in use (amdgpu, nvidia, i915, …)
-	MemoryBytes uint64 `json:"memory_bytes"`           // VRAM; 0 = unknown (e.g. shared-memory iGPU)
+	Driver      string `json:"driver,omitempty"` // kernel driver in use (amdgpu, nvidia, i915, …)
+	MemoryBytes uint64 `json:"memory_bytes"`     // VRAM; 0 = unknown (e.g. shared-memory iGPU)
 }
 
 // DetailedUSBDevice is one connected USB device (root hubs excluded), read from
@@ -54,44 +54,44 @@ type DetailedUSBDevice struct {
 }
 
 type DetailedCPUInfo struct {
-	Vendor     string  `json:"vendor"`      // e.g. "GenuineIntel" → friendly "Intel"
-	Model      string  `json:"model"`       // /proc/cpuinfo "model name"
-	Cores      int     `json:"cores"`       // physical cores (best-effort)
-	Threads    int     `json:"threads"`     // logical CPUs (always reliable)
-	Sockets    int     `json:"sockets"`     // populated when distinct in /proc/cpuinfo
-	BaseGHz    float64 `json:"base_ghz"`    // base frequency (cpu MHz divided by 1000) — current value
-	MaxGHz     float64 `json:"max_ghz"`     // max boost frequency from cpufreq if present
-	Arch       string  `json:"arch"`        // uname -m equivalent
+	Vendor  string  `json:"vendor"`   // e.g. "GenuineIntel" → friendly "Intel"
+	Model   string  `json:"model"`    // /proc/cpuinfo "model name"
+	Cores   int     `json:"cores"`    // physical cores (best-effort)
+	Threads int     `json:"threads"`  // logical CPUs (always reliable)
+	Sockets int     `json:"sockets"`  // populated when distinct in /proc/cpuinfo
+	BaseGHz float64 `json:"base_ghz"` // base frequency (cpu MHz divided by 1000) — current value
+	MaxGHz  float64 `json:"max_ghz"`  // max boost frequency from cpufreq if present
+	Arch    string  `json:"arch"`     // uname -m equivalent
 
 	// Hybrid-CPU breakdown (Intel Alder Lake+ / hybrid ARM big.LITTLE). All four
 	// fields are zero when the host is a single-class CPU; the frontend uses
 	// `hybrid` as the gate.
-	Hybrid     bool    `json:"hybrid"`
-	PCores     int     `json:"p_cores"`     // distinct P (performance) physical cores
-	PThreads   int     `json:"p_threads"`   // logical CPUs riding on P cores
-	ECores     int     `json:"e_cores"`     // distinct E (efficient) physical cores
-	EThreads   int     `json:"e_threads"`   // logical CPUs riding on E cores
+	Hybrid   bool `json:"hybrid"`
+	PCores   int  `json:"p_cores"`   // distinct P (performance) physical cores
+	PThreads int  `json:"p_threads"` // logical CPUs riding on P cores
+	ECores   int  `json:"e_cores"`   // distinct E (efficient) physical cores
+	EThreads int  `json:"e_threads"` // logical CPUs riding on E cores
 }
 
 type DetailedMemoryInfo struct {
-	TotalBytes uint64               `json:"total_bytes"` // /proc/meminfo MemTotal — kernel-usable RAM
+	TotalBytes uint64 `json:"total_bytes"` // /proc/meminfo MemTotal — kernel-usable RAM
 	// InstalledBytes is the sum of the populated DIMM sizes reported by
 	// dmidecode — the physically installed RAM. It is slightly larger than
 	// TotalBytes, which the kernel/firmware trims by a few hundred MB of
 	// reserved regions. 0 when dmidecode is unavailable.
-	InstalledBytes uint64        `json:"installed_bytes"`
+	InstalledBytes uint64         `json:"installed_bytes"`
 	DIMMs          []DetailedDIMM `json:"dimms"` // populated by dmidecode -t memory
 }
 
 // DetailedDIMM represents one populated DIMM slot. Empty slots are skipped.
 type DetailedDIMM struct {
-	Locator      string `json:"locator"`        // bank/slot label (e.g. "DIMM_A1")
-	SizeBytes    uint64 `json:"size_bytes"`     // 0 = empty slot (filtered out)
-	SpeedMTs     int    `json:"speed_mts"`      // configured speed in MT/s
-	Type         string `json:"type"`           // e.g. "DDR4", "DDR5"
+	Locator      string `json:"locator"`    // bank/slot label (e.g. "DIMM_A1")
+	SizeBytes    uint64 `json:"size_bytes"` // 0 = empty slot (filtered out)
+	SpeedMTs     int    `json:"speed_mts"`  // configured speed in MT/s
+	Type         string `json:"type"`       // e.g. "DDR4", "DDR5"
 	Manufacturer string `json:"manufacturer"`
 	PartNumber   string `json:"part_number"`
-	FormFactor   string `json:"form_factor"`    // e.g. "DIMM", "SODIMM"
+	FormFactor   string `json:"form_factor"` // e.g. "DIMM", "SODIMM"
 }
 
 type DetailedMotherboardInfo struct {
@@ -110,18 +110,18 @@ type DetailedBIOSInfo struct {
 // DetailedDiskController groups storage controllers (SATA/SAS/NVMe/RAID/USB)
 // with the block devices that ride on them.
 type DetailedDiskController struct {
-	Slot   string                  `json:"slot"`    // PCI BDF, e.g. "00:1f.2"
-	Class  string                  `json:"class"`   // e.g. "SATA controller", "Non-Volatile memory controller"
-	Vendor string                  `json:"vendor"`
-	Model  string                  `json:"model"`
-	Disks  []DetailedAttachedDisk  `json:"disks"`
+	Slot   string                 `json:"slot"`  // PCI BDF, e.g. "00:1f.2"
+	Class  string                 `json:"class"` // e.g. "SATA controller", "Non-Volatile memory controller"
+	Vendor string                 `json:"vendor"`
+	Model  string                 `json:"model"`
+	Disks  []DetailedAttachedDisk `json:"disks"`
 }
 
 type DetailedAttachedDisk struct {
-	Device    string `json:"device"`     // e.g. "sda", "nvme0n1"
+	Device    string `json:"device"` // e.g. "sda", "nvme0n1"
 	Model     string `json:"model"`
 	SizeBytes uint64 `json:"size_bytes"`
-	Rotation  string `json:"rotation"`   // "ssd", "hdd", or "" if unknown
+	Rotation  string `json:"rotation"` // "ssd", "hdd", or "" if unknown
 }
 
 type DetailedSystemSummary struct {
@@ -871,7 +871,9 @@ func enumerateBlockDevices() []DetailedAttachedDisk {
 // metadata.
 //
 // The path looks like:
-//   /sys/devices/pci0000:00/0000:00:1e.0/0000:05:04.0/0000:09:01.0/virtioN/...
+//
+//	/sys/devices/pci0000:00/0000:00:1e.0/0000:05:04.0/0000:09:01.0/virtioN/...
+//
 // Each PCI BDF segment is a hop down a PCI bridge tree. The leaf one
 // (here 0000:09:01.0) is the storage controller; everything above is just a
 // bridge chain. lspci omits bridges from `Slot:` for non-bridge classes, so we

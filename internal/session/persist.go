@@ -28,9 +28,9 @@ import (
 )
 
 const (
-	persistFile  = "sessions.json.enc"
-	persistKey   = "session.key"
-	flushPeriod  = 60 * time.Second
+	persistFile = "sessions.json.enc"
+	persistKey  = "session.key"
+	flushPeriod = 60 * time.Second
 )
 
 type persistConfig struct {

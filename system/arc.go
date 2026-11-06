@@ -14,15 +14,15 @@ import (
 // and tunable parameters read from the kernel.
 type ARCStats struct {
 	// Current sizes (bytes)
-	ARCSize       int64 `json:"arc_size"`
-	ARCMin        int64 `json:"arc_min"`
-	ARCMax        int64 `json:"arc_max"`
-	ARCTarget     int64 `json:"arc_target"`
-	ARCMetaUsed   int64 `json:"arc_meta_used"`
-	ARCMetaLimit  int64 `json:"arc_meta_limit"`
-	ARCMetaMax    int64 `json:"arc_meta_max"`
-	MFUSize       int64 `json:"mfu_size"`
-	MRUSize       int64 `json:"mru_size"`
+	ARCSize      int64 `json:"arc_size"`
+	ARCMin       int64 `json:"arc_min"`
+	ARCMax       int64 `json:"arc_max"`
+	ARCTarget    int64 `json:"arc_target"`
+	ARCMetaUsed  int64 `json:"arc_meta_used"`
+	ARCMetaLimit int64 `json:"arc_meta_limit"`
+	ARCMetaMax   int64 `json:"arc_meta_max"`
+	MFUSize      int64 `json:"mfu_size"`
+	MRUSize      int64 `json:"mru_size"`
 
 	// Hit/miss counters
 	Hits             int64   `json:"hits"`
@@ -84,7 +84,7 @@ type ARCPressure struct {
 }
 
 const arcStatsPath = "/proc/spl/kstat/zfs/arcstats"
-const arcParamDir  = "/sys/module/zfs/parameters/"
+const arcParamDir = "/sys/module/zfs/parameters/"
 const modprobePath = "/etc/modprobe.d/zfs.conf"
 
 // GetARCStats reads /proc/spl/kstat/zfs/arcstats and kernel sysfs parameters,
@@ -97,28 +97,28 @@ func GetARCStats() (*ARCStats, error) {
 
 	s := &ARCStats{}
 
-	s.ARCSize      = kstatInt(kstat, "size")
-	s.ARCMin       = kstatInt(kstat, "c_min")
-	s.ARCMax       = kstatInt(kstat, "c_max")
-	s.ARCTarget    = kstatInt(kstat, "c")
-	s.ARCMetaUsed  = kstatInt(kstat, "arc_meta_used")
+	s.ARCSize = kstatInt(kstat, "size")
+	s.ARCMin = kstatInt(kstat, "c_min")
+	s.ARCMax = kstatInt(kstat, "c_max")
+	s.ARCTarget = kstatInt(kstat, "c")
+	s.ARCMetaUsed = kstatInt(kstat, "arc_meta_used")
 	s.ARCMetaLimit = kstatInt(kstat, "arc_meta_limit")
-	s.ARCMetaMax   = kstatInt(kstat, "arc_meta_max")
-	s.MFUSize      = kstatInt(kstat, "mfu_size")
-	s.MRUSize      = kstatInt(kstat, "mru_size")
+	s.ARCMetaMax = kstatInt(kstat, "arc_meta_max")
+	s.MFUSize = kstatInt(kstat, "mfu_size")
+	s.MRUSize = kstatInt(kstat, "mru_size")
 
-	s.Hits             = kstatInt(kstat, "hits")
-	s.Misses           = kstatInt(kstat, "misses")
-	s.DemandDataHits   = kstatInt(kstat, "demand_data_hits")
-	s.DemandMetaHits   = kstatInt(kstat, "demand_metadata_hits")
+	s.Hits = kstatInt(kstat, "hits")
+	s.Misses = kstatInt(kstat, "misses")
+	s.DemandDataHits = kstatInt(kstat, "demand_data_hits")
+	s.DemandMetaHits = kstatInt(kstat, "demand_metadata_hits")
 	s.PrefetchDataHits = kstatInt(kstat, "prefetch_data_hits")
 
 	s.EvictedMFU = kstatInt(kstat, "mfu_ghost_hits")
 	s.EvictedMRU = kstatInt(kstat, "mru_ghost_hits")
 
-	s.L2Hits   = kstatInt(kstat, "l2_hits")
+	s.L2Hits = kstatInt(kstat, "l2_hits")
 	s.L2Misses = kstatInt(kstat, "l2_misses")
-	s.L2Size   = kstatInt(kstat, "l2_size")
+	s.L2Size = kstatInt(kstat, "l2_size")
 
 	total := s.Hits + s.Misses
 	if total > 0 {
@@ -282,7 +282,7 @@ func SetARCParams(arcMax, arcMin int64) error {
 // /etc/modprobe.d/zfs.conf so that ARC parameters survive a reboot.
 func persistARCModprobe(arcMax, arcMin int64) error {
 	const begin = "# BEGIN ZFSNAS ARC"
-	const end   = "# END ZFSNAS ARC"
+	const end = "# END ZFSNAS ARC"
 
 	// Read the current file (if it exists).
 	existing, err := os.ReadFile(modprobePath)

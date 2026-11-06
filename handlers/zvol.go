@@ -77,10 +77,10 @@ func HandleCreateZVol(w http.ResponseWriter, r *http.Request) {
 		Provisioning: req.Provisioning,
 		Sync:         req.Sync,
 		Compression:  req.Compression,
-		Dedup:       req.Dedup,
-		BlockSize:   req.BlockSize,
-		Encryption:  req.Encryption,
-		KeyFilePath: keyFilePath,
+		Dedup:        req.Dedup,
+		BlockSize:    req.BlockSize,
+		Encryption:   req.Encryption,
+		KeyFilePath:  keyFilePath,
 	}
 	if err := system.CreateZVol(createReq); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())

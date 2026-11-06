@@ -3,7 +3,8 @@ package termsessions
 import "encoding/json"
 
 // resizeMsg matches the JSON shape the SPA already sends today:
-//   {"type":"resize","cols":120,"rows":40}
+//
+//	{"type":"resize","cols":120,"rows":40}
 type resizeMsg struct {
 	Type string `json:"type"`
 	Cols uint16 `json:"cols"`

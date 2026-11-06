@@ -413,52 +413,52 @@ type AppConfig struct {
 	TerminalScrollbackKB       int `json:"terminal_scrollback_kb,omitempty"`         // per-session scrollback ring in KB; 0 = default (256)
 	TerminalMaxSessionsPerUser int `json:"terminal_max_sessions_per_user,omitempty"` // cap of live PTYs per web user; 0 = default (20)
 
-	LiveUpdateEnabled       bool                  `json:"live_update_enabled,omitempty"`    // enable in-place binary self-update
-	VersionCheckInterval    string                `json:"version_check_interval,omitempty"` // daily (default) | weekly | monthly | manual
-	VersionCheckCache       *VersionCacheEntry    `json:"version_check_cache,omitempty"`    // server-side cache of last GitHub check
-	AutoUpdateEnabled       bool                  `json:"auto_update_enabled,omitempty"`    // automatically apply updates at scheduled hour
-	AutoUpdateHour          int                   `json:"auto_update_hour"`                 // hour of day (0-23) to run auto-update, default 3
-	MaxSmbdProcesses        int                   `json:"max_smbd_processes,omitempty"`     // Samba max smbd processes (0 = use default 100)
-	SMBHomeDataset          string                `json:"smb_home_dataset,omitempty"`       // ZFS dataset path for SMB user home folders; "" = disabled
-	SMBCleanDefaults        bool                  `json:"smb_clean_defaults,omitempty"`     // remove distro default [printers], [print$], [homes] sections
-	SMBWorkgroup            string                `json:"smb_workgroup,omitempty"`          // Samba workgroup name (default "WORKGROUP")
-	SMBCustomGlobal         string                `json:"smb_custom_global,omitempty"`      // extra lines appended to the managed [global] section
-	SMBSocketOptions        bool                  `json:"smb_socket_options,omitempty"`     // enable socket options for throughput (TCP_NODELAY, buffers)
-	TreeMapSchedule         string                `json:"treemap_schedule,omitempty"`       // daily | weekly | biweekly | monthly | "" (off)
-	TreeMapHour             int                   `json:"treemap_hour"`                     // hour of day to run treemap scan (0-23)
-	TreeMapMinute           int                   `json:"treemap_minute"`                   // minute of hour to run treemap scan (0-59)
-	ISCSI                   ISCSIConfig           `json:"iscsi,omitempty"`
-	MinIO                   MinIOConfig           `json:"minio,omitempty"`
-	UPS                     UPSConfig             `json:"ups,omitempty"`
-	DiskPower               DiskPowerConfig       `json:"disk_power,omitempty"`
-	SystemPower             SystemPowerConfig     `json:"system_power,omitempty"`
-	ActiveCertName          string                `json:"active_cert_name,omitempty"`
-	PendingCertRestart      bool                  `json:"pending_cert_restart,omitempty"`
-	SudoersHardeningEnabled bool                  `json:"sudoers_hardening_enabled,omitempty"`
-	SudoersSilencedLines    []string              `json:"sudoers_silenced_lines,omitempty"`
-	SudoersSilencedMissing  []string              `json:"sudoers_silenced_missing,omitempty"`
-	SudoersSilencedExtra    []string              `json:"sudoers_silenced_extra,omitempty"`
-	SudoersAppliedHash      string                `json:"sudoers_applied_hash,omitempty"`
-	SudoersAppliedContent   string                `json:"sudoers_applied_content,omitempty"`
-	Replication             []ReplicationTask     `json:"replication,omitempty"`
-	InterLink               []LinkedServer        `json:"inter_link,omitempty"`
-	InterlinkRelayMode      bool                  `json:"interlink_relay_mode,omitempty"`    // global relay mode: proxy API calls through local server
-	LXDMetricsEnabled       bool                  `json:"lxd_metrics_enabled,omitempty"`     // turns on LXD's Prometheus endpoint on 127.0.0.1:9101 + portal scraper for VM/container Monitor tabs (v6.4.28)
-	WebSession              WebSessionPolicy      `json:"web_session,omitempty"`             // browser session lifetime policy (default 24h vs sliding inactivity timeout)
-	LXDSnapshotPolicies     []LXDSnapshotPolicy   `json:"lxd_snapshot_policies,omitempty"`   // v6.5.19 — per-instance scheduled snapshots
-	ComposeUpdatePolicies   []ComposeUpdatePolicy `json:"compose_update_policies,omitempty"` // per-stack scheduled auto-updates
-	LXDBackupPolicies       []LXDBackupPolicy     `json:"lxd_backup_policies,omitempty"`     // v6.5.19 — per-instance scheduled syncoid backups
-	ExternalStorages        []ExternalStorage     `json:"external_storages,omitempty"`       // v6.7.7 — Filesystem rsync external storage targets
-	NFSServer               NFSServerConfig       `json:"nfs_server,omitempty"`              // v6.10.20 — server-wide NFS settings (/etc/nfs.conf.d/zfsnas.conf)
-	MergerFS                MergerFSConfig        `json:"mergerfs,omitempty"`                // v6.7.13 — optional MergerFS union-filesystem support
+	LiveUpdateEnabled        bool                     `json:"live_update_enabled,omitempty"`    // enable in-place binary self-update
+	VersionCheckInterval     string                   `json:"version_check_interval,omitempty"` // daily (default) | weekly | monthly | manual
+	VersionCheckCache        *VersionCacheEntry       `json:"version_check_cache,omitempty"`    // server-side cache of last GitHub check
+	AutoUpdateEnabled        bool                     `json:"auto_update_enabled,omitempty"`    // automatically apply updates at scheduled hour
+	AutoUpdateHour           int                      `json:"auto_update_hour"`                 // hour of day (0-23) to run auto-update, default 3
+	MaxSmbdProcesses         int                      `json:"max_smbd_processes,omitempty"`     // Samba max smbd processes (0 = use default 100)
+	SMBHomeDataset           string                   `json:"smb_home_dataset,omitempty"`       // ZFS dataset path for SMB user home folders; "" = disabled
+	SMBCleanDefaults         bool                     `json:"smb_clean_defaults,omitempty"`     // remove distro default [printers], [print$], [homes] sections
+	SMBWorkgroup             string                   `json:"smb_workgroup,omitempty"`          // Samba workgroup name (default "WORKGROUP")
+	SMBCustomGlobal          string                   `json:"smb_custom_global,omitempty"`      // extra lines appended to the managed [global] section
+	SMBSocketOptions         bool                     `json:"smb_socket_options,omitempty"`     // enable socket options for throughput (TCP_NODELAY, buffers)
+	TreeMapSchedule          string                   `json:"treemap_schedule,omitempty"`       // daily | weekly | biweekly | monthly | "" (off)
+	TreeMapHour              int                      `json:"treemap_hour"`                     // hour of day to run treemap scan (0-23)
+	TreeMapMinute            int                      `json:"treemap_minute"`                   // minute of hour to run treemap scan (0-59)
+	ISCSI                    ISCSIConfig              `json:"iscsi,omitempty"`
+	MinIO                    MinIOConfig              `json:"minio,omitempty"`
+	UPS                      UPSConfig                `json:"ups,omitempty"`
+	DiskPower                DiskPowerConfig          `json:"disk_power,omitempty"`
+	SystemPower              SystemPowerConfig        `json:"system_power,omitempty"`
+	ActiveCertName           string                   `json:"active_cert_name,omitempty"`
+	PendingCertRestart       bool                     `json:"pending_cert_restart,omitempty"`
+	SudoersHardeningEnabled  bool                     `json:"sudoers_hardening_enabled,omitempty"`
+	SudoersSilencedLines     []string                 `json:"sudoers_silenced_lines,omitempty"`
+	SudoersSilencedMissing   []string                 `json:"sudoers_silenced_missing,omitempty"`
+	SudoersSilencedExtra     []string                 `json:"sudoers_silenced_extra,omitempty"`
+	SudoersAppliedHash       string                   `json:"sudoers_applied_hash,omitempty"`
+	SudoersAppliedContent    string                   `json:"sudoers_applied_content,omitempty"`
+	Replication              []ReplicationTask        `json:"replication,omitempty"`
+	InterLink                []LinkedServer           `json:"inter_link,omitempty"`
+	InterlinkRelayMode       bool                     `json:"interlink_relay_mode,omitempty"`       // global relay mode: proxy API calls through local server
+	LXDMetricsEnabled        bool                     `json:"lxd_metrics_enabled,omitempty"`        // turns on LXD's Prometheus endpoint on 127.0.0.1:9101 + portal scraper for VM/container Monitor tabs (v6.4.28)
+	WebSession               WebSessionPolicy         `json:"web_session,omitempty"`                // browser session lifetime policy (default 24h vs sliding inactivity timeout)
+	LXDSnapshotPolicies      []LXDSnapshotPolicy      `json:"lxd_snapshot_policies,omitempty"`      // v6.5.19 — per-instance scheduled snapshots
+	ComposeUpdatePolicies    []ComposeUpdatePolicy    `json:"compose_update_policies,omitempty"`    // per-stack scheduled auto-updates
+	LXDBackupPolicies        []LXDBackupPolicy        `json:"lxd_backup_policies,omitempty"`        // v6.5.19 — per-instance scheduled syncoid backups
+	ExternalStorages         []ExternalStorage        `json:"external_storages,omitempty"`          // v6.7.7 — Filesystem rsync external storage targets
+	NFSServer                NFSServerConfig          `json:"nfs_server,omitempty"`                 // v6.10.20 — server-wide NFS settings (/etc/nfs.conf.d/zfsnas.conf)
+	MergerFS                 MergerFSConfig           `json:"mergerfs,omitempty"`                   // v6.7.13 — optional MergerFS union-filesystem support
 	MergerFSSnapshotPolicies []MergerFSSnapshotPolicy `json:"mergerfs_snapshot_policies,omitempty"` // v6.7.13 — per-mergerfs coordinated ZFS snapshot schedules
 
 	// ── Services (v6.8.1) ────────────────────────────────────────────────
 	// The two default-ON switches are *pointers* on purpose: an absent key in
 	// an existing config file must mean "enabled". A plain bool would decode
 	// to false and silently disable the feature on every upgraded host.
-	ServiceDiscoveryEnabled   *bool `json:"service_discovery_enabled,omitempty"`    // nil = on
-	ServiceProxyEnabled       *bool `json:"service_proxy_enabled,omitempty"`        // nil = on
+	ServiceDiscoveryEnabled *bool `json:"service_discovery_enabled,omitempty"` // nil = on
+	ServiceProxyEnabled     *bool `json:"service_proxy_enabled,omitempty"`     // nil = on
 }
 
 // ServiceDiscoveryOn reports whether service discovery is enabled. Absent =
@@ -476,7 +476,6 @@ func (c *AppConfig) ServiceProxyOn() bool {
 	return c.ServiceProxyEnabled == nil || *c.ServiceProxyEnabled
 }
 
-
 // ── MergerFS (v6.7.13, optional feature) ─────────────────────────────────────
 
 // MergerFSBranch is one source path in a mergerfs union. ZFSDataset is set when
@@ -488,19 +487,19 @@ type MergerFSBranch struct {
 
 // MergerFSPool is one mergerfs union filesystem managed by ZNAS.
 type MergerFSPool struct {
-	Name             string           `json:"name"`              // logical name / tab label / default fsname
-	Mountpoint       string           `json:"mountpoint"`        // union mount target (under /mnt or a zpool mountpoint)
+	Name             string           `json:"name"`       // logical name / tab label / default fsname
+	Mountpoint       string           `json:"mountpoint"` // union mount target (under /mnt or a zpool mountpoint)
 	Branches         []MergerFSBranch `json:"branches"`
-	CreatePolicy     string           `json:"create_policy"`     // mfs | epmfs | pfrd
-	MinFreeSpace     string           `json:"minfreespace"`      // e.g. "50G"
+	CreatePolicy     string           `json:"create_policy"` // mfs | epmfs | pfrd
+	MinFreeSpace     string           `json:"minfreespace"`  // e.g. "50G"
 	MoveOnENOSPC     bool             `json:"moveonenospc"`
-	CacheFiles       string           `json:"cache_files"`       // off | partial | full | auto-full
+	CacheFiles       string           `json:"cache_files"` // off | partial | full | auto-full
 	DropCacheOnClose bool             `json:"dropcacheonclose"`
 	AllowOther       bool             `json:"allow_other"`
-	InodeCalc        string           `json:"inodecalc"`         // path-hash | …
+	InodeCalc        string           `json:"inodecalc"` // path-hash | …
 	FsName           string           `json:"fsname"`
 	NoFail           bool             `json:"nofail"`
-	AllZFS           bool             `json:"all_zfs"`           // cached: every branch is a ZFS dataset → global snapshots available
+	AllZFS           bool             `json:"all_zfs"`                   // cached: every branch is a ZFS dataset → global snapshots available
 	ZFSCompression   string           `json:"zfs_compression,omitempty"` // when AllZFS: zfs compression applied to every member dataset ("" = leave as-is)
 	CreatedAt        time.Time        `json:"created_at,omitempty"`
 }
@@ -514,7 +513,7 @@ type NFSServerConfig struct {
 	// sends instead of looking the uid up on the NAS. Kubernetes fsGroup
 	// (a supplementary group) only works with it. Off = distro default.
 	TrustClientGroups bool `json:"trust_client_groups,omitempty"`
-	Threads           int  `json:"threads,omitempty"`     // nfsd threads; 0 = default
+	Threads           int  `json:"threads,omitempty"`    // nfsd threads; 0 = default
 	DisableV3         bool `json:"disable_v3,omitempty"` // serve NFSv4 only
 }
 
@@ -531,16 +530,16 @@ type MergerFSConfig struct {
 // MergerFSSnapshotPolicy schedules coordinated ZFS snapshots across all member
 // datasets of an all-ZFS mergerfs. Mirrors LXDSnapshotPolicy's cadence fields.
 type MergerFSSnapshotPolicy struct {
-	Pool         string `json:"pool"`     // MergerFSPool.Name
-	Enabled      bool   `json:"enabled"`
-	EveryN       int    `json:"every_n"`
-	Unit         string `json:"unit"` // "minute"|"hour"|"day"|"week"|"month"
-	HourOfDay    int    `json:"hour_of_day,omitempty"`
-	MinuteOfHour int    `json:"minute_of_hour"`
-	Weekday      int    `json:"weekday,omitempty"`
-	DayOfMonth   int    `json:"day_of_month,omitempty"`
-	KeepLast     int    `json:"keep_last"`
-	NamePrefix   string `json:"name_prefix,omitempty"`
+	Pool         string    `json:"pool"` // MergerFSPool.Name
+	Enabled      bool      `json:"enabled"`
+	EveryN       int       `json:"every_n"`
+	Unit         string    `json:"unit"` // "minute"|"hour"|"day"|"week"|"month"
+	HourOfDay    int       `json:"hour_of_day,omitempty"`
+	MinuteOfHour int       `json:"minute_of_hour"`
+	Weekday      int       `json:"weekday,omitempty"`
+	DayOfMonth   int       `json:"day_of_month,omitempty"`
+	KeepLast     int       `json:"keep_last"`
+	NamePrefix   string    `json:"name_prefix,omitempty"`
 	LastRun      time.Time `json:"last_run,omitempty"`
 	LastStatus   string    `json:"last_status,omitempty"`
 	LastError    string    `json:"last_error,omitempty"`
@@ -559,8 +558,8 @@ type ExternalStorage struct {
 	Share    string `json:"share,omitempty"` // smb share name / nfs export path / ssh+ftp base path
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
-	Domain   string `json:"domain,omitempty"`   // smb optional AD/workgroup domain
-	SSHKey   bool   `json:"ssh_key,omitempty"`  // true = config/extstorage/<id>.key is used instead of Password
+	Domain   string `json:"domain,omitempty"`  // smb optional AD/workgroup domain
+	SSHKey   bool   `json:"ssh_key,omitempty"` // true = config/extstorage/<id>.key is used instead of Password
 	// MountMode: "ondemand" (default — mounted for rsync runs / file-browser
 	// use, auto-unmounted when idle) or "persistent" (mounted at save +
 	// service startup, stays mounted). SSH/FTP are always on-demand.

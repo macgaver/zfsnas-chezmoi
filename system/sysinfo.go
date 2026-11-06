@@ -33,9 +33,9 @@ type DiskIOSnapshot struct {
 }
 
 var (
-	diskIOMu      sync.RWMutex
-	diskIOLatest  *DiskIOSnapshot
-	diskIOPrev    map[string]diskstatSample
+	diskIOMu     sync.RWMutex
+	diskIOLatest *DiskIOSnapshot
+	diskIOPrev   map[string]diskstatSample
 )
 
 // StartDiskIOPoller samples /proc/diskstats every 2 s, keeping the latest
@@ -82,7 +82,7 @@ func StartDiskIOPoller() {
 
 // HardwareInfo holds static hardware properties of the host.
 type HardwareInfo struct {
-	CPUCores    int    `json:"cpu_cores"`
+	CPUCores      int    `json:"cpu_cores"`
 	TotalRAMBytes uint64 `json:"total_ram_bytes"`
 }
 
@@ -127,11 +127,11 @@ func GetDiskIOSnapshot() *DiskIOSnapshot {
 }
 
 var (
-	poolMemberCacheMu      sync.Mutex
-	poolMemberCache        []string
-	poolMemberCachedAt     time.Time
-	poolPerPoolCache       map[string][]string
-	poolPerPoolCachedAt    time.Time
+	poolMemberCacheMu   sync.Mutex
+	poolMemberCache     []string
+	poolMemberCachedAt  time.Time
+	poolPerPoolCache    map[string][]string
+	poolPerPoolCachedAt time.Time
 )
 
 // poolMemberBaseNames returns the kernel device names (e.g. "sda", "vdb") for ALL

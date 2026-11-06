@@ -28,12 +28,12 @@ func HandleMemCompStatus(w http.ResponseWriter, r *http.Request) {
 // Three response shapes:
 //   - 200 + status snapshot — applied live (Outcome.Status="applied").
 //   - 200 + outcome JSON    — saved for next reboot (Outcome.Status="deferred",
-//                             requested by the UI with Mode="defer").
+//     requested by the UI with Mode="defer").
 //   - 409 + outcome JSON    — needs_decision: too much data is currently
-//                             held in zram to safely shrink it now. The body
-//                             carries OrigDataBytes/HeadroomBytes so the UI
-//                             can show the user the breakdown and offer the
-//                             "wait & retry" or "apply on next reboot" paths.
+//     held in zram to safely shrink it now. The body
+//     carries OrigDataBytes/HeadroomBytes so the UI
+//     can show the user the breakdown and offer the
+//     "wait & retry" or "apply on next reboot" paths.
 //
 // Hard errors (validation, systemctl) still return 500/400 with {error: …}.
 // PUT /api/memcomp/config

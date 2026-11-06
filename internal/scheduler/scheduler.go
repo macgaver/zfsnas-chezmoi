@@ -10,18 +10,18 @@ import (
 
 // Policy describes a recurring snapshot schedule for one dataset.
 type Policy struct {
-	ID         string    `json:"id"`
-	Dataset    string    `json:"dataset"`
-	Frequency  string    `json:"frequency"`    // hourly | daily | weekly | monthly
-	Hour       int       `json:"hour"`          // 0-23 (daily / weekly / monthly)
-	Minute     int       `json:"minute"`        // 0-59
-	Weekday    int       `json:"weekday"`       // 0=Sun … 6=Sat (weekly)
-	DayOfMonth int       `json:"day_of_month"`  // 1-31 (monthly)
-	Retention  int       `json:"retention"`     // keep last N auto-snapshots
-	Label      string    `json:"label"`         // prefix for snapshot names (e.g. "auto")
-	Enabled    bool      `json:"enabled"`
+	ID          string    `json:"id"`
+	Dataset     string    `json:"dataset"`
+	Frequency   string    `json:"frequency"`    // hourly | daily | weekly | monthly
+	Hour        int       `json:"hour"`         // 0-23 (daily / weekly / monthly)
+	Minute      int       `json:"minute"`       // 0-59
+	Weekday     int       `json:"weekday"`      // 0=Sun … 6=Sat (weekly)
+	DayOfMonth  int       `json:"day_of_month"` // 1-31 (monthly)
+	Retention   int       `json:"retention"`    // keep last N auto-snapshots
+	Label       string    `json:"label"`        // prefix for snapshot names (e.g. "auto")
+	Enabled     bool      `json:"enabled"`
 	LastRun     time.Time `json:"last_run,omitempty"`
-	LastStatus  string    `json:"last_status,omitempty"`  // "ok" | "error" | ""
+	LastStatus  string    `json:"last_status,omitempty"` // "ok" | "error" | ""
 	LastError   string    `json:"last_error,omitempty"`
 	LastDetails string    `json:"last_details,omitempty"` // human-readable summary of last run
 

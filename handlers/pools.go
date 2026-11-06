@@ -18,9 +18,9 @@ import (
 // poolCreateJob tracks an async pool creation.
 type poolCreateJob struct {
 	mu     sync.Mutex
-	Status string      `json:"status"` // "running" | "done" | "error"
+	Status string       `json:"status"` // "running" | "done" | "error"
 	Pool   *system.Pool `json:"pool,omitempty"`
-	Error  string      `json:"error,omitempty"`
+	Error  string       `json:"error,omitempty"`
 }
 
 var poolCreateJobs sync.Map // key: string job ID → *poolCreateJob
@@ -63,9 +63,9 @@ func HandleCreatePool(w http.ResponseWriter, r *http.Request) {
 		Compression string   `json:"compression"`
 		Dedup       string   `json:"dedup"`
 		Devices     []string `json:"devices"`
-		Encrypted   bool     `json:"encrypted"`    // enable ZFS native encryption
-		KeyFileID   string   `json:"key_file_id"`  // EncryptionKey.ID to use
-		MountRoot   bool     `json:"mount_root"`   // if true, mount at /<name>; default false → /mnt/<name>
+		Encrypted   bool     `json:"encrypted"`   // enable ZFS native encryption
+		KeyFileID   string   `json:"key_file_id"` // EncryptionKey.ID to use
+		MountRoot   bool     `json:"mount_root"`  // if true, mount at /<name>; default false → /mnt/<name>
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -887,11 +887,11 @@ func HandleClearPool(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := MustSession(r)
 	audit.Log(audit.Entry{
-		User:   sess.Username,
-		Role:   sess.Role,
-		Action: audit.ActionImportPool,
-		Target: req.Pool,
-		Result: audit.ResultOK,
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  audit.ActionImportPool,
+		Target:  req.Pool,
+		Result:  audit.ResultOK,
 		Details: "zpool clear (pool fixer)",
 	})
 	pool, _ := system.GetPoolByName(req.Pool)
@@ -952,7 +952,7 @@ func HandlePoolFixerReplace(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	req.Pool      = strings.TrimSpace(req.Pool)
+	req.Pool = strings.TrimSpace(req.Pool)
 	req.OldDevice = strings.TrimSpace(req.OldDevice)
 	req.NewDevice = strings.TrimSpace(req.NewDevice)
 	if req.Pool == "" || req.OldDevice == "" || req.NewDevice == "" {
@@ -1044,7 +1044,7 @@ func HandleDiskOffline(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	req.Pool   = strings.TrimSpace(req.Pool)
+	req.Pool = strings.TrimSpace(req.Pool)
 	req.Device = strings.TrimSpace(req.Device)
 	if req.Pool == "" || req.Device == "" {
 		jsonErr(w, http.StatusBadRequest, "pool and device are required")
@@ -1076,7 +1076,7 @@ func HandleDiskOnline(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	req.Pool   = strings.TrimSpace(req.Pool)
+	req.Pool = strings.TrimSpace(req.Pool)
 	req.Device = strings.TrimSpace(req.Device)
 	if req.Pool == "" || req.Device == "" {
 		jsonErr(w, http.StatusBadRequest, "pool and device are required")
