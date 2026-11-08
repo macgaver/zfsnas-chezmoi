@@ -193,7 +193,7 @@
     const running = svc && svc.dns_running;
     // An Incus network that is also a Firewall interface: one card, the
     // Firewall's, tagged Incus (and warned when Incus serves DHCP there too).
-    const incusOf = i => incusNets.find(n => n.name === i.device || n.name === ('br-' + i.device).slice(0, 15));
+    const incusOf = i => incusNets.find(n => n.name === i.device || n.name === (i.bridge_device || ('br-' + i.device).slice(0, 15)));
     const runsOf = n => [n.dhcp && 'DHCP', n.dns && 'DNS', n.nat && 'NAT'].filter(Boolean);
     const incusTag = n => {
       const r = runsOf(n), what = r.length ? `Incus runs ${r.join(', ')} on this network` : 'Also an Incus network (Incus runs no DHCP, DNS or NAT on it)';

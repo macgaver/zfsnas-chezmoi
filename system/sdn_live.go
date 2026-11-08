@@ -17,7 +17,7 @@ import (
 // SDNLiveIface is a network device as the Interfaces page shows it.
 type SDNLiveIface struct {
 	Device    string   `json:"device"`
-	Kind      string   `json:"kind"` // physical | vlan | bridge
+	Kind      string   `json:"kind"` // physical | vlan | bridge | bond | ppp | wireguard
 	MAC       string   `json:"mac"`
 	State     string   `json:"state"`
 	SpeedMbps int      `json:"speed_mbps"`
@@ -97,6 +97,8 @@ func sdnDeviceKind(dev string) string {
 	switch {
 	case sysExists(dev, "bridge"):
 		return "bridge"
+	case sysExists(dev, "bonding"):
+		return "bond"
 	case strings.Contains(readSysTrim(dev, "uevent"), "DEVTYPE=vlan"):
 		return "vlan"
 	case sysExists(dev, "device"):
@@ -154,6 +156,8 @@ func SDNLiveInterfaces(requestLocalAddr string) ([]SDNLiveIface, error) {
 			l.Adoptable, l.Reason = false, "PPPoE link"
 		case kind == "wireguard":
 			l.Adoptable, l.Reason = false, "WireGuard tunnel"
+		case l.Master != "" && sysExists(l.Master, "bonding"):
+			l.Adoptable, l.Reason = false, "member of bond "+l.Master
 		case l.Master != "":
 			l.Adoptable, l.Reason = false, "port of bridge "+l.Master
 		case incusHas(incus, dev):

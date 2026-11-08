@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -609,6 +610,10 @@ func HandleSDNEnable(appCfg *config.AppConfig) http.HandlerFunc {
 				_ = st.SaveConfirmed(saved) // the failed attempt must not cost the saved configuration
 			} else {
 				st.ClearRestored()
+				// config.json exists now: the monitor's start condition holds.
+				if err := system.SDNStartGatewayMonitor(); err != nil {
+					log.Printf("[sdn] starting the gateway monitor: %v", err)
+				}
 				if m, ok := resp.(map[string]any); ok && len(dropped) > 0 {
 					m["dropped"] = dropped
 				}

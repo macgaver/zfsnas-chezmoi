@@ -145,3 +145,37 @@ func TestParseBlockedSet(t *testing.T) {
 		t.Fatalf("%+v", got[1])
 	}
 }
+
+// A bond is listed as its own kind (a VLAN can sit on it); its member ports
+// are listed but never offered: they belong to the bond.
+func TestSDNLive_Bond(t *testing.T) {
+	_, _ = sdnTestEnv(t)
+	sys := sdnSysClassNet
+	_ = os.RemoveAll(sys)
+	fakeNIC(t, sys, "bond0", nil, "bonding")
+	fakeNIC(t, sys, "eno1", nil, "device")
+	_ = os.Symlink("../bond0", filepath.Join(sys, "eno1", "master"))
+	fakeNIC(t, sys, "eno2", nil, "device")
+	_ = os.Symlink("../bond0", filepath.Join(sys, "eno2", "master"))
+
+	oldInc, oldAddrs, oldWin := sdnIncusManagedBridges, sdnIfaceAddrs, sdnRateWindow
+	t.Cleanup(func() { sdnIncusManagedBridges, sdnIfaceAddrs, sdnRateWindow = oldInc, oldAddrs, oldWin })
+	sdnIncusManagedBridges = func() map[string]string { return map[string]string{} }
+	sdnIfaceAddrs = func(string) []string { return nil }
+	sdnRateWindow = 0
+
+	list, err := SDNLiveInterfaces("192.168.2.129")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]SDNLiveIface{}
+	for _, l := range list {
+		got[l.Device] = l
+	}
+	if b := got["bond0"]; b.Kind != "bond" || !b.Adoptable {
+		t.Fatalf("bond0 = %+v", b)
+	}
+	if m := got["eno1"]; m.Kind != "physical" || m.Adoptable || m.Master != "bond0" || m.Reason != "member of bond bond0" {
+		t.Fatalf("eno1 = %+v", m)
+	}
+}

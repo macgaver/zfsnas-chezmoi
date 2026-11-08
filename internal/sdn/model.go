@@ -11,6 +11,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
+	"strings"
 )
 
 // Config is the whole feature configuration. The confirmed copy is what the
@@ -138,7 +140,10 @@ type Interface struct {
 	Gateway  string `json:"gateway,omitempty"`
 	MTU      int    `json:"mtu,omitempty"`
 	AllowVMs bool   `json:"allow_vms"` // vlan: realized as bridge br-<device> with the vlan as port
-	Owned    bool   `json:"owned"`
+	// BridgeDevice is the computed L3 device of an "Allow VMs" VLAN (set by
+	// Normalize, read-only for the UI so it never re-derives the name).
+	BridgeDevice string `json:"bridge_device,omitempty"`
+	Owned        bool   `json:"owned"`
 	// Disabled: the settings are kept, but the link is down and nothing runs
 	// on it. Off the JSON when false: an interface is on unless told otherwise.
 	Disabled bool `json:"disabled,omitempty"`
@@ -243,6 +248,10 @@ func (c *Config) Normalize() {
 		if in.Kind == "vlan" && in.Parent != "" && in.VLANTag > 0 {
 			in.Device = VLANDeviceName(in.Parent, in.VLANTag)
 		}
+		in.BridgeDevice = ""
+		if in.Kind == "vlan" && in.AllowVMs {
+			in.BridgeDevice = BridgeDeviceName(in.Device)
+		}
 		if in.Kind == "pppoe" {
 			in.Device = PPPoEDeviceName(in.ID)
 			in.IPv4Mode, in.Owned = "pppoe", true
@@ -296,10 +305,29 @@ func VLANDeviceName(parent string, tag int) string {
 	return parent + suffix
 }
 
-// BridgeDeviceName is the bridge carrying an "Allow VMs" VLAN: br-<device>,
-// truncated to 15 characters.
+// BridgeDeviceName is the bridge carrying an "Allow VMs" VLAN: br-<device>
+// when that fits IFNAMSIZ-1 (15). On a longer port name (enp5s0f0-v700) a
+// plain cut made VLAN 700 and 701 share "br-enp5s0f0-v70", so the name keeps
+// the whole "-v<tag>" and marks the cut parent with 2 hex digits of the
+// device's CRC: br-enp5s<hh>-v700. Validate refuses the rare leftover clash.
+// The "br-" prefix stays: other code recognises bridges by it.
 func BridgeDeviceName(device string) string {
 	n := "br-" + device
+	if len(n) <= 15 {
+		return n
+	}
+	parent, suffix := device, ""
+	if k := strings.LastIndex(device, "-v"); k > 0 {
+		parent, suffix = device[:k], device[k:]
+	}
+	keep := 15 - 3 - 2 - len(suffix)
+	if keep < 1 {
+		keep = 1
+	}
+	if len(parent) > keep {
+		parent = parent[:keep]
+	}
+	n = fmt.Sprintf("br-%s%02x%s", parent, crc32.ChecksumIEEE([]byte(device))&0xff, suffix)
 	if len(n) > 15 {
 		n = n[:15]
 	}

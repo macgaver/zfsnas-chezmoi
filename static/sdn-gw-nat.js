@@ -398,7 +398,7 @@
       ...c.interfaces.filter(i => i.kind !== 'wireguard' || i.role === 'wan').map(i => ({ value: i.id, label: i.name, color: i.color,
         disabled: i.ipv4_mode === 'none' && i.id !== g.interface,
         hint: i.disabled ? 'disabled' : ({ pppoe: 'PPPoE', dhcp: 'DHCP', static: i.ipv4 }[i.ipv4_mode] || 'no address: set one on the Interfaces page') })),
-      ...links.filter(l => l.adoptable && !known.has(l.device) && (l.kind === 'physical' || l.kind === 'bridge')).map(l => {
+      ...links.filter(l => l.adoptable && !known.has(l.device) && (l.kind === 'physical' || l.kind === 'bond' || l.kind === 'bridge')).map(l => {
         const mode = l.cfg_mode && l.cfg_mode !== 'manual' ? l.cfg_mode : ((l.ipv4 || []).length ? 'static' : '');
         return { value: 'port:' + l.device, label: l.device, disabled: !mode, section: 'Not in the Firewall yet',
           hint: mode ? 'added to the Firewall as a WAN' : 'no address' };

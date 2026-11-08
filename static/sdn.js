@@ -728,7 +728,7 @@
   }
 
   // ── Interfaces ─────────────────────────────────────────────────────────
-  const l3 = i => (i.kind === 'vlan' && i.allow_vms) ? ('br-' + i.device).slice(0, 15) : i.device;
+  const l3 = i => (i.kind === 'vlan' && i.allow_vms) ? (i.bridge_device || ('br-' + i.device).slice(0, 15)) : i.device;
   function liveOf(dev) { return live.find(l => l.device === dev); }
   // PPPoE links and WireGuard tunnels are listed for their live address only.
   const isPort = l => l.kind !== 'ppp' && l.kind !== 'wireguard';
@@ -1140,8 +1140,17 @@
         modeSeg();
       }
     }, { placeholder: 'Choose a port…' });
-    const parents = live.filter(l => (l.kind === 'physical' || l.kind === 'bridge') && !l.master && l.reason !== 'managed by Incus')
-      .map(l => ({ value: l.device, label: l.device, hint: l.kind }));
+    // A VLAN goes on the device that carries the tagged frames to the
+    // switch: a network port (even one that is also in a bridge such as
+    // vmbr0, so the VLAN stays independent of that bridge) or a bond. Never
+    // a bond's member port, and never a bridge: our bridges aren't
+    // VLAN-aware, so a VLAN on one leaks its tagged traffic to every VM on
+    // that bridge. An existing VLAN keeps its current parent in the list.
+    const liveKind = d => (live.find(x => x.device === d) || {}).kind;
+    const parentOk = l => (l.kind === 'physical' || l.kind === 'bond') && (!l.master || liveKind(l.master) === 'bridge');
+    const parents = live.filter(parentOk).map(l => ({ value: l.device, label: l.device,
+      hint: (l.kind === 'bond' ? 'bond' : 'network port') + (l.master ? ' · also in ' + l.master : '') }));
+    if (it.parent && !parents.some(p => p.value === it.parent)) parents.push({ value: it.parent, label: it.parent, hint: 'current parent' });
     picker(box.querySelector('#fwi-parent'), parents, it.parent || '', v => { it.parent = v; }, { placeholder: 'Choose the trunk port…' });
     box.querySelectorAll('#fwi-colors span').forEach(s => s.onclick = () => {
       it.color = s.dataset.c;

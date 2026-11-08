@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"zfsnas/internal/backup"
@@ -135,5 +136,56 @@ func TestCarryOverKeepsDDNSOfExistingGateways(t *testing.T) {
 	}
 	if got := sdnCarryDropped(last, next); len(got) == 0 {
 		t.Fatal("a dropped gateway and dynamic DNS name must be reported")
+	}
+}
+
+func TestZnasbakSDNSettingsTravel(t *testing.T) {
+	src := t.TempDir()
+	for f, body := range map[string]string{
+		"sdn/config.json": "{}", "sdn/geo.json": `{"provider":"maxmind","account_id":"1","license_key":"k"}`,
+		"sdn/events.jsonl": `{"kind":"ppp_up"}` + "\n", "sdn/country-cache.json": "{}",
+		"sdn/blocklists.json": "{}", "sdn/vips-applied.json": "[]", "sdn/ids-state.json": "{}",
+	} {
+		p := filepath.Join(src, f)
+		_ = os.MkdirAll(filepath.Dir(p), 0755)
+		_ = os.WriteFile(p, []byte(body), 0600)
+	}
+	files, err := collectConfigFiles(src, backup.ExportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"config/sdn/geo.json", "config/sdn/events.jsonl"} {
+		if _, ok := files[k]; !ok {
+			t.Fatalf("%s must be exported", k)
+		}
+	}
+	// a fresh machine (Firewall off): every setting comes back
+	dst := t.TempDir()
+	if err := writeConfigFiles(dst, files, false); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst, "sdn", "geo.json")); !strings.Contains(string(b), "license_key") {
+		t.Fatal("MaxMind account and license key lost on import")
+	}
+	if fi, err := os.Stat(filepath.Join(dst, "sdn", "geo.json")); err != nil || fi.Mode().Perm() != 0600 {
+		t.Fatal("geo.json holds a license key: 0600")
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst, "sdn", "events.jsonl")); !strings.Contains(string(b), "ppp_up") {
+		t.Fatal("event history lost on import")
+	}
+	for _, f := range []string{"blocklists.json", "vips-applied.json"} {
+		if _, err := os.Stat(filepath.Join(dst, "sdn", f)); err == nil {
+			t.Fatalf("sdn/%s is the source machine's runtime state", f)
+		}
+	}
+	// a machine with its own history keeps it
+	own := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(own, "sdn"), 0700)
+	_ = os.WriteFile(filepath.Join(own, "sdn", "events.jsonl"), []byte(`{"kind":"mine"}`+"\n"), 0644)
+	if err := writeConfigFiles(own, files, false); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(own, "sdn", "events.jsonl")); !strings.Contains(string(b), "mine") {
+		t.Fatal("an import must not replace this machine's own event history")
 	}
 }

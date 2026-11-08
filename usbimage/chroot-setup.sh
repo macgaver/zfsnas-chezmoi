@@ -296,7 +296,10 @@ systemctl enable zfsnas-hostnat.service
 # the feature from Optional Features (the confirmed config lives in the
 # persisted config dir). -sdn-boot then regenerates the ruleset and sysctls
 # from that config at every boot — nothing under /etc needs persisting.
-# Keep in sync with system.sdnUnitText.
+# Keep in sync with system.sdnUnitText. Every unit that runs the portal binary
+# goes through run-zfsnas.sh, like zfsnas.service: after a portal upgrade on
+# the persist partition, boot must compile the config with the binary that
+# wrote it, not the older one baked into the image.
 cat > /etc/systemd/system/znas-sdn.service <<'SDNUNIT'
 [Unit]
 Description=ZNAS SDN — load the confirmed firewall/routing state
@@ -309,7 +312,7 @@ ConditionPathExists=/opt/zfsnas/config/sdn/config.json
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/opt/zfsnas/zfsnas -config /opt/zfsnas/config -sdn-boot
+ExecStart=/usr/lib/zfsnas/run-zfsnas.sh -config /opt/zfsnas/config -sdn-boot
 
 [Install]
 WantedBy=multi-user.target
@@ -324,7 +327,7 @@ ConditionPathExists=/opt/zfsnas/config/sdn/config.json
 
 [Service]
 Type=simple
-ExecStart=/opt/zfsnas/zfsnas -config /opt/zfsnas/config -sdn-gwmon
+ExecStart=/usr/lib/zfsnas/run-zfsnas.sh -config /opt/zfsnas/config -sdn-gwmon
 Restart=always
 RestartSec=2
 
@@ -364,7 +367,7 @@ After=znas-sdn.service network.target
 Type=simple
 RuntimeDirectory=znas-sdn-dns znas-sdn-dns/hosts.d
 RuntimeDirectoryPreserve=yes
-ExecStart=/opt/zfsnas/zfsnas -sdn-dhcp
+ExecStart=/usr/lib/zfsnas/run-zfsnas.sh -sdn-dhcp
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=2

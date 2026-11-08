@@ -274,7 +274,7 @@ func TestSDNDHCPUnit_MatchesApplianceImage(t *testing.T) {
 	if start < 0 || end < 0 {
 		t.Fatal("znas-sdn-dhcp.service not baked in usbimage/chroot-setup.sh")
 	}
-	if baked, want := s[start+len("<<'SDNDHCPUNIT'\n"):end+1], sdnDHCPUnitText("/opt/zfsnas/zfsnas"); baked != want {
+	if baked, want := s[start+len("<<'SDNDHCPUNIT'\n"):end+1], sdnDHCPUnitText("/usr/lib/zfsnas/run-zfsnas.sh"); baked != want {
 		t.Fatalf("baked unit differs:\n--- baked ---\n%s\n--- portal ---\n%s", baked, want)
 	}
 	if !strings.Contains(s, "znas-sdn-dns.service znas-sdn-dhcp.service") {
@@ -299,5 +299,54 @@ func TestSDNServiceFiles_RemovesKeyOfRemovedTunnelWithoutListing(t *testing.T) {
 	}
 	if rec.index("rm "+filepath.Join(sdnWGDir, "znas-ifwg0001.conf")) < 0 {
 		t.Fatalf("key file not removed: %v", rec.cmds)
+	}
+}
+
+// Every baked unit that runs the portal binary goes through the launcher, so
+// boot runs the portal upgraded on the persist partition, not the image's.
+func TestApplianceUnitsUseLauncher(t *testing.T) {
+	b, err := os.ReadFile("../usbimage/chroot-setup.sh")
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(l, "ExecStart=/opt/zfsnas/zfsnas") {
+			t.Errorf("baked unit bypasses run-zfsnas.sh: %s", l)
+		}
+	}
+}
+
+// On the appliance the units the portal rewrites name the launcher, like the
+// baked ones; elsewhere they name the portal binary. Either way the gateway
+// monitor can be started once Enable has saved the configuration.
+func TestSDNInstallUnitApplianceUsesLauncher(t *testing.T) {
+	rec, dir := sdnTestEnv(t)
+	launcher := filepath.Join(dir, "run-zfsnas.sh")
+	_ = os.WriteFile(launcher, []byte("#!/bin/sh\n"), 0755)
+	oldL := sdnApplianceLauncherPath
+	sdnApplianceLauncherPath = launcher
+	t.Cleanup(func() { sdnApplianceLauncherPath = oldL })
+	applianceOnce.Do(func() {})
+	oldA := applianceCached
+	t.Cleanup(func() { applianceCached = oldA })
+
+	for _, appl := range []bool{true, false} {
+		applianceCached = appl
+		if err := SDNInstallUnit("/opt/zfsnas/zfsnas", "/opt/zfsnas/config"); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(sdnUnitPath)
+		want := map[bool]string{true: "ExecStart=" + launcher + " ", false: "ExecStart=/opt/zfsnas/zfsnas "}[appl]
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("appliance=%v: boot unit = %s", appl, b)
+		}
+		g, _ := os.ReadFile(sdnGWUnitPath())
+		if !strings.Contains(string(g), want) {
+			t.Fatalf("appliance=%v: gateway unit = %s", appl, g)
+		}
+	}
+	rec.cmds = nil
+	if err := SDNStartGatewayMonitor(); err != nil || rec.index("systemctl restart "+sdnGWUnitName) < 0 {
+		t.Fatalf("gateway monitor not started: %v %v", err, rec.cmds)
 	}
 }

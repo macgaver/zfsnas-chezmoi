@@ -83,6 +83,7 @@ func (c *Config) Validate() error {
 		}
 		ids[in.ID] = true
 		devices[in.Device] = true
+		devices[in.L3Device()] = true // a VLAN's VM bridge is taken too
 		if in.Kind == "vlan" {
 			vlans[fmt.Sprintf("%s/%d", in.Parent, in.VLANTag)] = true
 		}
@@ -394,6 +395,9 @@ func (c *Config) checkInterface(in Interface, ids, devices, vlans map[string]boo
 	}
 	if devices[in.Device] {
 		return "device|" + in.Device + " is already used by another interface"
+	}
+	if l3 := in.L3Device(); l3 != in.Device && devices[l3] {
+		return "vlan_tag|its VM network bridge " + l3 + " is already used by another interface"
 	}
 	switch in.Role {
 	case "wan", "lan", "":

@@ -807,6 +807,26 @@ func writeConfigFiles(dir string, files map[string][]byte, withCerts bool) error
 				if err := sdnImportToDraft(dir, data); err != nil {
 					return fmt.Errorf("firewall config: %w", err)
 				}
+				continue
+			}
+			mode, ok := sdnImportFiles[rel]
+			if !ok {
+				continue // runtime state of the source machine
+			}
+			dst := filepath.Join(dir, filepath.FromSlash(rel))
+			if mode.onlyIfMissing {
+				if _, err := os.Stat(dst); err == nil {
+					continue // this machine's own history/cache wins
+				}
+			}
+			if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(dst+".import-tmp", data, mode.perm); err != nil {
+				return err
+			}
+			if err := os.Rename(dst+".import-tmp", dst); err != nil {
+				return err
 			}
 			continue
 		}
@@ -956,7 +976,7 @@ func restoreSnapshot(dir, snap string) error {
 	}
 	// A firewall config the import stored for Enable (the running one is
 	// never replaced, so it is in the copy whenever there was one).
-	for _, n := range []string{"sdn/config.json", "sdn/draft.json", "sdn/restored.json"} {
+	for _, n := range []string{"sdn/config.json", "sdn/draft.json", "sdn/restored.json", "sdn/geo.json", "sdn/events.jsonl", "sdn/country-cache.json"} {
 		if _, err := os.Stat(filepath.Join(snap, n)); os.IsNotExist(err) {
 			if err := os.Remove(filepath.Join(dir, n)); err != nil && !os.IsNotExist(err) {
 				return err
@@ -976,6 +996,19 @@ func HandleBackupStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	jsonOK(w, map[string]any{"rollback_available": latest != "", "rollback_from": strings.TrimPrefix(latest, preImportPrefix)})
+}
+
+// sdnImportFiles are the firewall files besides config.json that an import
+// brings over: the GeoIP provider (MaxMind account and license key) always,
+// the event history and the country cache only when this machine has none.
+// Everything else under sdn/ is the source machine's runtime state.
+var sdnImportFiles = map[string]struct {
+	perm          os.FileMode
+	onlyIfMissing bool
+}{
+	"sdn/geo.json":           {0600, false},
+	"sdn/events.jsonl":       {0644, true},
+	"sdn/country-cache.json": {0600, true},
 }
 
 func sdnImportToDraft(dir string, data []byte) error {

@@ -71,16 +71,24 @@ WantedBy=multi-user.target
 // SDNInstallUnit writes and enables the boot unit and the gateway monitor,
 // and (re)starts the monitor so it runs the current binary.
 func SDNInstallUnit(binary, configDir string) error {
-	if err := sdnWriteFile(sdnUnitPath, []byte(sdnUnitText(binary, configDir))); err != nil {
+	// On the appliance the units start through the launcher, like the baked
+	// ones: it picks the portal upgraded on the persist partition when newer.
+	// The units rewritten here live in RAM and the baked ones come back at
+	// the next boot: both must name the same thing.
+	unitBin := binary
+	if l := sdnApplianceLauncher(); l != "" {
+		unitBin = l
+	}
+	if err := sdnWriteFile(sdnUnitPath, []byte(sdnUnitText(unitBin, configDir))); err != nil {
 		return err
 	}
-	if err := sdnWriteFile(sdnGWUnitPath(), []byte(sdnGWUnitText(binary, configDir))); err != nil {
+	if err := sdnWriteFile(sdnGWUnitPath(), []byte(sdnGWUnitText(unitBin, configDir))); err != nil {
 		return err
 	}
 	if err := sdnWriteFile(sdnDNSUnitPath(), []byte(sdnDNSUnitText())); err != nil {
 		return err
 	}
-	if err := sdnWriteFile(sdnDHCPUnitPath(), []byte(sdnDHCPUnitText(binary))); err != nil {
+	if err := sdnWriteFile(sdnDHCPUnitPath(), []byte(sdnDHCPUnitText(unitBin))); err != nil {
 		return err
 	}
 	if err := sdnWriteFile(sdnIDSUnitPath(), []byte(sdnIDSUnitText())); err != nil {
@@ -106,6 +114,29 @@ func SDNInstallUnit(binary, configDir string) error {
 			return err
 		}
 	}
+	_, err := sdnRun.Run(nil, "systemctl", "restart", sdnGWUnitName)
+	return err
+}
+
+// sdnApplianceLauncherPath is the appliance's binary launcher
+// (usbimage/overlay/usr/lib/zfsnas/run-zfsnas.sh).
+var sdnApplianceLauncherPath = "/usr/lib/zfsnas/run-zfsnas.sh"
+
+func sdnApplianceLauncher() string {
+	if !ApplianceMode() {
+		return ""
+	}
+	if fi, err := os.Stat(sdnApplianceLauncherPath); err == nil && fi.Mode()&0111 != 0 {
+		return sdnApplianceLauncherPath
+	}
+	return ""
+}
+
+// SDNStartGatewayMonitor (re)starts the gateway monitor. Enable calls it once
+// the configuration is saved: the restart in SDNInstallUnit comes before
+// that, when the unit's ConditionPathExists on config.json is still unmet, so
+// systemd skips it and failover, the event history and latency stay off.
+func SDNStartGatewayMonitor() error {
 	_, err := sdnRun.Run(nil, "systemctl", "restart", sdnGWUnitName)
 	return err
 }
