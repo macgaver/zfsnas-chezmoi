@@ -347,6 +347,9 @@ func main() {
 	// callback lives on the system package so we don't create an import
 	// cycle (alerts already imports system via the interlink relay sub).
 	system.OnVMUnexpectedStop = func(name, details, cause string) {
+		if system.InstanceAlertsMuted(name) { // "No alerts for this instance"
+			return
+		}
 		subject := name + " stopped unexpectedly"
 		body := "Instance: " + name + "\nState change: " + details + "\nDetected cause: " + cause + "\n"
 		if err := alerts.Send(alerts.EventVMUnexpectedStop, subject, "vm_unexpected_stop", body); err != nil {
@@ -388,6 +391,7 @@ func main() {
 
 	// ===== InterLink peer connectivity watcher (5-min ping + down/up alerts) =====
 	handlers.StartInterlinkWatcher(appCfg)
+	handlers.StartInstanceDiskWatcher()
 
 	// ===== Auto-load encryption keys for encrypted pools =====
 	autoLoadEncryptionKeys(absConfig)

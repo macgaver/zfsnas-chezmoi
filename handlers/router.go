@@ -392,6 +392,15 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeApply)))).Methods("POST")
 	r.Handle("/api/appliance/upgrade/cancel",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceUpgradeCancel)))).Methods("POST")
+	// --- USB appliance: move the OS to an internal disk (web page only) ---
+	r.Handle("/api/appliance/where",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceWhere)))).Methods("GET")
+	r.Handle("/api/appliance/install-targets",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceInstallTargets)))).Methods("GET")
+	r.Handle("/api/appliance/install-disk",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceInstallStart)))).Methods("POST")
+	r.Handle("/api/appliance/install-disk/status",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleApplianceInstallStatus)))).Methods("GET")
 
 	// --- Sudoers Hardening (admin only) ---
 	r.Handle("/api/sudoers/status",

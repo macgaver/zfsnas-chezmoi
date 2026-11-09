@@ -568,10 +568,12 @@ func runComposeUpdatePolicy(p config.ComposeUpdatePolicy, appCfg *config.AppConf
 			Action: audit.ActionComposeUpdate, Target: "compose:" + p.Instance,
 			Result: audit.ResultError, Details: err.Error(),
 		})
-		go alerts.Send(alerts.EventComposeUpdateFailure, //nolint:errcheck
-			"Compose stack auto-update failed: "+p.Instance,
-			"compose_update_failure",
-			fmt.Sprintf("Scheduled auto-update of Compose stack %q failed:\n\n%v", p.Instance, err))
+		if !system.InstanceAlertsMuted(p.Instance) {
+			go alerts.Send(alerts.EventComposeUpdateFailure, //nolint:errcheck
+				"Compose stack auto-update failed: "+p.Instance,
+				"compose_update_failure",
+				fmt.Sprintf("Scheduled auto-update of Compose stack %q failed:\n\n%v", p.Instance, err))
+		}
 		return
 	}
 	audit.Log(audit.Entry{

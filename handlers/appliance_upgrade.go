@@ -271,9 +271,13 @@ func readApplianceWriteMeta() applianceWriteMeta {
 	return m
 }
 
-// applianceStickDisk returns the disk holding the appliance image ("sdc"),
-// found the same way zfsnas-upgrade-image finds it: by the ISO volume label.
+// applianceStickDisk returns the system disk the upgrade writes ("sdc",
+// "nvme0n1"), found the same way zfsnas-upgrade-image finds it: the disk
+// holding the settings store in use, else the ISO volume label.
 func applianceStickDisk() string {
+	if m := system.ApplianceMediumInfo(); m.Disk != "" {
+		return m.Disk
+	}
 	part, err := filepath.EvalSymlinks("/dev/disk/by-label/ZFSNAS-USB")
 	if err != nil {
 		return ""

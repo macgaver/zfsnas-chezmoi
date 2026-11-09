@@ -7,7 +7,10 @@ H=../hooks/60zfsnas_persist
 T=$(mktemp -d)
 LOOP=""
 ZLOOP=""
+DLOOP=""
 cleanup() {
+    mountpoint -q "$T/dstore" 2>/dev/null && umount "$T/dstore"
+    [ -n "$DLOOP" ] && losetup -d "$DLOOP" 2>/dev/null
     umount -R "$T/root" 2>/dev/null || true    # any leftover binds
     mountpoint -q "$T/store-mnt" 2>/dev/null && umount "$T/store-mnt"
     [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null
@@ -92,4 +95,57 @@ fi
 losetup -d "$ZLOOP"
 ZLOOP=""
 echo "PASS: zp_part_at_sector"
+
+# ---- 5. internal disk: store re-registered at its exact size, pool back ---
+# A 4 GiB "disk": store at 1 GiB (512 MiB) + a pool partition after it,
+# then the image dd is simulated by dropping both entries (power cut before
+# the upgrade could put them back).
+truncate -s 4G "$T/disk.img"
+DLOOP=$(losetup -f --partscan --show "$T/disk.img")
+SS=2097152; SE=3145727; PS=3145728; PE=$(( 8388608 - 34 - 1 ))
+sgdisk -n "4:$SS:$SE" -t 4:8300 -c 4:ZFSNAS-PERSIST -n "5:$PS:$PE" -t 5:BF01 -c 5:zpool-1 "$DLOOP" >/dev/null
+partx -a "$DLOOP" >/dev/null 2>&1 || partx -u "$DLOOP" >/dev/null 2>&1
+mke2fs -t ext4 -q -L ZFSNAS-PERSIST "${DLOOP}p4"
+mkdir -p "$T/byid" "$T/dstore"
+ln -s "$DLOOP" "$T/byid/nvme-TEST_DISK_1"
+ln -s "${DLOOP}p4" "$T/byid/nvme-TEST_DISK_1-part4"
+ZP_BYID_DIR="$T/byid"
+[ "$(zp_disk_id "$DLOOP")" = "nvme-TEST_DISK_1" ] || fail "zp_disk_id"
+mount "${DLOOP}p4" "$T/dstore"
+mkdir -p "$T/dstore/.zfsnas-persist"
+cat > "$T/dstore/.zfsnas-persist/disk-layout.conf" <<EOF
+VERSION=1
+DISK_ID=nvme-TEST_DISK_1
+SECTOR_SIZE=512
+PART=4:$SS:$SE:8300:ZFSNAS-PERSIST
+PART=5:$PS:$PE:BF01:zpool-1
+POOL_NAME=zpool-1
+EOF
+umount "$T/dstore"
+ZP_DISK="$DLOOP"
+[ "$(zp_fs_bytes "$DLOOP" $((SS * 512)))" = $(( (SE - SS + 1) * 512 )) ] || fail "zp_fs_bytes $(zp_fs_bytes "$DLOOP" $((SS * 512)))"
+echo "PASS: zp_disk_id + zp_fs_bytes"
+sgdisk -d 4 -d 5 "$DLOOP" >/dev/null; partx -d "$DLOOP" >/dev/null 2>&1 || true
+off=$(zp_scan_for_store) || fail "scan found no store on the disk"
+[ "$off" = $((SS * 512)) ] || fail "scan offset $off"
+fsb=$(zp_fs_bytes "$DLOOP" "$off"); last=$(( (off + fsb) / 512 - 1 ))
+zp_register_partition "$off" "$last" || fail "register store"
+[ "$(cat "/sys/class/block/$(basename "$ZP_PART")/size")" = $((SE - SS + 1)) ] || fail "store not registered at its exact size"
+mount "$ZP_PART" "$T/dstore"
+zp_restore_layout "$T/dstore"
+umount "$T/dstore"
+pool=$(zp_part_at_sector "$PS") || fail "pool partition not re-registered"
+[ "$(cat "/sys/class/block/$(basename "$pool")/size")" = $((PE - PS + 1)) ] || fail "pool partition wrong size"
+sgdisk -i 5 "$DLOOP" 2>/dev/null | grep -q "zpool-1" || sgdisk -p "$DLOOP" | grep -q zpool-1 || fail "pool label"
+echo "PASS: store exact size + pool re-registered from the layout"
+
+# ---- 6. a layout naming ANOTHER disk is ignored ---------------------------
+sgdisk -d "$(basename "$pool" | sed 's/.*p//')" "$DLOOP" >/dev/null; partx -d "$pool" >/dev/null 2>&1 || partx -u "$DLOOP" >/dev/null 2>&1
+mount "$ZP_PART" "$T/dstore"
+sed -i 's/^DISK_ID=.*/DISK_ID=nvme-SOME_OTHER_DISK/' "$T/dstore/.zfsnas-persist/disk-layout.conf"
+zp_restore_layout "$T/dstore"
+umount "$T/dstore"
+if zp_part_at_sector "$PS" >/dev/null; then fail "layout of another disk was applied"; fi
+echo "PASS: foreign layout ignored"
+losetup -d "$DLOOP"; DLOOP=""
 echo "hook_test: ALL PASS"

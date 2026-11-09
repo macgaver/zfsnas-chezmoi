@@ -554,7 +554,7 @@ func HandleLXDSetConfig(w http.ResponseWriter, r *http.Request) {
 	for _, k := range []string{
 		"description", "cpu_limit", "cpu_pin", "cpu_sockets", "cpu_shares",
 		"cpu_limit_pct", "memory_limit", "memory_hugepages", "memory_reservation",
-		"nesting", "autostart", "force_running", "stateful_snapshots",
+		"nesting", "autostart", "force_running", "no_alerts", "stateful_snapshots",
 		"unprivileged", "firmware", "secure_boot", "tpm", "machine_type",
 		"disable_virtual_vga", "swap_limit", "feature_keyctl",
 	} {

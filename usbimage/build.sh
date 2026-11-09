@@ -75,7 +75,9 @@ stage_chroot() {
     # A checkout missing overlay files (e.g. hidden by an ignore rule) would
     # otherwise build an image without its launcher and network scripts.
     for f in overlay/usr/lib/zfsnas/run-zfsnas.sh overlay/usr/lib/zfsnas/gen-net-config.sh \
-             overlay/etc/systemd/system/zfsnas.service overlay/usr/local/sbin/zfsnas-upgrade-image; do
+             overlay/etc/systemd/system/zfsnas.service overlay/usr/local/sbin/zfsnas-upgrade-image \
+             overlay/usr/local/sbin/zfsnas-install-disk overlay/usr/lib/zfsnas/disk-targets.py \
+             overlay/etc/systemd/system/zfsnas-disk-heal.service; do
         [ -f "$f" ] || { echo "overlay incomplete: $f is missing from this checkout (ignored by git?)"; exit 1; }
     done
     # overlay files, manifest, hooks — BEFORE chroot-setup so
@@ -148,6 +150,13 @@ stage_squashfs() {
         "$(chroot "$ROOTFS" dpkg-query -W -f='${Version}' incus 2>/dev/null || true)" \
         "$("$ROOTFS/usr/local/bin/rustfs" --version 2>/dev/null | sed -n '1s/^rustfs //p')" \
         > "$ROOTFS/etc/zfsnas-release"
+    # The ISO9660 volume UUID is a timestamp xorriso stamps at build time.
+    # Pin it here and record it in the image, so a running appliance can tell
+    # whether the image it booted is the one on its system disk (an internal
+    # disk started through the old stick's boot partition would not be).
+    ISO_STAMP=$(date -u +%Y%m%d%H%M%S00)
+    echo "$ISO_STAMP" > "$WORK/iso-stamp"
+    echo "iso_uuid=$(echo "$ISO_STAMP" | sed -E 's/^(....)(..)(..)(..)(..)(..)(..)$/\1-\2-\3-\4-\5-\6-\7/')" >> "$ROOTFS/etc/zfsnas-release"
     # Console pre-login line (agetty): name the appliance, not just Ubuntu.
     # Display only — version checks read os-release / zfsnas-release, never this.
     printf 'ZNAS Appliance %s (Ubuntu %s) \\n \\l\n\n' "$(appliance_version)" \
@@ -282,8 +291,11 @@ EOF
     # grub-mkrescue parity: -partition_offset 16 gives the ISO9660 region a
     # real partition-table entry on dd'd sticks — the persist hook's sgdisk
     # logic needs a sane GPT.
+    # same stamp as iso_uuid in /etc/zfsnas-release (stage_squashfs)
+    local stamp_args=()
+    [ -s "$WORK/iso-stamp" ] && stamp_args=("--modification-date=$(cat "$WORK/iso-stamp")")
     xorriso -as mkisofs \
-        -V "$ISO_LABEL" -iso-level 3 -full-iso9660-filenames \
+        -V "$ISO_LABEL" -iso-level 3 -full-iso9660-filenames "${stamp_args[@]}" \
         -rational-rock -joliet -joliet-long \
         -partition_offset 16 \
         --grub2-mbr "$GRUBLIB/boot_hybrid.img" \

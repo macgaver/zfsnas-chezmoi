@@ -7,6 +7,10 @@ import (
 )
 
 func HandleReboot(w http.ResponseWriter, r *http.Request) {
+	if ApplianceInstallActive() {
+		jsonErr(w, http.StatusConflict, "ZNAS is being moved to an internal disk — wait for it to finish (Platform → Where ZNAS runs).")
+		return
+	}
 	if ApplianceImageWriteActive() {
 		jsonErr(w, http.StatusConflict, "The appliance image is being written to the USB stick — rebooting now would leave it unbootable. Wait for the write to finish (Platform → USB Appliance Upgrades).")
 		return
@@ -27,6 +31,10 @@ func HandleReboot(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleShutdown(w http.ResponseWriter, r *http.Request) {
+	if ApplianceInstallActive() {
+		jsonErr(w, http.StatusConflict, "ZNAS is being moved to an internal disk — wait for it to finish (Platform → Where ZNAS runs).")
+		return
+	}
 	if ApplianceImageWriteActive() {
 		jsonErr(w, http.StatusConflict, "The appliance image is being written to the USB stick — shutting down now would leave it unbootable. Wait for the write to finish (Platform → USB Appliance Upgrades).")
 		return

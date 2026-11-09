@@ -55,15 +55,41 @@ MSG
     exit 1
 fi
 
-# --- locate the stick -------------------------------------------------------
-part=$(blkid -o device -t LABEL="$ISO_LABEL" 2>/dev/null | head -n1)
-[ -n "$part" ] || die "could not find the appliance medium (label $ISO_LABEL)"
-name=$(basename "$part")
-disk="/dev/$(basename "$(readlink -f "/sys/class/block/$name/..")")"
-[ -b "$disk" ] || die "could not resolve the stick's disk device from $part"
-note "stick: $disk (image partition $part)"
+# --- locate the system disk -------------------------------------------------
+# The disk to write is the one holding the settings store in use (/persist),
+# for a stick and an internal disk alike. Never "the first disk with the
+# image label": after a move to an internal disk the old stick carries the
+# same label, and writing it instead would leave the disk on the old image.
+parent_disk() {
+    local n p
+    n=$(basename "$1")
+    p=$(basename "$(readlink -f "/sys/class/block/$n/..")")
+    if [ "$p" = "block" ] || [ -z "$p" ]; then echo "/dev/$n"; else echo "/dev/$p"; fi
+}
+store=$(findmnt -n -o SOURCE /persist 2>/dev/null || true)
+disk="" part=""
+if [ -n "$store" ] && [ -b "$store" ]; then
+    disk=$(parent_disk "$store")
+    for d in $(blkid -o device -t LABEL="$ISO_LABEL" 2>/dev/null); do
+        [ "$(parent_disk "$d")" = "$disk" ] && [ "$d" != "$disk" ] && { part="$d"; break; }
+    done
+    [ -n "$part" ] || die "the settings disk $disk carries no appliance image (label $ISO_LABEL)"
+else
+    store=""
+    part=$(blkid -o device -t LABEL="$ISO_LABEL" 2>/dev/null | head -n1)
+    [ -n "$part" ] || die "could not find the appliance medium (label $ISO_LABEL)"
+    disk=$(parent_disk "$part")
+fi
+[ -b "$disk" ] || die "could not resolve the system disk from $part"
+LAYOUT=/persist/.zfsnas-persist/disk-layout.conf
+if [ -n "$store" ] && [ -f "$LAYOUT" ]; then
+    note "internal disk: $disk (image partition $part)"
+else
+    LAYOUT=""
+    note "stick: $disk (image partition $part)"
+fi
 
-store=$(blkid -o device -t LABEL="$PERSIST_LABEL" 2>/dev/null | head -n1)
+[ -n "$store" ] || store=$(blkid -o device -t LABEL="$PERSIST_LABEL" 2>/dev/null | head -n1)
 if [ -n "$store" ]; then
     sname=$(basename "$store")
     store_start_bytes=$(( $(cat "/sys/class/block/$sname/start") * 512 ))
@@ -106,8 +132,45 @@ fi
 note "writing the image (settings partition is past the end of it and stays put)…"
 dd if="$SRC" of="$disk" bs=4M conv=notrunc,fsync status=progress
 sync
+
+# --- internal disk: put our partitions back ---------------------------------
+# The dd replaced the partition table with the image's. On a stick the boot
+# hook re-adopts the store by scanning; an internal disk also has the
+# zpool-1 partition after it, so restore every entry of the recorded layout
+# now, in ONE sgdisk call (-e moves the backup GPT to the disk end; separate
+# calls on a disk with a mounted partition lose each other's writes), with
+# fresh disk/partition GUIDs (-G) so the disk never shares them with the
+# stick. Then the UEFI entry is re-pointed at the ESP's new GUID. A power
+# cut before this point is covered by the boot hook (zp_restore_layout).
+if [ -n "$LAYOUT" ]; then
+    note "restoring the settings and pool partitions…"
+    args=()
+    for n in $(sgdisk -p "$disk" 2>/dev/null | awk '$1 ~ /^[0-9]+$/ && $1 >= 4 {print $1}'); do
+        args+=(-d "$n")
+    done
+    while IFS=: read -r num start end typ label; do
+        args+=(-n "$num:$start:$end" -t "$num:$typ" -c "$num:$label")
+    done < <(sed -n 's/^PART=//p' "$LAYOUT")
+    knob=/proc/sys/fs/bdev_allow_write_mounted prev=""
+    [ -f "$knob" ] && { prev=$(cat "$knob"); echo 1 > "$knob" || true; }
+    sgdisk -e "${args[@]}" -G "$disk" >/dev/null || die "could not restore the partition table — do NOT reboot; run: zfsnas-install-disk --heal"
+    [ -n "$prev" ] && echo "$prev" > "$knob" || true
+    partx -u "$disk" 2>/dev/null || partx -a "$disk" 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
+    while IFS=: read -r num start end typ label; do
+        sgdisk -i "$num" "$disk" 2>/dev/null | grep -q "First sector: $start " \
+            || die "partition $num ($label) is not back at sector $start — do NOT reboot; run: zfsnas-install-disk --heal"
+    done < <(sed -n 's/^PART=//p' "$LAYOUT")
+    if [ -d /sys/firmware/efi ] && command -v zfsnas-install-disk >/dev/null; then
+        zfsnas-install-disk --boot-entry "$disk" || note "warning: could not refresh the UEFI boot entry"
+    fi
+fi
 [ -n "$URL" ] && rm -f "$SRC" "$SRC.sha256"
 
+if [ -n "$LAYOUT" ]; then
+    echo
+    echo "==> Done. Reboot to start the new image (settings and pool partitions are in place)."
+else
 cat <<'MSG'
 
 ==> Done. Reboot to start the new image.
@@ -117,3 +180,4 @@ cat <<'MSG'
     scanning the stick on the next boot and re-adopts it automatically
     (the console will log "re-adopted store … after reflash").
 MSG
+fi

@@ -136,7 +136,7 @@ apt-get install -y \
     ifupdown bridge-utils \
     nftables conntrack iputils-ping iputils-arping ppp dnsmasq-base wireguard-tools suricata suricata-update ddclient \
     gdisk parted dosfstools e2fsprogs zstd \
-    python3 jq net-tools ethtool lsof nvme-cli lsscsi
+    python3 jq net-tools ethtool lsof nvme-cli lsscsi efibootmgr
 
 # Realtek vendor NIC drivers (r8168: RTL8111/8168 family, r8125: RTL8125
 # 2.5G). The in-kernel r8169 already drives every Realtek chip and stays the
@@ -290,6 +290,7 @@ systemctl enable networking.service 2>/dev/null || true
 systemctl enable zfsnas-netgen.service zfsnas-netfallback.service
 systemctl enable zfsnas-authsync.path
 systemctl enable zfsnas-hostnat.service
+systemctl enable zfsnas-disk-heal.service
 
 # SDN / Firewall boot unit (PLANS/spec-sdn-firewall.md). Pre-installed and
 # enabled, but inert: ConditionPathExists only holds once the owner enables

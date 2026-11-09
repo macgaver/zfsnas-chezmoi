@@ -1,0 +1,313 @@
+#!/bin/bash
+# Move the ZNAS appliance OS from its USB stick to an internal disk.
+# PLANS/plan-appliance-internal-disk.md — run by the web portal (Platform →
+# "Where ZNAS runs"), never from a console: erasing a disk needs an admin who
+# re-entered their password.
+#
+# The internal disk becomes the same thing as the stick: the image dd-ed raw
+# at the front (runs from RAM, changes outside the settings are lost at
+# reboot), the settings store at 8 GiB, and zpool-1 from 16 GiB to the end.
+#
+# Usage:
+#   zfsnas-install-disk --install DISK --confirm DISK [--pool NAME | --no-pool]
+#                       [--image FILE.iso]
+#   zfsnas-install-disk --boot-entry DISK   (re)create the UEFI "ZNAS System" entry
+#   zfsnas-install-disk --heal              boot-time repair on an internal-disk install
+#
+# State for the portal: /run/zfsnas-install/{log,rc,meta}. Every step is
+# logged as "STEP <n> <name>" so the page can show a checklist.
+set -uo pipefail
+
+STORE_START=16777216        # 8 GiB in 512-byte sectors (the stick's FRESH_STORE_OFFSET)
+STORE_SECTORS=16777216      # 8 GiB
+PERSIST_LABEL=ZFSNAS-PERSIST
+MOVED_LABEL=ZFSNAS-MOVED
+ISO_LABEL=ZFSNAS-USB
+BOOT_LABEL="ZNAS System"
+STATE=/run/zfsnas-install
+TARGETS=/usr/lib/zfsnas/disk-targets.py
+
+STOPPED=0
+die()  {
+    echo "error: $*" >&2
+    if [ "$STOPPED" = 1 ]; then      # never leave the portal or Incus down
+        systemctl start incus.socket incus.service zfsnas.service 2>/dev/null || true
+    fi
+    [ -d "$STATE" ] && echo 1 > "$STATE/rc"
+    exit 1
+}
+note() { echo "==> $*"; }
+step() { echo "STEP $1 $2"; }
+
+parent_disk() {
+    local n p
+    n=$(basename "$(readlink -f "$1")")
+    p=$(basename "$(readlink -f "/sys/class/block/$n/..")")
+    if [ "$p" = "block" ] || [ -z "$p" ]; then echo "/dev/$n"; else echo "/dev/$p"; fi
+}
+# Same rule as the boot hook's zp_disk_id and disk-targets.py's disk_id.
+disk_id() {
+    local t l b
+    t=$(readlink -f "$1")
+    for l in /dev/disk/by-id/*; do
+        b=$(basename "$l")
+        case "$b" in *-part*|wwn-*|nvme-eui.*|nvme-nvme.*) continue ;; esac
+        [ "$(readlink -f "$l")" = "$t" ] && { echo "$b"; return 0; }
+    done
+    return 1
+}
+# Partition device of number $2 on disk $1 (sda4, nvme0n1p4), via sysfs.
+part_dev() {
+    local d n f
+    d=$(basename "$1")
+    for f in /sys/class/block/"$d"*/partition; do
+        [ -f "$f" ] || continue
+        n=$(cat "$f")
+        [ "$n" = "$2" ] && { echo "/dev/$(basename "$(dirname "$f")")"; return 0; }
+    done
+    return 1
+}
+esp_number() {   # number of the EFI System Partition on disk $1
+    sgdisk -p "$1" 2>/dev/null | awk '$1 ~ /^[0-9]+$/ && $6 == "EF00" {print $1; exit}'
+}
+lift_guard() {   # Linux >= 6.5 refuses table writes on a disk with a mounted partition
+    KNOB=/proc/sys/fs/bdev_allow_write_mounted KPREV=""
+    [ -f "$KNOB" ] && { KPREV=$(cat "$KNOB"); echo 1 > "$KNOB" 2>/dev/null || true; }
+}
+restore_guard() { [ -n "${KPREV:-}" ] && echo "$KPREV" > "$KNOB" 2>/dev/null; return 0; }
+
+# --- boot entry -------------------------------------------------------------
+boot_entry() {
+    local disk=$1 n uuid b
+    [ -d /sys/firmware/efi ] || { note "legacy BIOS boot: no UEFI entry needed"; return 0; }
+    n=$(esp_number "$disk"); [ -n "$n" ] || die "no EFI partition on $disk"
+    uuid=$(sgdisk -i "$n" "$disk" | awk -F': ' '/Partition unique GUID/ {print tolower($2)}')
+    for b in $(efibootmgr | awk -v l="$BOOT_LABEL" 'index($0, l) && /^Boot[0-9A-F]{4}/ {print substr($1,5,4)}'); do
+        efibootmgr -q -b "$b" -B || true
+    done
+    efibootmgr -q -c -d "$disk" -p "$n" -L "$BOOT_LABEL" -l '\EFI\BOOT\BOOTX64.EFI' || die "efibootmgr could not add the boot entry"
+    efibootmgr -v | grep -F "$BOOT_LABEL" | grep -qi "$uuid" || die "the new boot entry does not point at $disk"
+    note "UEFI entry \"$BOOT_LABEL\" → $disk partition $n (first in the boot order)"
+}
+
+# --- heal (boot) -------------------------------------------------------------
+# Runs at every boot of an internal-disk install (zfsnas-disk-heal.service):
+# the disk must not share GUIDs with a stick still plugged in (the copied
+# image carries the same ones), and its UEFI entry must point at its ESP.
+heal() {
+    local layout=/persist/.zfsnas-persist/disk-layout.conf store disk mine dup d esp uuid
+    [ -f "$layout" ] || { note "not an internal-disk install"; return 0; }
+    store=$(findmnt -n -o SOURCE /persist) || die "/persist is not mounted"
+    disk=$(parent_disk "$store")
+    mine=$(sed -n 's/^DISK_ID=//p' "$layout")
+    [ "$(disk_id "$disk")" = "$mine" ] || die "the settings store isn't on the disk its layout names ($mine)"
+    dup=0
+    mydisk_guid=$(sgdisk -p "$disk" 2>/dev/null | awk -F': ' '/Disk identifier/ {print $2}')
+    for d in $(blkid -o device -t LABEL="$ISO_LABEL" 2>/dev/null); do
+        d=$(parent_disk "$d"); [ "$d" = "$disk" ] && continue
+        [ "$(sgdisk -p "$d" 2>/dev/null | awk -F': ' '/Disk identifier/ {print $2}')" = "$mydisk_guid" ] && dup=1
+    done
+    if [ "$dup" = 1 ]; then
+        lift_guard; sgdisk -G "$disk" >/dev/null && note "new GUIDs: $disk shared them with another ZNAS disk"; restore_guard
+        partx -u "$disk" 2>/dev/null || true
+    fi
+    mkdir -p "$STATE"
+    # Did this boot run the image on this disk? The image records its ISO
+    # volume UUID (iso_uuid, a per-build stamp); the disk's ISO9660 partition
+    # carries the same one when it's that image. If not, the firmware started
+    # another disk (the old stick first in the boot order): this boot works,
+    # but an upgrade written to this disk wouldn't take effect. The portal
+    # warns (Platform → Where ZNAS runs). Firmware entries can't tell us this
+    # reliably: after an upgrade they may fall back to an automatic entry.
+    local running ondisk isop
+    running=$(sed -n 's/^iso_uuid=//p' /etc/zfsnas-release 2>/dev/null)
+    isop=$(part_dev "$disk" 1) && ondisk=$(blkid -s UUID -o value "$isop" 2>/dev/null)
+    if [ -n "$running" ] && [ -n "${ondisk:-}" ]; then
+        if [ "$running" = "$ondisk" ]; then
+            echo disk > "$STATE/booted-from"
+        else
+            echo other > "$STATE/booted-from"
+            note "warning: this boot ran image $running, not the one on $disk ($ondisk)"
+        fi
+    fi
+    if [ -d /sys/firmware/efi ]; then
+        esp=$(esp_number "$disk")
+        uuid=$(sgdisk -i "$esp" "$disk" | awk -F': ' '/Partition unique GUID/ {print tolower($2)}')
+        if efibootmgr -v 2>/dev/null | grep -F "$BOOT_LABEL" | grep -qi "$uuid"; then
+            note "UEFI entry OK"
+        else
+            boot_entry "$disk"
+        fi
+    fi
+}
+
+# --- install -------------------------------------------------------------------
+install() {
+    local disk=$1 confirm=$2 pool=$3 image=$4
+    local name info nvfmt sys stick img_bytes mib pool_start store_end store_part id guid
+    mkdir -p "$STATE"; echo running > "$STATE/rc"
+    name=$(basename "$disk"); disk=/dev/$name
+    [ "$confirm" = "$name" ] || die "the typed disk name \"$confirm\" doesn't match $name"
+
+    step 1 preflight
+    grep -qw toram /proc/cmdline || die "the appliance must run from RAM (\"load OS to RAM\" boot entry)"
+    [ -f /persist/.zfsnas-persist/disk-layout.conf ] && die "ZNAS already runs from an internal disk"
+    sys=$(findmnt -n -o SOURCE /persist) || die "no settings store in use: nothing to move"
+    stick=$(parent_disk "$sys")
+    info=$(python3 -I "$TARGETS" --check "$name") || die "$name can't be used: $info"
+    nvfmt=$(python3 -I -c 'import json,sys; v=json.load(sys.stdin).get("nvme_format"); print("" if v is None else v)' <<<"$info")
+    note "target $disk: $(python3 -I -c 'import json,sys; t=json.load(sys.stdin); print(t["model"], t["serial"], t["size"]//1000**3, "GB")' <<<"$info")"
+    note "moving from the stick $stick (settings $sys)"
+    if [ -n "$pool" ] && zpool list -H -o name "$pool" >/dev/null 2>&1; then
+        die "a pool named $pool already exists"
+    fi
+
+    step 2 image
+    local src=$stick
+    if [ -n "$image" ]; then
+        [ -f "$image" ] || die "no such image: $image"
+        if [ -f "$image.sha256" ]; then
+            ( cd "$(dirname "$image")" && sha256sum -c --quiet "$(basename "$image").sha256" ) || die "image checksum mismatch"
+        fi
+        src=$image; img_bytes=$(stat -c %s "$image")
+    else
+        # the stick's image region: up to the end of the last partition that
+        # isn't the settings store
+        local end
+        end=$(sgdisk -p "$stick" 2>/dev/null | awk -v p="$PERSIST_LABEL" '$1 ~ /^[0-9]+$/ && $NF != p {e = $3} END {print e}')
+        [ -n "$end" ] || die "can't read the stick's partition table"
+        img_bytes=$(( (end + 1) * 512 ))
+    fi
+    [ "$img_bytes" -lt $(( STORE_START * 512 )) ] || die "the image is larger than the space before the settings store"
+    mib=$(( (img_bytes + 1048575) / 1048576 ))
+    note "image: $mib MiB from $src"
+
+    if [ -n "$nvfmt" ]; then
+        step 3 nvme-format
+        note "switching $name to 512-byte sectors (NVMe format $nvfmt)…"
+        nvme format "$disk" --lbaf="$nvfmt" --ses=0 --force >/dev/null || die "nvme format failed"
+        nvme ns-rescan "/dev/$(echo "$name" | sed 's/n[0-9]*$//')" 2>/dev/null || true
+        udevadm settle; sleep 2
+        [ "$(cat "/sys/block/$name/queue/logical_block_size")" = 512 ] || die "$name still isn't in 512-byte sectors"
+    fi
+
+    step 4 wipe
+    for p in $(lsblk -nro PATH,FSTYPE "$disk" | awk '$2 == "zfs_member" {print $1}'); do
+        zpool labelclear -f "$p" 2>/dev/null || true
+    done
+    for p in $(lsblk -nro PATH,TYPE "$disk" | awk '$2 == "part" {print $1}'); do
+        wipefs -aq "$p" 2>/dev/null || true
+    done
+    wipefs -aq "$disk" 2>/dev/null || true
+    sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
+    [ -n "$nvfmt" ] || blkdiscard -f "$disk" 2>/dev/null || true
+
+    step 5 write-image
+    dd if="$src" of="$disk" bs=1M count="$mib" iflag=fullblock conv=fsync status=progress 2>&1 \
+        | tr '\r' '\n' | grep -E 'copied|bytes' | tail -n1 || true
+    sync
+    cmp -n "$img_bytes" "$src" "$disk" || die "the image on $name doesn't match its source"
+    note "image written and verified"
+
+    step 6 partitions
+    local last="" args=() store_arg_end
+    store_end=$(( STORE_START + STORE_SECTORS - 1 ))
+    pool_start=$(( store_end + 1 ))
+    store_arg_end=$store_end
+    [ -n "$pool" ] || store_arg_end=0
+    for n in $(sgdisk -p "$disk" 2>/dev/null | awk '$1 ~ /^[0-9]+$/ && $1 >= 4 {print $1}'); do args+=(-d "$n"); done
+    # End 0 = "last usable sector": sgdisk knows the exact GPT tail, which
+    # -e only moves to the disk end in this same call.
+    args+=(-n "4:$STORE_START:$store_arg_end" -t 4:8300 -c "4:$PERSIST_LABEL")
+    [ -n "$pool" ] && args+=(-n "5:$pool_start:0" -t 5:BF01 -c "5:$pool")
+    sgdisk -e "${args[@]}" -G "$disk" >/dev/null || die "could not write the partition table"
+    last_of() { sgdisk -i "$1" "$disk" | awk '/Last sector/ {print $3}'; }
+    store_end=$(last_of 4)
+    [ -n "$pool" ] && last=$(last_of 5)
+    partx -u "$disk" 2>/dev/null || partx -a "$disk" 2>/dev/null || true
+    udevadm settle
+    store_part=$(part_dev "$disk" 4) || die "settings partition didn't appear"
+    if [ -n "$pool" ]; then part_dev "$disk" 5 >/dev/null || die "pool partition didn't appear"; fi
+    id=$(disk_id "$disk") || die "$name has no /dev/disk/by-id name"
+
+    step 7 boot-entry
+    boot_entry "$disk"
+
+    if [ -n "$pool" ]; then
+        step 8 pool
+        # Created BEFORE the settings copy: the pool lands in the running
+        # zpool.cache (kept in the store), so the next boot imports it.
+        zpool create -f -o ashift=12 -o autotrim=on -O compression=lz4 -O atime=off \
+            -m "/mnt/$pool" "$pool" "/dev/disk/by-id/$id-part5" || die "zpool create failed"
+        guid=$(zpool get -H -o value guid "$pool")
+        note "pool $pool created ($(zpool list -H -o size "$pool"))"
+    fi
+
+    step 9 settings
+    mkfs.ext4 -q -F -L "$PERSIST_LABEL" "$store_part" || die "mkfs failed"
+    local running=""
+    if command -v incus >/dev/null && systemctl is-active -q incus 2>/dev/null; then
+        running=$(incus list --format csv -c n status=running 2>/dev/null | tr '\n' ' ')
+        for i in $running; do note "stopping $i"; incus stop "$i" --timeout 90 2>/dev/null || incus stop "$i" --force; done
+    fi
+    note "stopping the portal and Incus for a consistent copy…"
+    STOPPED=1
+    systemctl stop zfsnas.service 2>/dev/null || true
+    systemctl stop incus.service incus.socket 2>/dev/null || true
+    sync
+    mkdir -p /run/zfsnas-install/newstore
+    mount "$store_part" /run/zfsnas-install/newstore || die "can't mount the new settings partition"
+    rsync -aHAX --numeric-ids /persist/ /run/zfsnas-install/newstore/ || { umount /run/zfsnas-install/newstore; die "copying the settings failed"; }
+    rm -rf /run/zfsnas-install/newstore/.zfsnas-persist/upgrade
+    {
+        echo "VERSION=1"
+        echo "DISK_ID=$id"
+        echo "SECTOR_SIZE=512"
+        echo "PART=4:$STORE_START:$store_end:8300:$PERSIST_LABEL"
+        [ -n "$pool" ] && echo "PART=5:$pool_start:$last:BF01:$pool"
+        [ -n "$pool" ] && echo "POOL_NAME=$pool" && echo "POOL_GUID=$guid"
+        echo "INSTALLED=$(date -Is)"
+    } > /run/zfsnas-install/newstore/.zfsnas-persist/disk-layout.conf
+    sync
+    umount /run/zfsnas-install/newstore
+    note "settings copied"
+
+    step 10 retire-stick
+    # Two adoptable stores with the same identity must never coexist: the
+    # stick's store is relabelled and says where its settings went.
+    printf 'Settings moved on %s to %s (%s)\n' "$(date -Is)" "$name" "$id" > /persist/.zfsnas-persist/MOVED-TO
+    sync
+    e2label "$sys" "$MOVED_LABEL" || die "could not relabel the stick's settings partition"
+
+    step 11 restart
+    systemctl start incus.socket incus.service 2>/dev/null || true
+    systemctl start zfsnas.service 2>/dev/null || true
+    STOPPED=0
+    echo "$name" > "$STATE/disk"
+    echo 0 > "$STATE/rc"
+    note "done: remove the USB stick, then restart. Changes made before the restart are not kept."
+}
+
+# --- main ------------------------------------------------------------------------
+[ "$(id -u)" -eq 0 ] || die "must run as root"
+case "${1:-}" in
+    --install)
+        DISK=${2:-}; shift 2 || die "usage: --install DISK --confirm DISK"
+        CONFIRM="" POOL="zpool-1" IMAGE=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --confirm) CONFIRM=$2; shift 2 ;;
+                --pool)    POOL=$2; shift 2 ;;
+                --no-pool) POOL=""; shift ;;
+                --image)   IMAGE=$2; shift 2 ;;
+                *) die "unknown option $1" ;;
+            esac
+        done
+        [ -n "$DISK" ] || die "no disk"
+        if [ -n "$POOL" ] && ! [[ "$POOL" =~ ^[A-Za-z][A-Za-z0-9_.:-]{0,63}$ ]]; then die "invalid pool name"; fi
+        install "$DISK" "$CONFIRM" "$POOL" "$IMAGE"
+        ;;
+    --boot-entry) boot_entry "/dev/$(basename "${2:?disk}")" ;;
+    --heal)       heal ;;
+    *) sed -n '2,20p' "$0"; exit 2 ;;
+esac

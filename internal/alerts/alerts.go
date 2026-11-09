@@ -425,6 +425,25 @@ func MinWearoutThreshold(cfg *AlertConfig) (enabled bool, pct int) {
 	return
 }
 
+// MinVMDiskFullThreshold returns the lowest VM/container disk-usage
+// threshold across enabled targets with vm_disk_full on (90 when unset).
+func MinVMDiskFullThreshold(cfg *AlertConfig) (enabled bool, pct int) {
+	for _, ev := range allEnabledEvents(cfg) {
+		if !ev.VMDiskFull {
+			continue
+		}
+		p := ev.VMDiskFullThresholdPct
+		if p <= 0 || p > 100 {
+			p = 90
+		}
+		if !enabled || p < pct {
+			pct = p
+		}
+		enabled = true
+	}
+	return
+}
+
 // MinFailedLoginThreshold returns the lowest non-zero failed-login threshold
 // across all enabled targets that have FailedLoginAlert enabled.
 func MinFailedLoginThreshold(cfg *AlertConfig) (enabled bool, threshold int) {

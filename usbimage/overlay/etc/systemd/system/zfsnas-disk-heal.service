@@ -1,0 +1,16 @@
+[Unit]
+Description=ZNAS internal-disk install: unique disk GUIDs and UEFI boot entry
+# Only on an appliance that was moved to an internal disk
+# (PLANS/plan-appliance-internal-disk.md). The boot hook already put back
+# any partition an interrupted upgrade left out of the table.
+ConditionPathExists=/persist/.zfsnas-persist/disk-layout.conf
+After=local-fs.target
+Before=zfsnas.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zfsnas-install-disk --heal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

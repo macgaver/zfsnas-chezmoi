@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"os"
 	"strings"
@@ -28,6 +29,14 @@ func HandleSetupPage(staticContent func(name string) ([]byte, error)) http.Handl
 		users, _ := config.LoadUsers()
 		if len(users) > 0 {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		// A USB stick whose settings were moved to an internal disk: never
+		// offer a fresh setup (it would look like a reset), say where they went.
+		if system.ApplianceMode() && system.PersistStatus() == "moved" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Write([]byte(settingsMovedPage(system.ApplianceMediumInfo().MovedTo)))
 			return
 		}
 		data, err := staticContent("setup.html")
@@ -81,6 +90,10 @@ func HandleLoginPage(staticContent func(name string) ([]byte, error), appCfg *co
 
 // HandleSetup processes first-run admin account creation.
 func HandleSetup(w http.ResponseWriter, r *http.Request) {
+	if system.ApplianceMode() && system.PersistStatus() == "moved" {
+		jsonErr(w, http.StatusConflict, "this USB stick's settings were moved to an internal disk: start the server from that disk")
+		return
+	}
 	users, err := config.LoadUsers()
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "failed to load users")
@@ -550,4 +563,24 @@ func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// settingsMovedPage replaces /setup on a USB stick whose settings were moved
+// to an internal disk (zfsnas-install-disk relabels its store ZFSNAS-MOVED).
+func settingsMovedPage(movedTo string) string {
+	detail := ""
+	if movedTo != "" {
+		detail = "<p class=\"d\">" + html.EscapeString(movedTo) + "</p>"
+	}
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZNAS: settings moved</title><style>
+:root{--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--sub:#6e6e73;--accent:#0a84ff}
+@media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f5f5f7;--sub:#a1a1a6}}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:16px;box-sizing:border-box}
+.c{max-width:520px;background:var(--card);border-radius:14px;padding:28px 30px;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+h1{font-size:20px;margin:0 0 12px}p{margin:0 0 12px;color:var(--sub)}.d{font-family:ui-monospace,monospace;font-size:13px;color:var(--text)}
+</style></head><body><div class="c"><h1>This USB stick's settings were moved</h1>
+<p>ZNAS was moved to an internal disk, and its settings went with it.</p>` + detail + `
+<p>Remove this USB stick and start the server again: it then starts from the internal disk. If it still starts from the stick, choose the internal disk first in the firmware boot order.</p>
+<p>Nothing was changed on this stick's settings; they are kept but not used.</p></div></body></html>`
 }

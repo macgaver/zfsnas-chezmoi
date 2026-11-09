@@ -2366,6 +2366,9 @@
           </div>
         </div>
 
+        <!-- Where ZNAS runs: USB stick or internal disk (static/appliance-disk.js) -->
+        <div class="card appliance-only" id="appliance-where-card"></div>
+
         <!-- OS update live output log -->
         <div id="updates-log-wrap" class="card appliance-hide" style="display:none;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -2458,6 +2461,10 @@
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
                 <input type="checkbox" id="lxd-edit-force-running"> Force running
                 <i class="info-tip" data-tip="When enabled, ZNAS automatically brings this instance back up if it stops without a user action through this portal.&#10;&#10;Triggers a restart on:&#10;  • guest-issued poweroff (someone ran `poweroff` / `shutdown -h` inside)&#10;  • QEMU crash, kernel OOM-kill&#10;  • `incus stop` issued from a shell on the host&#10;&#10;Stuck-in-error escalation: if the instance enters Error / Crashed / Aborted, ZNAS first tries a soft `incus start` after ~2 s; if the instance is STILL in Error 120 s later, ZNAS issues a hard reset (`incus restart --force`) to break it out of the stuck state.&#10;&#10;Every auto-restart and hard reset is recorded in the audit log as a `system` action so you can tell them apart from your own start/restart actions in Activity & Events.&#10;&#10;Does NOT trigger when you click Stop / Restart in the ZNAS UI, or when an edit modal needs a stop-apply-start cycle to apply a change.&#10;&#10;Crash-loop guard: after each auto-restart we wait at least 90 s before restarting the same instance again, so a VM that keeps dying immediately doesn't spin in a tight loop.&#10;&#10;Independent of `Auto-start on boot` — that one only fires when the host (hypervisor) reboots. This one keeps the instance running between host reboots."></i>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="lxd-edit-no-alerts"> No alerts for this instance
+                <i class="info-tip" data-tip="Skips every notification about this VM or container (email, ntfy, Gotify, Pushover, syslog, browser): unexpected stop, failed snapshot or replication of its disks, failed Compose auto-update.&#10;&#10;Events are still recorded in Activity &amp; Events. Useful for test machines that are stopped and rebuilt on purpose."></i>
               </label>
             </div>
             <p id="lxd-edit-note" style="font-size:12px;color:var(--text-3);margin:0 0 8px;"></p>
@@ -19597,7 +19604,7 @@ function _buildVirtEventSubsHTML(p) {
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-vm-created-deleted"><span>VM / Container created or deleted</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-vm-snapshot-fail"><span>VM / Container snapshot failure</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-vm-backup-fail"><span>VM / Container backup / replication failure</span></label>
-    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-vm-disk-full"><span>VM / Container disk usage exceeds <input type="number" id="al-${p}-vm-disk-pct" value="90" min="1" max="100" onclick="event.stopPropagation()">%</span></label>
+    <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-vm-disk-full"><span>VM / Container disk usage exceeds <input type="number" id="al-${p}-vm-disk-pct" value="90" min="1" max="100" onclick="event.stopPropagation()">% <i class="info-tip tip-left tip-down" data-tip="Checked every 5 minutes; one notification when a disk crosses the level, again only after it went back 5 points below. Containers: each disk against its size. VMs: the guest\'s filesystems (needs the Incus agent). Each disk can use its own level or be turned off in Edit → Disks (Alert column); instances with &quot;No alerts&quot; ticked are skipped."></i></span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-vm-host-saturation"><span>Host resource saturation from running VMs / Containers (CPU or RAM)</span></label>
     <label class="al-event-row"><input type="checkbox" id="al-${p}-ev-compose-update-fail"><span>Compose stack scheduled auto-update failure</span></label>`;
 }
@@ -32959,7 +32966,7 @@ function initUpdatesPage() {
   _loadAutoUpdateStatus();
 
   // USB appliance: the image-upgrade card replaces OS Packages there.
-  if (window._appliance) loadApplianceUpgrade(false);
+  if (window._appliance) { loadApplianceUpgrade(false); if (window._applWhereLoad) _applWhereLoad(); }
 
   // Check if an upgrade is already running in the background (user may have
   // navigated away and come back).
@@ -53092,8 +53099,11 @@ function _parseDiskSize(s) {
   if (!s) return { num: '', unit: 'GB' };
   const m = String(s).match(/^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB|KiB|MiB|GiB|TiB)?$/i);
   if (!m) return { num: s, unit: 'GB' };
-  const raw = (m[2] || 'GB').toUpperCase().replace('KIB','KB').replace('MIB','MB').replace('GIB','GB').replace('TIB','TB');
-  return { num: Math.round(+m[1]).toString(), unit: ['KB','MB','GB','TB'].includes(raw) ? raw : 'GB' };
+  // Keep the disk's own unit: "100GiB" relabelled "100 GB" made any grow
+  // below 108 GB a no-op or a shrink (100 GiB = 107.4 GB).
+  const units = ['KB','MB','GB','TB','KiB','MiB','GiB','TiB'];
+  const unit = units.find(u => u.toLowerCase() === (m[2] || 'GB').toLowerCase()) || 'GB';
+  return { num: (+m[1]).toString(), unit };
 }
 
 let _openEditDiskMenu = null;
@@ -53148,7 +53158,7 @@ function lxdEditRenderDisks() {
       <input type="number" class="input" data-di="${i}" data-df="size" value="${esc(sizeNum)}" min="${_sizeMin}"
         style="width:64px${_sizeOpac};"${_sizeRO}${_sizeBold}>
       <select class="input" data-di="${i}" data-df="unit" style="width:52px${_sizeOpac};"${isReadOnly?' disabled':''}>
-        ${['KB','MB','GB','TB'].map(u=>`<option${u===sizeUnit?' selected':''}>${u}</option>`).join('')}
+        ${(/iB$/.test(sizeUnit) ? ['KiB','MiB','GiB','TiB'] : ['KB','MB','GB','TB']).map(u=>`<option${u===sizeUnit?' selected':''}>${u}</option>`).join('')}
       </select></div>`;
 
     const reserveOpts = [[0,'Thin'],[25,'25%'],[50,'50%'],[75,'75%'],[100,'Thick']];
@@ -53191,6 +53201,20 @@ function lxdEditRenderDisks() {
       ? `<span style="font-size:9px;background:rgba(56,139,253,0.15);color:#58a6ff;border-radius:3px;padding:1px 4px;margin-right:3px;">${disk.is_root?'Root':'Profile'}</span>`
       : '';
 
+    // Space alert threshold. Containers: every disk (its ZFS size limit).
+    // VMs: the root row only — it covers the guest's filesystems.
+    const alertOpts = [['','Default'],['off','Off'],['50','50%'],['60','60%'],['70','70%'],['75','75%'],['80','80%'],['85','85%'],['90','90%'],['95','95%']];
+    const curAlert = String(disk.alert_pct || '');
+    if (curAlert && !alertOpts.some(([v]) => v === curAlert)) alertOpts.push([curAlert, curAlert + '%']);
+    const alertCell = (_lxdEditIsVM && !disk.is_root) || disk._new
+      ? `<span style="color:var(--text-3);">—</span>`
+      : `<select class="input" data-di="${i}" data-df="alert" style="width:76px;" title="${_lxdEditIsVM ? 'Notify when a filesystem inside this VM is fuller than this (needs the Incus agent)' : 'Notify when this disk is fuller than this'}. Default uses the threshold of the &quot;VM / Container disk usage&quot; notification.">
+          ${alertOpts.map(([v,l])=>`<option value="${v}"${curAlert===v?' selected':''}>${l}</option>`).join('')}
+        </select>`;
+    const snapCell = (!disk._new && disk.zfs_type === 'dataset')
+      ? `<input type="checkbox" data-di="${i}" data-df="snapx" ${disk.snaps_excluded?'checked':''} title="Snapshots don't count against this disk's size. Checked: deleting files always frees space for the container, and snapshot space comes from the pool. Unchecked (Incus default): snapshots use up the disk's size, so a container with snapshots can fill up and deleting files may not free anything.">`
+      : `<span style="color:var(--text-3);">—</span>`;
+
     let actionsCell;
     if (!canDelete) {
       actionsCell = `<span style="font-size:14px;color:var(--text-3);opacity:0.3;padding:0 4px;line-height:1;cursor:default;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
@@ -53205,7 +53229,7 @@ function lxdEditRenderDisks() {
       // span and disable the kebab/X. Skips reserve, boot, bus, cache,
       // RO toggles — none apply to a passthrough share whose contents
       // Incus regenerates on every VM start.
-      const cols = _lxdEditIsVM ? 11 : 8;
+      const cols = _lxdEditIsVM ? 12 : 10;
       const label = `<span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-3);font-style:italic;">
         <span style="font-family:monospace;font-style:normal;color:var(--text-2);">${esc(disk.name)}</span>
         <span style="font-size:11px;background:rgba(255,180,0,0.12);color:#f0b429;border:1px solid rgba(240,180,41,0.35);border-radius:3px;padding:1px 6px;font-style:normal;">Incus agent — auto-managed</span>
@@ -53228,6 +53252,8 @@ function lxdEditRenderDisks() {
       ${_lxdEditIsVM ? `<td>${bootCell}</td>` : ''}
       ${_lxdEditIsVM ? `<td>${busCell}</td>` : ''}
       ${_lxdEditIsVM ? `<td>${cacheCell}</td>` : ''}
+      <td>${alertCell}</td>
+      ${_lxdEditIsVM ? '' : `<td style="text-align:center;">${snapCell}</td>`}
       <td style="text-align:center;">${roCell}</td>
       <td style="text-align:right;">${actionsCell}</td>
     </tr>`;
@@ -53244,6 +53270,8 @@ function lxdEditRenderDisks() {
       ${_lxdEditIsVM ? '<th style="width:56px;">Boot</th>' : ''}
       ${_lxdEditIsVM ? '<th style="width:90px;" title="Per-disk bus override">Bus</th>' : ''}
       ${_lxdEditIsVM ? '<th style="width:90px;" title="QEMU cache mode">Cache</th>' : ''}
+      <th style="width:76px;" title="Space alert: notify when the disk is fuller than this">Alert <i class="info-tip tip-down" data-tip="Sends the &quot;VM / Container disk usage&quot; notification (Settings → Notifications) when this disk gets fuller than the chosen level. Default uses the level set there; Off never alerts for this disk. Checked every 5 minutes, once per crossing. For a VM, the guest's filesystems are checked (needs the Incus agent)."></i></th>
+      ${_lxdEditIsVM ? '' : '<th style="width:56px;text-align:center;" title="Snapshots don\'t count against the disk size">Snap. excl. <i class="info-tip tip-down" data-tip="Snapshots don\'t count against this disk\'s size: the size limit applies to the live data only, and snapshot space comes from the pool. Without it (the Incus default), snapshots use up the disk\'s size, so a container with snapshots can fill up and deleting files may free nothing."></i></th>'}
       <th style="width:40px;text-align:center;" title="Read-only">RO</th>
       <th style="width:30px;"></th>
     </tr></thead>
@@ -53262,13 +53290,17 @@ function lxdEditRenderDisks() {
     if (f === 'cache')   el.addEventListener('change', e => { _lxdEditDisks[i].io_cache = e.target.value; });
     if (f === 'iobus')   el.addEventListener('change', e => { _lxdEditDisks[i].io_bus   = e.target.value; });
     if (f === 'readonly')el.addEventListener('change', e => { _lxdEditDisks[i].readonly = e.target.checked; });
+    if (f === 'alert')   el.addEventListener('change', e => { _lxdEditDisks[i].alert_pct = e.target.value; });
+    if (f === 'snapx')   el.addEventListener('change', e => { _lxdEditDisks[i].snaps_excluded = e.target.checked; });
     if (f === 'del')    el.addEventListener('click',  () => { _lxdEditDisks[i]._deleted = true; lxdEditRenderDisks(); });
     if (f === 'burger') el.addEventListener('click',  e => _editDiskBurger(e, i));
     if (f === 'size' || f === 'unit') {
       const sync = () => {
         const sv = c.querySelector(`[data-di="${i}"][data-df="size"]`)?.value.trim();
         const uv = c.querySelector(`[data-di="${i}"][data-df="unit"]`)?.value || 'GB';
-        _lxdEditDisks[i].size = sv ? sv + uv : '';
+        // Incus takes whole numbers only: send "100.5 GiB" as bytes.
+        const mult = {KB:1e3,MB:1e6,GB:1e9,TB:1e12,KiB:2**10,MiB:2**20,GiB:2**30,TiB:2**40}[uv] || 1e9;
+        _lxdEditDisks[i].size = !sv ? '' : (/^\d+$/.test(sv) ? sv + uv : Math.round(+sv * mult) + 'B');
       };
       el.addEventListener(f === 'size' ? 'input' : 'change', sync);
     }
@@ -53590,6 +53622,7 @@ async function openLXDEditModal(name, type) {
   const _memUnitReset = document.getElementById('lxd-edit-memory-unit');
   if (_memUnitReset) _memUnitReset.value = 'GB';
   document.getElementById('lxd-edit-autostart').checked = false;
+  document.getElementById('lxd-edit-no-alerts').checked = false;
   document.getElementById('lxd-edit-hugepages').checked = false;
   const isVM = type === 'virtual-machine';
   // CPU labels and container/VM-specific fields
@@ -53718,6 +53751,7 @@ async function openLXDEditModal(name, type) {
     }
     if (_memUnitSel && typeof csRefresh === 'function') csRefresh('lxd-edit-memory-unit');
     document.getElementById('lxd-edit-autostart').checked = !!cfg.autostart;
+    document.getElementById('lxd-edit-no-alerts').checked = !!cfg.no_alerts;
     const _editForceChk = document.getElementById('lxd-edit-force-running');
     if (_editForceChk) _editForceChk.checked = !!cfg.force_running;
     document.getElementById('lxd-edit-hugepages').checked = !!cfg.memory_hugepages;
@@ -53984,6 +54018,12 @@ async function submitLXDEdit() {
       io_cache: d.io_cache || '', io_bus: d.io_bus || '', readonly: !!d.readonly,
       mount_path: (d.path || '').trim(),
     }));
+  // Space alert + "snapshots excluded" for every existing disk, the
+  // profile-inherited root included (kept out of the disk diff above).
+  const disk_settings = _lxdEditDisks
+    .filter(d => !d._deleted && !d._new && !d.is_agent)
+    .map(d => ({ name: d.name, pool: d.pool || '', is_root: !!d.is_root,
+                 alert_pct: d.alert_pct || '', snaps_excluded: !!d.snaps_excluded }));
 
   // Container-specific: build swap_limit string. LXD's limits.memory.swap is
   // a boolean: "true" = allow, "false" = disallow. The default is "allow",
@@ -54006,6 +54046,7 @@ async function submitLXDEdit() {
     memory_reservation:   _lxdEditIsVM ? _editGetMemReservation() : '',
     nesting:              !_lxdEditIsVM && document.getElementById('lxd-edit-nesting').checked,
     autostart:            document.getElementById('lxd-edit-autostart').checked,
+    no_alerts:            document.getElementById('lxd-edit-no-alerts').checked,
     force_running:        !!document.getElementById('lxd-edit-force-running')?.checked,
     stateful_snapshots:   _lxdEditIsVM && document.getElementById('lxd-edit-stateful-snap').checked,
     firmware:             _lxdEditIsVM ? (document.getElementById('lxd-edit-firmware')?.value || 'uefi') : '',
@@ -54026,6 +54067,7 @@ async function submitLXDEdit() {
     is_vm:                _lxdEditIsVM,
     nics:                 nics,
     disks:                disks,
+    disk_settings,
     usb_devices:          _lxdEditIsVM ? _lxdEditUSBs : [],
     pci_devices:          _lxdEditIsVM ? _lxdEditPCIs : [],
     passthrough_devices:  _lxdEditIsVM ? [] : _lxdEditCTDevs,
@@ -65657,6 +65699,7 @@ async function submitDeleteDatastore() {
 <!-- Floating external tooltip for network I/O chart -->
 <div id="chart-net-tooltip" style="position:fixed;z-index:9999;pointer-events:none;display:none;min-width:200px;max-width:340px;background:var(--surface,#1c1c1e);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 14px;box-shadow:0 4px 24px rgba(0,0,0,.5);font-size:12px;"></div>
 
+<script src="/static/appliance-disk.js"></script>
 <script src="/static/sdn.js"></script>
 <script src="/static/sdn-traffic.js"></script>
 <script src="/static/sdn-hostcard.js"></script>

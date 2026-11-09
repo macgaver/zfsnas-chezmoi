@@ -1909,6 +1909,12 @@ type LXDDiskConfig struct {
 	// MountPath is the in-container mount point for a newly-added container
 	// disk (e.g. "/data1"). Container-only; empty falls back to "/" + Name.
 	MountPath string `json:"mount_path,omitempty"`
+	// AlertPct: space alert threshold for this disk — "" = the notification
+	// settings' threshold, "off", or "1".."99" (instance_disk_alert.go).
+	AlertPct string `json:"alert_pct,omitempty"`
+	// SnapsExcluded (containers): snapshots don't count against this disk's
+	// size (ZFS refquota instead of quota).
+	SnapsExcluded bool `json:"snaps_excluded,omitempty"`
 }
 
 // LXDCapabilities flags optional disk knobs by LXD's API extension list, so
@@ -1944,7 +1950,11 @@ type LXDInstanceConfig struct {
 	// unexpected stop (guest poweroff, QEMU crash, OOM, external CLI stop).
 	// Stored as the Incus user.* key `user.zfsnas.force_running`, separate
 	// from Autostart so the two flags can be toggled independently.
-	ForceRunning      bool `json:"force_running"`
+	ForceRunning bool `json:"force_running"`
+	// NoAlerts mutes every notification about this instance (unexpected
+	// stop, its snapshot/replication schedules, Compose auto-update):
+	// Incus user.* key `user.zfsnas.no_alerts`.
+	NoAlerts          bool `json:"no_alerts"`
 	StatefulSnapshots bool `json:"stateful_snapshots"` // migration.stateful — VM-only
 	IsVM              bool `json:"is_vm"`
 	// Container-specific features (only applied when ApplyContainerFeatures is true)
@@ -1959,24 +1969,27 @@ type LXDInstanceConfig struct {
 	// the frontend's `cfg.unprivileged !== false` default flipped the
 	// checkbox back to "Unprivileged" on the next edit, masking the
 	// successful save.
-	Unprivileged       bool                   `json:"unprivileged"`             // security.privileged = !Unprivileged
-	FeatureKeyctl      bool                   `json:"feature_keyctl,omitempty"` // security.syscalls.allow=keyctl
-	FeatureFUSE        bool                   `json:"feature_fuse,omitempty"`   // /dev/fuse device
-	CDROMPath          string                 `json:"cdrom_path"`               // current ISO path (GET) / desired path (PUT)
-	ApplyCDROM         bool                   `json:"apply_cdrom"`              // if true, apply CDROMPath change on PUT (legacy single-drive)
-	CDROMs             []string               `json:"cdroms"`                   // handler-resolved absolute ISO paths (multi-drive)
-	ApplyCDROMs        bool                   `json:"apply_cdroms"`             // if true, replace all CDROMs with CDROMs list
-	Firmware           string                 `json:"firmware"`                 // "uefi" (default) | "bios"
-	SecureBoot         bool                   `json:"secure_boot"`              // only meaningful when Firmware == "uefi"
-	TPM                bool                   `json:"tpm"`                      // enable emulated TPM 2.0 (security.tpm)
-	MachineType        string                 `json:"machine_type"`             // "" = auto, "pc-q35-9.1", "pc-i440fx-9.1", etc.
-	DiskBus            string                 `json:"disk_bus"`                 // "" = virtio-blk (default), "scsi", "nvme"
-	SMBIOS             *LXDSMBIOSType1        `json:"smbios,omitempty"`         // SMBIOS type 1 (System Information); applied via raw.qemu
-	SMBIOSType2        *LXDSMBIOSType2        `json:"smbios_type2,omitempty"`   // SMBIOS type 2 (Baseboard / Motherboard); applied via raw.qemu
-	SMBIOSType4        *LXDSMBIOSType4        `json:"smbios_type4,omitempty"`   // SMBIOS type 4 (Processor); applied via raw.qemu
-	DisableVirtualVGA  bool                   `json:"disable_virtual_vga"`      // replace Incus' default virtio-vga with a passive bridge; used for full GPU passthrough so the guest doesn't bind a framebuffer console
-	NICs               []LXDNICConfig         `json:"nics"`
-	Disks              []LXDDiskConfig        `json:"disks"`
+	Unprivileged      bool            `json:"unprivileged"`             // security.privileged = !Unprivileged
+	FeatureKeyctl     bool            `json:"feature_keyctl,omitempty"` // security.syscalls.allow=keyctl
+	FeatureFUSE       bool            `json:"feature_fuse,omitempty"`   // /dev/fuse device
+	CDROMPath         string          `json:"cdrom_path"`               // current ISO path (GET) / desired path (PUT)
+	ApplyCDROM        bool            `json:"apply_cdrom"`              // if true, apply CDROMPath change on PUT (legacy single-drive)
+	CDROMs            []string        `json:"cdroms"`                   // handler-resolved absolute ISO paths (multi-drive)
+	ApplyCDROMs       bool            `json:"apply_cdroms"`             // if true, replace all CDROMs with CDROMs list
+	Firmware          string          `json:"firmware"`                 // "uefi" (default) | "bios"
+	SecureBoot        bool            `json:"secure_boot"`              // only meaningful when Firmware == "uefi"
+	TPM               bool            `json:"tpm"`                      // enable emulated TPM 2.0 (security.tpm)
+	MachineType       string          `json:"machine_type"`             // "" = auto, "pc-q35-9.1", "pc-i440fx-9.1", etc.
+	DiskBus           string          `json:"disk_bus"`                 // "" = virtio-blk (default), "scsi", "nvme"
+	SMBIOS            *LXDSMBIOSType1 `json:"smbios,omitempty"`         // SMBIOS type 1 (System Information); applied via raw.qemu
+	SMBIOSType2       *LXDSMBIOSType2 `json:"smbios_type2,omitempty"`   // SMBIOS type 2 (Baseboard / Motherboard); applied via raw.qemu
+	SMBIOSType4       *LXDSMBIOSType4 `json:"smbios_type4,omitempty"`   // SMBIOS type 4 (Processor); applied via raw.qemu
+	DisableVirtualVGA bool            `json:"disable_virtual_vga"`      // replace Incus' default virtio-vga with a passive bridge; used for full GPU passthrough so the guest doesn't bind a framebuffer console
+	NICs              []LXDNICConfig  `json:"nics"`
+	Disks             []LXDDiskConfig `json:"disks"`
+	// DiskSettings: per-disk space alert + "snapshots excluded" for every
+	// disk, profile-inherited root included (PUT only).
+	DiskSettings       []LXDDiskConfig        `json:"disk_settings,omitempty"`
 	DetachDisks        []string               `json:"detach_disks,omitempty"` // device names to detach only (keep backing volume)
 	ExistingDisks      []LXDExistingDisk      `json:"existing_disks_raw"`     // ZVols to attach as new raw block devices
 	BindMounts         []LXDBindMount         `json:"bind_mounts"`            // host /mnt directories bind-mounted into a container
@@ -2941,6 +2954,7 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 		Nesting:           raw.Config["security.nesting"] == "true",
 		Autostart:         raw.Config["boot.autostart"] == "true" || raw.Config["boot.autostart"] == "1",
 		ForceRunning:      raw.Config["user.zfsnas.force_running"] == "true" || raw.Config["user.zfsnas.force_running"] == "1",
+		NoAlerts:          raw.Config[instanceNoAlertsKey] == "true",
 		StatefulSnapshots: raw.Config["migration.stateful"] == "true",
 		IsVM:              raw.Type == "virtual-machine",
 		Firmware:          firmware,
@@ -3075,6 +3089,7 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 				IOBus:        devCfg["io.bus"],
 				ReadOnly:     devCfg["readonly"] == "true",
 				MountPath:    devCfg["path"], // in-container mount point (containers)
+				AlertPct:     raw.Config[DiskAlertKey(devName)],
 			}
 			// Capture the disk bus from the root disk to represent the VM-wide setting.
 			if isRoot && cfg.DiskBus == "" && devCfg["io.bus"] != "" {
@@ -3158,13 +3173,13 @@ func LXDGetConfig(name string) (LXDInstanceConfig, error) {
 			// their size is the dataset quota, not a device config key, so
 			// devCfg["size"] above came back empty.
 			if disk.Size == "" && !isRoot && disk.ZFSPath != "" && disk.ZFSType == "dataset" {
-				if out, err := exec.Command("zfs", "get", "-Hp", "-o", "value", "quota", disk.ZFSPath).Output(); err == nil {
-					var quota int64
-					fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &quota)
-					if quota > 0 {
-						disk.Size = fmt.Sprintf("%dGB", (quota+500000000)/1000000000)
-					}
+				// quota, or refquota when snapshots are excluded from the size.
+				if _, quota := datasetLimit(disk.ZFSPath); quota > 0 {
+					disk.Size = fmt.Sprintf("%dGB", (quota+500000000)/1000000000)
 				}
+			}
+			if disk.ZFSType == "dataset" && disk.ZFSPath != "" {
+				disk.SnapsExcluded = ContainerSnapsExcluded(disk.ZFSPath)
 			}
 			cfg.Disks = append(cfg.Disks, disk)
 		case "proxy":
@@ -3461,6 +3476,23 @@ func LXDSetConfig(name string, cfg LXDInstanceConfig) error {
 		}
 	}
 
+	// A full container can't take ANY config change: every Incus write
+	// rewrites backup.yaml inside the container's own dataset, so the first
+	// `incus config set` below would fail with "disk quota exceeded" and the
+	// resize further down would never be reached. Raise the ZFS quota to the
+	// requested root size first.
+	if !cfg.IsVM {
+		for _, disk := range cfg.Disks {
+			if disk.IsRoot && disk.Size != "" {
+				if n := lxdVolSizeBytes(disk.Size); n > 0 {
+					if err := lxdPreGrowContainerQuota(disk.Pool, name, n); err != nil {
+						return fmt.Errorf("resize disk %s: %v", disk.Name, err)
+					}
+				}
+			}
+		}
+	}
+
 	// Capability flags drive whether per-disk io.bus / io.cache writes are
 	// even attempted; on LXD 5.0.x these keys are absent and would error.
 	caps := LXDGetCapabilities()
@@ -3564,6 +3596,13 @@ func LXDSetConfig(name string, cfg LXDInstanceConfig) error {
 			forceRunning = "true"
 		}
 		if err := applyConf("user.zfsnas.force_running", forceRunning); err != nil {
+			return err
+		}
+		noAlerts := ""
+		if cfg.NoAlerts {
+			noAlerts = "true"
+		}
+		if err := applyConf(instanceNoAlertsKey, noAlerts); err != nil {
 			return err
 		}
 		// migration.stateful — VM-only; controls whether QEMU is initialised in a way
@@ -4336,6 +4375,60 @@ func LXDSetConfig(name string, cfg LXDInstanceConfig) error {
 			}
 		}
 	} // end ManageDisks guard
+
+	// Per-disk space alert threshold, and (containers) whether snapshots
+	// count against the disk's size. A separate list from cfg.Disks so a
+	// profile-inherited root disk can carry them without entering the diff.
+	for _, disk := range cfg.DiskSettings {
+		if disk.IsAgent || !lxdDevNameRe.MatchString(disk.Name) {
+			continue
+		}
+		pct, err := NormalizeDiskAlertPct(disk.AlertPct)
+		if err != nil {
+			return err
+		}
+		if pct != rawDev.Config[DiskAlertKey(disk.Name)] {
+			if err := applyConf(DiskAlertKey(disk.Name), pct); err != nil {
+				return err
+			}
+		}
+		if isVM {
+			continue
+		}
+		d := rawDev.ExpandedDevices[disk.Name]
+		if d == nil {
+			d = curDisks[disk.Name]
+		}
+		pool, vol := disk.Pool, ""
+		if d != nil {
+			if d["pool"] != "" {
+				pool = d["pool"]
+			}
+			vol = d["source"]
+		}
+		if disk.IsRoot {
+			vol = "container/" + name
+		} else if vol == "" {
+			vol = name + "-" + disk.Name // just created above
+		}
+		if pool == "" {
+			continue
+		}
+		ds := ""
+		if zp := lxdZFSPoolForLXDPool(pool); zp != "" {
+			if disk.IsRoot {
+				ds = zp + "/containers/" + name
+			} else {
+				ds = lxdFindZFSDataset(vol)
+			}
+		}
+		if ds == "" || ContainerSnapsExcluded(ds) == disk.SnapsExcluded {
+			continue
+		}
+		if err := setContainerSnapsExcluded(pool, vol, disk.SnapsExcluded); err != nil {
+			return fmt.Errorf("disk %s: snapshots setting: %v", disk.Name, err)
+		}
+	}
 
 	// Apply DiskBus to the root disk independently of the cfg.Disks loop.
 	// Root disks are typically profile-inherited (absent from cfg.Disks/curDisks) and
@@ -8684,4 +8777,54 @@ func lxdAllGlobalIPv4s(network map[string]lxdStateNetwork, preferred string) []s
 		}
 	}
 	return out
+}
+
+// lxdPreGrowContainerQuota raises a container root dataset's ZFS quota and
+// refquota to newBytes BEFORE Incus applies the new size. Incus writes
+// backup.yaml inside that dataset before it changes the quota, so a
+// container whose disk is 100% full could never be grown ("Failed to write
+// backup file … disk quota exceeded"). Only raises, never lowers; a pool
+// that isn't ZFS or a dataset that can't be found is left to Incus.
+func lxdPreGrowContainerQuota(lxdPool, name string, newBytes int64) error {
+	zfsPool := lxdZFSPoolForLXDPool(lxdPool)
+	if zfsPool == "" {
+		return nil
+	}
+	ds := zfsPool + "/containers/" + name
+	out, err := exec.Command("zfs", "get", "-H", "-p", "-o", "property,value", "quota,refquota,available", ds).Output()
+	if err != nil {
+		return nil // not found (other project prefix, …): Incus handles it as before
+	}
+	vals := map[string]int64{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if f := strings.Fields(line); len(f) == 2 {
+			vals[f[0]], _ = strconv.ParseInt(f[1], 10, 64)
+		}
+	}
+	// Full and not actually growing: Incus would fail on backup.yaml with
+	// an error that doesn't say why. Say it plainly.
+	if lim := max(vals["quota"], vals["refquota"]); lim > 0 && newBytes <= lim && vals["available"] < 1<<20 {
+		return fmt.Errorf("the disk is full (limit %s) and the size entered, %s, is not larger, so no setting can be saved. Enter a size above %s",
+			lxdHumanBytes(lim), lxdHumanBytes(newBytes), lxdHumanBytes(lim))
+	}
+	for _, prop := range []string{"quota", "refquota"} {
+		cur := vals[prop]
+		if cur == 0 || cur >= newBytes {
+			continue // none/unlimited, or already large enough
+		}
+		if o, err := exec.Command("sudo", "zfs", "set", fmt.Sprintf("%s=%d", prop, newBytes), ds).CombinedOutput(); err != nil {
+			log.Printf("[lxd] pre-grow %s %s: %v: %s", ds, prop, err, strings.TrimSpace(string(o)))
+			return fmt.Errorf("could not raise the ZFS %s first: %s", prop, strings.TrimSpace(string(o)))
+		}
+	}
+	return nil
+}
+
+// lxdHumanBytes shows a size in both units: "100 GiB (107.4 GB)".
+func lxdHumanBytes(n int64) string {
+	if n < 1<<30 {
+		return fmt.Sprintf("%d MiB (%d MB)", n>>20, n/1e6)
+	}
+	gib := strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/(1<<30)), ".0")
+	return fmt.Sprintf("%s GiB (%.1f GB)", gib, float64(n)/1e9)
 }

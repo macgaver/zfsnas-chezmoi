@@ -14,12 +14,19 @@ GIB=1073741824
 HEADROOM=536870912          # 512 MiB past ISO end before the store starts
 MIN_STORE=268435456         # refuse to create a store under 256 MiB
 FRESH_STORE_OFFSET=8589934592  # 8 GiB — where a NEW store starts (see below)
+# Internal-disk installs (PLANS/plan-appliance-internal-disk.md): the store
+# holds the disk's partition layout so an image dd (which replaces the table)
+# can be undone, and a stick whose settings were moved to a disk is relabelled.
+LAYOUT_FILE="disk-layout.conf"
+MOVED_LABEL="ZFSNAS-MOVED"     # ext4 labels are 16 chars max
+ISO_LABEL="ZFSNAS-USB"
+ZP_BYID_DIR="${ZP_BYID_DIR:-/dev/disk/by-id}"   # tests point this at a fake dir
 
 # "<4>" = KERN_WARNING: the boot uses `quiet`, which hides info-level kmsg.
 # Persistence status is exactly what an admin needs to see on a headless
 # console, so it is logged at warning level.
 zp_log() { echo "<4>zfsnas-persist: $*" > /dev/kmsg 2>/dev/null || \
-           echo "zfsnas-persist: $*"; }
+           echo "zfsnas-persist: $*" >&2; }   # stderr: callers use $(...)
 
 zp_set_status() {
     mkdir -p "$ZP_ROOT/var/lib/zfsnas"
@@ -88,6 +95,99 @@ zp_iso_end() {
     else
         blockdev --getsize64 "$ZP_MEDIUM"
     fi
+}
+
+# Whole disk of a partition (or the device itself when it is a whole disk).
+zp_parent_disk() {
+    part=$(basename "$1")
+    parent=$(basename "$(readlink -f "/sys/class/block/$part/..")")
+    if [ "$parent" = "block" ] || [ -z "$parent" ]; then
+        echo "/dev/$part"
+    else
+        echo "/dev/$parent"
+    fi
+}
+
+# Stable identity of a disk: its first /dev/disk/by-id name, skipping
+# partitions and the wwn/eui aliases (sorted glob → deterministic). The
+# installer (zfsnas-install-disk) uses the very same rule.
+zp_disk_id() {
+    t=$(readlink -f "$1")
+    for l in "$ZP_BYID_DIR"/*; do
+        case "$(basename "$l")" in *-part*|wwn-*|nvme-eui.*|nvme-nvme.*) continue ;; esac
+        [ "$(readlink -f "$l")" = "$t" ] && { basename "$l"; return 0; }
+    done
+    return 1
+}
+
+# A store's layout file belongs to $2 (the disk the store sits on).
+zp_layout_ok() {       # $1 = mounted store root, $2 = disk
+    f="$1/$STORE_DIRNAME/$LAYOUT_FILE"
+    [ -f "$f" ] || return 1
+    want=$(sed -n 's/^DISK_ID=//p' "$f" | head -n1)
+    have=$(zp_disk_id "$2") || return 1
+    [ -n "$want" ] && [ "$want" = "$have" ]
+}
+
+# Several ZFSNAS-PERSIST stores (a stick AND an internal disk): never take
+# the first one blkid lists. An internal-disk store (its layout file names
+# its own disk) wins, then the store on the boot medium, then the first.
+zp_pick_store() {
+    list=$(blkid -o device -t "LABEL=$PERSIST_LABEL" 2>/dev/null)
+    [ "$(echo "$list" | grep -c .)" -le 1 ] && { echo "$list"; return 0; }
+    mkdir -p /run/zp-probe
+    for p in $list; do
+        mount -t ext4 -o ro,noload "$p" /run/zp-probe 2>/dev/null || continue
+        hit=1
+        zp_layout_ok /run/zp-probe "$(zp_parent_disk "$p")" && hit=0
+        umount /run/zp-probe 2>/dev/null
+        if [ "$hit" = 0 ]; then
+            zp_log "several stores: using $p (internal-disk install)"
+            echo "$p"; return 0
+        fi
+    done
+    for p in $list; do
+        if [ "$(zp_parent_disk "$p")" = "$ZP_DISK" ]; then
+            zp_log "several stores: using $p (boot medium)"
+            echo "$p"; return 0
+        fi
+    done
+    zp_log "several stores, none preferred: using the first"
+    echo "$list" | head -n1
+}
+
+# Disks to scan for a store whose table entry is gone: the boot medium
+# first, then every other disk carrying the appliance image (a stick and an
+# internal disk can both be plugged in, and toram can't tell which booted).
+zp_candidate_disks() {
+    echo "$ZP_DISK"
+    for d in $(blkid -o device -t "LABEL=$ISO_LABEL" 2>/dev/null); do
+        zp_parent_disk "$d"
+    done | grep -vx "$ZP_DISK" | sort -u
+}
+
+# The image's ISO9660 partition on disk $1 (for zp_iso_end), or nothing.
+zp_medium_on() {
+    for d in $(blkid -o device -t "LABEL=$ISO_LABEL" 2>/dev/null); do
+        [ "$(zp_parent_disk "$d")" = "$1" ] && [ "$d" != "$1" ] && { echo "$d"; return 0; }
+    done
+    return 1
+}
+
+# Little-endian u32 at byte $3 of the ext4 superblock of the fs at byte
+# offset $2 of disk $1 (busybox-safe: 1 MiB seek, then bytes).
+zp_sb_u32() {
+    set -- $(dd if="$1" bs=1048576 skip=$(( $2 / 1048576 )) count=1 2>/dev/null \
+             | dd bs=1 skip=$(( 1024 + $3 )) count=4 2>/dev/null | od -An -tx1)
+    [ $# -eq 4 ] || { echo 0; return; }
+    echo $(( 0x$4$3$2$1 ))
+}
+
+# Size in bytes of the ext4 filesystem at byte offset $2 of disk $1.
+zp_fs_bytes() {
+    blocks=$(zp_sb_u32 "$1" "$2" 4)
+    logbs=$(zp_sb_u32 "$1" "$2" 24)
+    echo $(( blocks * (1024 << logbs) ))
 }
 
 # --- reflash scan (spec §5.3) ----------------------------------------------
@@ -172,7 +272,8 @@ zp_restore_bdev_write() {
     return 0
 }
 
-zp_register_partition() {   # $1 = byte offset; creates GPT entry to disk end
+zp_register_partition() {   # $1 = byte offset; $2 = last sector (default:
+                             # disk end); creates the GPT entry
                              # returns: 0 registered+resolved, 1 sgdisk -n
                              # failed (nothing written), 2 registered but
                              # could not resolve the device node
@@ -185,7 +286,7 @@ zp_register_partition() {   # $1 = byte offset; creates GPT entry to disk end
     # invalidated, and the second sgdisk re-reads the OLD table, rejects our
     # (now out-of-range) start and silently appends at first-free instead,
     # unaligned. Applying both in one pass writes once and keeps our offset.
-    out=$(sgdisk -e -n "0:$(( $1 / 512 )):0" -t 0:8300 -c "0:$PERSIST_LABEL" \
+    out=$(sgdisk -e -n "0:$(( $1 / 512 )):${2:-0}" -t 0:8300 -c "0:$PERSIST_LABEL" \
         "$ZP_DISK" 2>&1)
     rc=$?
     zp_log "register: sgdisk -e -n rc=$rc (start=$(( $1 / 512 ))): $(echo "$out" | tr '\n' '|' | cut -c1-220)"
@@ -208,6 +309,31 @@ zp_register_partition() {   # $1 = byte offset; creates GPT entry to disk end
         sleep 1
     done
     return 2
+}
+
+# --- internal-disk layout ----------------------------------------------------
+# An image upgrade dd replaces the disk's partition table. The upgrade puts
+# our entries back right after, but a power cut in between leaves only what
+# the image carries: the scan above re-registers the store, and this puts
+# back every other partition the layout lists (the zpool-1 partition) before
+# ZFS pools are imported. Only from a layout naming THIS disk, only at the
+# recorded sectors, only where no partition starts there already.
+zp_restore_layout() {   # $1 = mounted store root
+    zp_layout_ok "$1" "$ZP_DISK" || return 0
+    f="$1/$STORE_DIRNAME/$LAYOUT_FILE"
+    sed -n 's/^PART=//p' "$f" | while IFS=: read -r num start end typ label; do
+        [ -n "$start" ] && [ -n "$end" ] || continue
+        if zp_part_at_sector "$start" >/dev/null; then
+            continue
+        fi
+        zp_allow_bdev_write
+        out=$(sgdisk -e -n "0:$start:$end" -t "0:$typ" -c "0:$label" "$ZP_DISK" 2>&1)
+        rc=$?
+        zp_restore_bdev_write
+        partx -a "$ZP_DISK" >/dev/null 2>&1 || partx -u "$ZP_DISK" >/dev/null 2>&1
+        zp_log "layout: re-registered $label ($start-$end) rc=$rc $(echo "$out" | tr '\n' '|' | cut -c1-120)"
+    done
+    return 0
 }
 
 # --- seed + bind (spec §2) --------------------------------------------------
@@ -304,20 +430,54 @@ zp_main() {
 
     zp_find_disk || { zp_log "no live medium found"; zp_set_status degraded; return 0; }
     zp_log "medium=$ZP_MEDIUM disk=$ZP_DISK"
-    ZP_PART=$(blkid -o device -t "LABEL=$PERSIST_LABEL" 2>/dev/null | head -n1)
+    ZP_PART=$(zp_pick_store)
+    if [ -n "$ZP_PART" ]; then
+        ZP_DISK=$(zp_parent_disk "$ZP_PART")
+    fi
 
     if [ -z "$ZP_PART" ]; then
+        found=""
+        for d in $(zp_candidate_disks); do
+            [ -b "$d" ] || continue
+            boot_disk="$ZP_DISK"; ZP_DISK="$d"
+            found=$(zp_scan_for_store) || found=""
+            if [ -n "$found" ]; then
+                m=$(zp_medium_on "$d") && ZP_MEDIUM="$m"
+                [ "$d" = "$boot_disk" ] || zp_log "store found on $d, not on the boot medium $boot_disk"
+                break
+            fi
+            ZP_DISK="$boot_disk"
+        done
         iso_end=$(zp_iso_end)
-        zp_log "no labelled store; iso_end=$iso_end — scanning"
-        found=$(zp_scan_for_store) || found=""
-        zp_log "scan done (found='$found')"
+        zp_log "no labelled store; iso_end=$iso_end — scan done (found='$found' on $ZP_DISK)"
+        if [ -z "$found" ] && [ -n "$(blkid -o device -t "LABEL=$MOVED_LABEL" 2>/dev/null)" ]; then
+            # This stick's settings were moved to an internal disk that isn't
+            # here (or didn't boot). Never create a fresh store: the portal
+            # shows "settings moved to <disk>" instead of /setup.
+            mv_part=$(blkid -o device -t "LABEL=$MOVED_LABEL" 2>/dev/null | head -n1)
+            mkdir -p /run/zp-probe "$ZP_ROOT/var/lib/zfsnas"
+            if mount -t ext4 -o ro,noload "$mv_part" /run/zp-probe 2>/dev/null; then
+                cat "/run/zp-probe/$STORE_DIRNAME/MOVED-TO" > "$ZP_ROOT/var/lib/zfsnas/persist-moved-to" 2>/dev/null
+                umount /run/zp-probe 2>/dev/null
+            fi
+            zp_log "settings were moved to an internal disk ($mv_part relabelled $MOVED_LABEL) — no persistence"
+            zp_set_status moved
+            return 0
+        fi
         if [ -n "$found" ]; then
             if [ "$found" -lt $((iso_end + HEADROOM)) ]; then
                 zp_log "old store at $found overlapped by new ISO (end $iso_end) — data lost"
                 status="overlap-lost"
                 found=""
             else
-                zp_register_partition "$found"
+                # Exactly the filesystem's extent, not "to the disk end": on
+                # an internal disk the zpool-1 partition follows the store.
+                fsb=$(zp_fs_bytes "$ZP_DISK" "$found")
+                last=0
+                [ "$fsb" -gt 0 ] && last=$(( (found + fsb) / 512 - 1 ))
+                dbytes=$(blockdev --getsize64 "$ZP_DISK")
+                [ "$last" -gt 0 ] && [ $(( (last + 34) * 512 )) -ge "$dbytes" ] && last=0
+                zp_register_partition "$found" "$last"
                 reg_rc=$?
                 if [ "$reg_rc" -eq 0 ]; then
                     zp_log "re-adopted store at offset $found after reflash"
@@ -397,6 +557,7 @@ zp_main() {
     if ! mount -t ext4 -o noatime,lazytime,commit=60 "$ZP_PART" "$ZP_ROOT/persist"; then
         zp_log "mount failed"; zp_set_status degraded; return 0
     fi
+    zp_restore_layout "$ZP_ROOT/persist"
     zp_log "seeding+binding manifest"
     zp_seed_and_bind "$ZP_ROOT/persist/$STORE_DIRNAME" "$ZP_ROOT"
     zp_set_status "$status"
