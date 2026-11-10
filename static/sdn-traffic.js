@@ -457,7 +457,7 @@
         const place = [p.city, p.country || p.cc].filter(Boolean).join(', ');
         tip.innerHTML = dir === 'blk'
           ? `<div class="fw-tip-h">${flag(p.cc)} ${E(place || 'Unknown location')} — blocked</div>${ipRow}<div class="fw-r">Attempts<b>${fmtN(p.pkts)}</b></div>${p.remote ? '' : `<div class="fw-r">Unique IPs<b>${fmtN(p.ips)}</b></div>`}<div class="fw-r">Port${(p.ports || []).length > 1 ? 's' : ''}<b>${E((p.ports || []).join(', '))}</b></div>${p.rule ? `<div class="fw-r">Blocked by<b>${E(p.rule)}</b></div>` : ''}`
-          : `<div class="fw-tip-h">${flag(p.cc)} ${E(place || 'Unknown location')}</div>${ipRow}${p.remote ? '' : `<div class="fw-r">IPs<b>${fmtN(p.ips)}</b></div>`}<div class="fw-r">Started by<b>${dir === 'in' ? 'remote → us' : 'us → remote'}</b></div>${dir === 'in' ? `<div class="fw-r">Inside host<b>${E(p.name || p.inside || '')} ${E(p.inside ? p.inside + ':' + p.port : '')}</b></div><div class="fw-r">Hit our public<b class="fw-mono">${E((p.pub_ip ? p.pub_ip + ':' : '') + (p.pub_port || ''))}</b></div>` : `<div class="fw-r">Port${(p.ports || []).length > 1 ? 's' : ''}<b>${E(portsLabel(p) || '—')}</b></div><div class="fw-r">Inside hosts<b>${E((p.hosts || []).join(', '))}</b></div><div class="fw-r">Interface<b>${E(ifName(p.iface))}</b></div>`}<div class="fw-r">Data<b>${fmtB((p.bytes_in || 0) + (p.bytes_out || 0))}</b></div><div class="fw-r">Sessions<b>${fmtN(p.sessions)}</b></div>${p.as_org ? `<div class="fw-r">Network<b>${E(p.as_org)}</b></div>` : ''}`;
+          : `<div class="fw-tip-h">${flag(p.cc)} ${E(place || 'Unknown location')}</div>${ipRow}${p.remote ? '' : `<div class="fw-r">IPs<b>${fmtN(p.ips)}</b></div>`}<div class="fw-r">Started by<b>${dir === 'in' ? 'remote → us' : 'us → remote'}</b></div>${dir === 'in' ? `<div class="fw-r">Inside host<b>${E(p.name || p.inside || '')} ${E(p.inside ? p.inside + ':' + p.port : '')}</b></div><div class="fw-r">Hit our public<b class="fw-mono">${E((p.pub_ip ? p.pub_ip + ':' : '') + (p.pub_port || ''))}</b></div>${(m => m ? `<div class="fw-r">Not forwarded<b>${E(m.target + ':' + m.port)}</b></div>` : '')(missedForward(p))}` : `<div class="fw-r">Port${(p.ports || []).length > 1 ? 's' : ''}<b>${E(portsLabel(p) || '—')}</b></div><div class="fw-r">Inside hosts<b>${E((p.hosts || []).join(', '))}</b></div><div class="fw-r">Interface<b>${E(ifName(p.iface))}</b></div>`}<div class="fw-r">Data<b>${fmtB((p.bytes_in || 0) + (p.bytes_out || 0))}</b></div><div class="fw-r">Sessions<b>${fmtN(p.sessions)}</b></div>${p.as_org ? `<div class="fw-r">Network<b>${E(p.as_org)}</b></div>` : ''}`;
         // keep the card inside the map
         const x = cx - bb.left + 14, y = cy - bb.top + 14;
         tip.style.left = Math.max(4, Math.min(x, bb.width - tip.offsetWidth - 8)) + 'px';
@@ -528,6 +528,36 @@
   function loc(r) { return `<span class="fw-flag">${flag(r.cc)}</span>${E(r.city ? r.city : (r.country || r.cc || '—'))}`; }
   function bar(v, max, grad) { return `<div class="fw-bytes"><div class="fw-b" style="width:${Math.max(3, 70 * v / Math.max(1, max))}px;background:${grad}"></div>`; }
 
+  // A connection that reached this firewall itself (nothing rewrote its
+  // destination) on a port a port forward publishes: the forward did not
+  // apply to it. Returns that forward's inside target and the reason, so the
+  // table can show where such a connection would have gone, and why not.
+  const portIn = (p, spec) => String(spec || '').split(',').some(s => {
+    const [a, b] = s.trim().split('-').map(Number);
+    return b ? p >= a && p <= b : p === a;
+  });
+  function missedForward(r) {
+    const F = window.sdnFW, c = F && F.cfg && F.cfg();
+    if (!c || !r.pub_port || !r.inside || r.inside !== r.pub_ip) return null;
+    const f = (c.port_forwards || []).find(x => x.enabled && x.target && (x.interfaces || []).length &&
+      (x.protocol === 'tcpudp' || x.protocol === r.proto) && portIn(r.pub_port, x.pub_ports));
+    if (!f) return null;
+    const ifs = c.interfaces || [], nm = id => (ifs.find(i => i.id === id) || {}).name || id;
+    const on = f.interfaces.map(nm), here = ifName(r.iface);
+    // same port inside, or the matching place in a target range
+    const [pa] = String(f.pub_ports).split('-').map(Number), [ta, tb] = String(f.target_ports || f.pub_ports).split('-').map(Number);
+    const port = tb ? ta + (r.pub_port - pa) : (ta || r.pub_port);
+    const why = on.includes(here) && r.pub_ip
+      ? `this forward only accepts some sources (${(f.source && f.source.type) || 'restricted'}), and ${r.remote || 'this address'} is not one of them`
+      : `it only applies to connections arriving on ${on.join(', ')}; this one was addressed to ${r.pub_ip} (${here || 'this firewall'}) instead`;
+    return { target: f.target, port, why };
+  }
+  function missedHTML(r) {
+    const m = missedForward(r);
+    if (!m) return '';
+    return `<div class="fw-nofwd" title="${E(`Not forwarded: ${m.why}. It went to the firewall itself, not to the inside host.`)}">${icon('alert-triangle', 11)}not forwarded to ${E(m.target)}:${m.port}</div>`;
+  }
+
   function tableIn() {
     const res = T.data.in || {}, rows = res.rows || [];
     const max = Math.max(1, ...rows.map(r => (r.bytes_in || 0) + (r.bytes_out || 0)));
@@ -535,7 +565,7 @@
     return `<div class="fw-tcard"><div class="fw-tch"><span class="fw-dir in">${arr}Incoming</span><h3>Connections coming from the Internet</h3><span class="fw-sub">${E(T.range)} · ${fmtN(res.total)} lines · click a row to find it on the map</span><span style="flex:1"></span><button class="fw-icon-btn" data-csv="in">${icon('download', 12)}CSV</button></div>
       <div class="fw-tscroll"><table class="fw-table fw-dense" data-sort="traffic-in-${byIP ? 'ip' : 'geo'}"><thead><tr><th>${byIP ? 'Remote (initiator)' : 'Where'}</th>${byIP ? '<th>Location</th><th>Network</th><th></th><th>Hit our public</th><th>Forwarded to (inside)</th>' : '<th>IPs</th>'}<th>Sessions</th><th>Data ↓ / ↑</th><th>Last seen</th><th></th></tr></thead><tbody>
       ${rows.length ? rows.map(r => `<tr data-k="${E(rowKey('in', r))}">
-        ${byIP ? `<td class="fw-mono">${E(r.remote || '(others)')}</td><td data-v="${E(locKey(r))}">${loc(r)}</td><td>${E(r.as_org || '')}</td><td><span class="fw-dir in">${arr}</span></td><td><span title="${E(r.iface && ifName(r.iface) !== r.iface ? 'Linux interface: ' + r.iface : '')}">${E(ifName(r.iface))}</span><span class="fw-mono">:${E(r.pub_port || '')}</span></td><td><span class="fw-host">${hn(r.name || '', r.inside)}<small>${E(r.inside ? r.inside + ':' + r.port : '')}</small></span></td>`
+        ${byIP ? `<td class="fw-mono">${E(r.remote || '(others)')}</td><td data-v="${E(locKey(r))}">${loc(r)}</td><td>${E(r.as_org || '')}</td><td><span class="fw-dir in">${arr}</span></td><td><span title="${E(r.iface && ifName(r.iface) !== r.iface ? 'Linux interface: ' + r.iface : '')}">${E(ifName(r.iface))}</span><span class="fw-mono">:${E(r.pub_port || '')}</span></td><td><span class="fw-host">${hn(r.name || '', r.inside)}<small>${E(r.inside ? r.inside + ':' + r.port : '')}</small></span>${missedHTML(r)}</td>`
           : `<td data-v="${E(locKey(r))}">${loc(r)}</td><td data-v="${r.ips || 0}">${fmtN(r.ips)}</td>`}
         <td data-v="${r.sessions || 0}">${fmtN(r.sessions)}</td><td data-v="${(r.bytes_in || 0) + (r.bytes_out || 0)}">${bar((r.bytes_in || 0) + (r.bytes_out || 0), max, 'linear-gradient(90deg,var(--accent-2),var(--fw-in))')}${fmtB(r.bytes_in)} / ${fmtB(r.bytes_out)}</div></td><td data-v="${tms(r.last)}">${ago(r.last)}</td>
         <td>${isAdmin() ? `<span class="fw-act-h">${r.remote ? `<button data-block-ip="${E(r.remote)}">Block IP</button>` : ''}${r.cc ? `<button data-block-cc="${E(r.cc)}">Block ${E(r.country || r.cc)}</button>` : ''}</span>` : ''}</td></tr>`).join('')

@@ -5,7 +5,6 @@
  */
 (function () {
   'use strict';
-  const INTERNAL = /(^|[^\d.])((?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01])|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])|169\.254)\.\d{1,3}\.\d{1,3})(?!\d|\.\d|\/(?!32\b))/g;
   const INTERNAL_ONE = /^(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01])|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])|169\.254)\.\d{1,3}\.\d{1,3}$/;
   const valid = ip => ip.split('.').every(o => +o <= 255);
   const SKIP = 'button,select,option,textarea,input,script,style,svg,.fw-ipi';
@@ -18,6 +17,13 @@
     ? `<span class="fw-ipi${cls ? ' ' + cls : ''}" data-ip="${E(ip)}" title="${E(ip)}">${E(name)}</span>`
     : (cls ? `<span class="${cls}">${E(name || ip || '')}</span>` : E(name || ip || ''));
   // ── marking the addresses ───────────────────────────────────────────────
+  // Every IPv4 address in the text: internal ones get the inside card, public
+  // ones the Internet address card. Others (loopback, multicast, documentation
+  // ranges…) stay plain.
+  const ANY = /(^|[^\d.])(\d{1,3}(?:\.\d{1,3}){3})(?!\d|\.\d|\/(?!32\b))/g;
+  const NOT_PUBLIC = /^(?:0\.|127\.|2(?:2[4-9]|[3-5]\d)\.|192\.0\.[02]\.|198\.1[89]\.|198\.51\.100\.|203\.0\.113\.)/;
+  const kindOf = ip => !valid(ip) ? '' : INTERNAL_ONE.test(ip) ? 'in' : NOT_PUBLIC.test(ip) ? '' : 'pub';
+  window.fwIsPublicIP = ip => kindOf(String(ip || '')) === 'pub';
   function mark(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const found = [];
@@ -27,14 +33,16 @@
     found.forEach(n => {
       const text = n.nodeValue;
       let last = 0, frag = null;
-      INTERNAL.lastIndex = 0;
-      for (let m = INTERNAL.exec(text); m; m = INTERNAL.exec(text)) {
-        if (!valid(m[2])) continue;
+      ANY.lastIndex = 0;
+      for (let m = ANY.exec(text); m; m = ANY.exec(text)) {
+        const kind = kindOf(m[2]);
+        if (!kind) continue;
         frag = frag || document.createDocumentFragment();
         const at = m.index + m[1].length;
         frag.append(text.slice(last, at));
         const s = document.createElement('span');
         s.className = 'fw-ipi'; s.dataset.ip = m[2]; s.textContent = m[2];
+        if (kind === 'pub') s.dataset.pub = '1';
         frag.append(s);
         last = at + m[2].length;
       }
@@ -190,9 +198,119 @@
   }
   const connCount = l => l.conns ? `${fmtN(l.conns)} open · ${fmtN(l.tcp)} TCP · ${fmtN(l.udp)} UDP` : '';
 
+
+  // ── the Internet address card ───────────────────────────────────────────
+  const isAdmin = () => typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin';
+  const SVC = {
+    greynoise: ['GreyNoise', 'Is it an Internet-wide scanner, and is it known as harmful?'],
+    shodan: ['Shodan', 'Its open ports, names, tags and known vulnerabilities (Shodan InternetDB)'],
+    abuseipdb: ['AbuseIPDB', 'Abuse reports from other networks and a confidence score'],
+  };
+  function verdictOf(d) {
+    if (d.lists.length) return ['off', 'On a blocklist'];
+    const loaded = (d.list_state || []).some(l => l.entries);
+    return loaded ? ['on', 'Not on blocklists'] : null;
+  }
+  function extHTML(svc, v, ip) {
+    if (!v) return '';
+    if (v.error) return `<div class="fw-hc-none fw-hc-err">${E(v.error)}</div>`;
+    if (v.loading) return '<div class="fw-hc-none">Asking…</div>';
+    const link = (href, t) => `<a class="fw-hc-link" href="${E(href)}" target="_blank" rel="noopener noreferrer">${E(t)}${icon('external-link', 11)}</a>`;
+    if (svc === 'greynoise') {
+      if (!v.found) return `<div class="fw-hc-none">Not seen scanning the Internet, and not a known business service.</div>`;
+      const cls = v.classification === 'malicious' ? 'block' : v.classification === 'benign' ? 'allow' : '';
+      return `<div class="fw-hc-kv">${row('Verdict', `<span class="fw-hc-act ${cls}">${E(v.classification || 'unknown')}</span>`)}${row('Scans the Internet', v.noise ? 'Yes' : 'No')}${row('Known service', v.riot ? 'Yes (common business service)' : '')}${row('Name', v.name && v.name !== 'unknown' ? E(v.name) : '')}${row('Last seen', E(v.last_seen || ''))}</div>${v.link ? link(v.link, 'Open in GreyNoise') : ''}`;
+    }
+    if (svc === 'shodan') {
+      if (!v.found) return '<div class="fw-hc-none">Shodan knows nothing about this address.</div>';
+      const vulns = v.vulns || [];
+      return `<div class="fw-hc-kv">${row('Open ports', (v.ports || []).length ? E(v.ports.join(', ')) : 'None seen', 'fw-mono')}${row('Names', E((v.hostnames || []).slice(0, 4).join(', ')))}${row('Software', E((v.cpes || []).slice(0, 3).map(c => c.replace(/^cpe:\/[aho]:/, '').replace(/:/g, ' ')).join(', ')))}${row('Known CVEs', vulns.length ? `<b class="blk">${vulns.length}</b> ${E(vulns.slice(0, 4).join(', '))}${vulns.length > 4 ? '…' : ''}` : '')}</div>${(v.tags || []).length ? `<div class="fw-hc-tags" style="margin-top:6px">${v.tags.map(t => `<span>${E(t)}</span>`).join('')}</div>` : ''}${link('https://www.shodan.io/host/' + ip, 'Open in Shodan')}`;
+    }
+    const sc = +v.abuseConfidenceScore || 0, col = sc >= 50 ? 'var(--fw-blk)' : sc >= 15 ? '#ff9f0a' : '#30d158';
+    return `<div class="fw-hc-score"><div><i style="width:${Math.max(2, sc)}%;background:${col}"></i></div><b style="color:${col}">${sc}%</b><small>abuse confidence</small></div>
+      <div class="fw-hc-kv">${row('Reports', `${fmtN(v.totalReports)}${v.numDistinctUsers ? ` from ${fmtN(v.numDistinctUsers)} reporters` : ''} (90 days)`)}${row('Last report', v.lastReportedAt ? E(ago(v.lastReportedAt)) : '')}${row('Usage', E(v.usageType || ''))}${row('Provider', E(v.isp || ''))}${row('Domain', E(v.domain || ''))}${row('Tor', v.isTor ? 'Yes' : '')}${row('Allow-listed', v.isWhitelisted ? 'Yes' : '')}</div>${link('https://www.abuseipdb.com/check/' + ip, 'Open in AbuseIPDB')}`;
+  }
+  function pubCardHTML(d, ext) {
+    const g = d.geo || {}, rd = d.rdap, v = verdictOf(d);
+    const ptr = d.ptr.length ? d.ptr[0].name : '';
+    const place = [g.city, g.country || g.cc].filter(Boolean).join(', ');
+    const hero = `<div class="fw-hc-mac"><div><small>Network</small><b>${E(g.as_org || (rd && rd.org) || '—')}</b>${g.asn ? `<div class="fw-hc-dim fw-mono">AS${E(g.asn)}</div>` : ''}</div><div><small>Location</small><b>${flag(g.cc)}${E(place || 'Unknown')}</b></div></div>`;
+    const rev = d.ptr.length ? d.ptr.map(p => `<div class="fw-hc-li"><span class="fw-hc-grow fw-mono">${E(p.name)}</span><span class="fw-hc-act ${p.confirmed ? 'allow' : ''}" title="${p.confirmed ? 'This name resolves back to the address' : 'This name does not resolve back to the address: it may be forged'}">${p.confirmed ? 'confirmed' : 'not confirmed'}</span></div>`).join('')
+      : `<div class="fw-hc-none">${E(d.ptr_error || 'No reverse name')}</div>`;
+    const reg = rd ? `<div class="fw-hc-kv">${row('Owner', E(rd.org || ''))}${row('Block', E(rd.name || ''))}${row('Range', E(rd.cidr || rd.range || ''), 'fw-mono')}${row('Country', rd.country ? flag(rd.country) + E(rd.country) : '')}${row('Abuse contact', rd.abuse ? `<a class="fw-hc-link" href="mailto:${E(rd.abuse)}">${E(rd.abuse)}</a>` : '')}${row('Registered', E(rd.created || ''))}${row('Changed', E(rd.updated || ''))}</div>`
+      : `<div class="fw-hc-none">${E(d.rdap_error || 'No registry answer')}</div>`;
+    const ls = d.list_state || [], loaded = ls.filter(l => l.entries);
+    const newest = loaded.reduce((a, l) => (l.updated > a ? l.updated : a), '');
+    const lists = d.lists.length ? d.lists.map(h => `<div class="fw-hc-li"><span class="fw-hc-act block">Listed</span><span class="fw-hc-grow"><span>${E(h.name)}</span><small title="${E(h.about)}">${E(h.entry)} · ${E(h.about)}</small></span></div>`).join('')
+      : loaded.length ? `<div class="fw-hc-none" style="padding-top:0">Not on ${E(loaded.map(l => l.name).join(', '))}.</div>`
+      : '<div class="fw-hc-none" style="padding-top:0">The lists are not downloaded yet: they come with the location databases (daily).</div>';
+    const btns = Object.keys(SVC).map(k => {
+      const off = !d.services[k];
+      return `<button type="button" class="fw-hc-svc${ext[k] && !ext[k].error ? ' on' : ''}" data-ext="${k}" title="${E(SVC[k][1] + (off ? ' (needs a free API key)' : ''))}"${off && !isAdmin() ? ' disabled' : ''}>${E(SVC[k][0])}${off ? icon('key', 11) : ''}</button>`;
+    }).join('');
+    const results = Object.keys(SVC).filter(k => ext[k]).map(k => `<div class="fw-hc-ext"><h5>${E(SVC[k][0])}</h5>${extHTML(k, ext[k], d.ip)}</div>`).join('');
+    return `<header class="fw-hc-head">
+        <div class="fw-hc-avatar r-public">${icon('globe', 22)}</div>
+        <div class="fw-hc-title"><div class="fw-hc-name${ptr ? '' : ' fw-mono'}">${E(ptr || d.ip)}</div><div class="fw-hc-sub">${ptr ? `<span class="fw-mono">${E(d.ip)}</span> · ` : ''}Internet address</div></div>
+        ${v ? `<span class="fw-hc-state ${v[0]}"><i></i>${v[1]}</span>` : ''}
+      </header>${hero}
+      ${section('search', 'Reverse DNS', rev, 'PTR, checked forward')}
+      ${section('file-text', 'Registry', reg, rd && rd.registry ? 'RDAP · ' + rd.registry : 'RDAP')}
+      ${section('shield', 'Blocklists', lists, newest ? 'updated ' + ago(newest) : '')}
+      <section class="fw-hc-s"><h4>${icon('globe', 13)}<span>Ask online</span><small>sends this address to the service</small></h4><div class="fw-hc-svcs">${btns}</div>${results}</section>`;
+  }
+  function keyDialog(after) {
+    if (typeof window.sdnModal !== 'function') return;
+    const box = document.createElement('div');
+    box.innerHTML = `<p style="margin-top:0">AbuseIPDB is free for 1,000 checks a day with an account: <a href="https://www.abuseipdb.com/register" target="_blank" rel="noopener noreferrer">sign up</a>, then create a key under <a href="https://www.abuseipdb.com/account/api" target="_blank" rel="noopener noreferrer">API</a>.</p>
+      <div class="fw-field"><label>API key</label><input type="password" id="fwk-abuse" autocomplete="new-password" placeholder="The key AbuseIPDB shows"></div>
+      <div id="fwk-res" style="min-height:18px;margin-top:8px;font-size:12.5px;color:var(--fw-blk)"></div>`;
+    const m = window.sdnModal({ title: 'AbuseIPDB key', body: box, buttons: [
+      { label: 'Cancel' },
+      { label: 'Save', cls: 'btn-primary', onClick: async (close, b) => {
+        const k = box.querySelector('#fwk-abuse').value.trim();
+        if (!k) { box.querySelector('#fwk-res').textContent = 'Paste the key first'; return; }
+        b.disabled = true;
+        const r = await fetch('/api/sdn/ipinfo/keys', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ abuseipdb_key: k }) }).catch(() => null);
+        b.disabled = false;
+        if (!r || !r.ok) { box.querySelector('#fwk-res').textContent = 'Not saved'; return; }
+        close(); after();
+      } }] });
+    setTimeout(() => { const i = m && m.body.querySelector('#fwk-abuse'); if (i) i.focus(); }, 50);
+    // the card sits above dialogs: out of the way until this one closes
+    if (card && m) {
+      card.style.visibility = 'hidden';
+      const t = setInterval(() => { if (!document.body.contains(m.el)) { clearInterval(t); if (card) card.style.visibility = ''; } }, 250);
+    }
+  }
+  async function askExt(ip, svc) {
+    const c = cache['pub:' + ip];
+    if (!c) return;
+    c.ext = c.ext || {};
+    if (!c.data.services[svc]) {
+      if (isAdmin()) keyDialog(() => { c.data.services[svc] = true; askExt(ip, svc); });
+      return;
+    }
+    if (c.ext[svc] && !c.ext[svc].error) { delete c.ext[svc]; redrawPub(ip); return; } // a second click folds it
+    c.ext[svc] = { loading: true }; redrawPub(ip);
+    const r = await fetch(`/api/sdn/ipinfo/ext?service=${svc}&ip=${encodeURIComponent(ip)}`, { credentials: 'same-origin' }).catch(() => null);
+    let v = null;
+    try { v = r ? await r.json() : null; } catch (e) { v = null; }
+    c.ext[svc] = r && r.ok && v ? v : { error: (v && v.error) || 'No answer' };
+    redrawPub(ip);
+  }
+  function redrawPub(ip) {
+    const c = cache['pub:' + ip];
+    if (!card || openIP !== ip || !c) return;
+    const top = card.scrollTop;
+    card.innerHTML = pubCardHTML(c.data, c.ext || {}); card.scrollTop = top; place();
+  }
+
   // ── showing it ──────────────────────────────────────────────────────────
   const cache = {}; // ip → {at, data}
-  let card = null, anchor = null, openIP = '', showT = 0, hideT = 0, pollT = 0, mx = 0, my = 0;
+  // pinned: the user clicked inside the card (asked a service…): it stays
+  // until a click elsewhere or Escape, even when the pointer leaves it.
+  let card = null, anchor = null, openIP = '', showT = 0, hideT = 0, pollT = 0, mx = 0, my = 0, pinned = false;
   // The last input was a finger or a pen (iPad, iPhone): the card stays until
   // a tap elsewhere. iOS also sends mouse events after a tap, and an iPad with
   // a trackpad says it can hover, so neither of those may close it.
@@ -211,7 +329,7 @@
   }
   function close() {
     clearTimeout(showT); clearTimeout(hideT); clearInterval(pollT);
-    pollT = 0; anchor = null; openIP = '';
+    pollT = 0; anchor = null; openIP = ''; pinned = false;
     if (card) card.style.display = 'none';
   }
   async function refreshLive(ip) {
@@ -234,7 +352,7 @@
       return;
     }
     const el = document.elementFromPoint(mx, my);
-    if (el && card.contains(el)) return;
+    if (pinned || (el && card.contains(el))) return;
     const a = el && el.closest('.fw-ipi');
     if (a && a.dataset.ip === openIP) anchor = a;
     else close();
@@ -245,8 +363,10 @@
       card = document.createElement('div');
       card.className = 'fw-hostcard'; card.style.display = 'none';
       card.addEventListener('mouseenter', () => clearTimeout(hideT));
-      card.addEventListener('mouseleave', () => { if (!touchMode) hideT = setTimeout(close, 220); });
+      card.addEventListener('mouseleave', () => { if (!touchMode && !pinned) hideT = setTimeout(close, 220); });
       card.addEventListener('click', e => {
+        const x = e.target.closest('[data-ext]');
+        if (x) { pinned = true; clearTimeout(hideT); askExt(openIP, x.dataset.ext); return; }
         const g = e.target.closest('[data-hc-go]');
         if (!g) return;
         const ip = openIP, fn = g.dataset.hcGo === 'dns' ? window.fwDNSFocus : window.fwIDSFocus;
@@ -257,9 +377,22 @@
     }
     document.querySelectorAll('.fw-ipcard').forEach(c => { c.style.display = 'none'; }); // the IDS page's own card
     clearInterval(pollT);
-    anchor = el; openIP = ip;
+    anchor = el; openIP = ip; pinned = false;
     card.innerHTML = `<div class="fw-hc-load"><span class="fw-mono">${E(ip)}</span><small>Looking up…</small></div>`;
     card.style.display = 'block'; card.scrollTop = 0; place();
+    if (el.dataset.pub) {
+      let c = cache['pub:' + ip];
+      if (!c || Date.now() - c.at > 600000) {
+        const r = await fetch('/api/sdn/ipinfo?ip=' + encodeURIComponent(ip), { credentials: 'same-origin' }).catch(() => null);
+        if (openIP !== ip) return;
+        if (!r || !r.ok) { card.innerHTML = `<div class="fw-hc-load"><span class="fw-mono">${E(ip)}</span><small>No information available</small></div>`; place(); return; }
+        c = cache['pub:' + ip] = { at: Date.now(), data: await r.json(), ext: (c && c.ext) || {} };
+        if (openIP !== ip) return;
+      }
+      card.innerHTML = pubCardHTML(c.data, c.ext); place();
+      pollT = setInterval(followAnchor, 3000);
+      return;
+    }
     let c = cache[ip];
     if (!c || Date.now() - c.at > 30000) {
       const r = await fetch('/api/sdn/hostinfo?ip=' + encodeURIComponent(ip), { credentials: 'same-origin' }).catch(() => null);
@@ -288,7 +421,7 @@
     const a = e.target.closest && e.target.closest('.fw-ipi');
     if (!a) return;
     clearTimeout(showT);
-    if (anchor) hideT = setTimeout(close, 220);
+    if (anchor && !pinned) hideT = setTimeout(close, 220);
   });
   // Touch screens: a tap opens it, a tap elsewhere closes it. A tap on an
   // address must not also trigger its row.
@@ -296,7 +429,7 @@
     const touch = touchMode;
     const a = e.target.closest && e.target.closest('.fw-ipi');
     if (a && touch) { e.preventDefault(); e.stopPropagation(); if (a.dataset.ip !== openIP) open(a); return; }
-    if (touch && anchor && card && !card.contains(e.target)) close();
+    if ((touch || pinned) && anchor && card && !card.contains(e.target) && !e.target.closest('.modal-backdrop')) close();
   }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && anchor) close(); });
   window.addEventListener('hashchange', close);

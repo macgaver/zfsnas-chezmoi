@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -384,6 +385,42 @@ func SDNDHCPLeases(c *sdn.Config) []SDNLease {
 		out = append(out, l)
 	}
 	return out
+}
+
+var sdnMACRe = regexp.MustCompile(`^([0-9a-f]{2}:){5}[0-9a-f]{2}$`)
+
+// SDNDeleteDHCPLease forgets one lease of a Firewall network: the DHCP
+// supervisor restarts that network's server without it (dnsmasq keeps its
+// leases in memory). The address is free again; a device still using it
+// asks again at its next renewal and may get it back.
+func SDNDeleteDHCPLease(c *sdn.Config, ifaceID, mac, ip string) error {
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	served := false
+	for _, d := range c.DHCP {
+		served = served || d.Interface == ifaceID
+	}
+	if !served || !sdnMACRe.MatchString(mac) {
+		return fmt.Errorf("no DHCP server on this network, or an invalid MAC address")
+	}
+	if a, err := netip.ParseAddr(ip); err != nil || !a.Is4() {
+		return fmt.Errorf("invalid address %q", ip)
+	}
+	req := filepath.Join(sdnDHCPDir, fmt.Sprintf("%s-%d.release", ifaceID, time.Now().UnixNano()))
+	if err := sdnWriteFile(req, []byte(ifaceID+" "+mac+" "+ip+"\n")); err != nil {
+		return err
+	}
+	if _, err := sdnRun.Run(nil, "systemctl", "reload", sdnDHCPUnitName); err != nil {
+		sdnRemoveFile(req) //nolint:errcheck
+		return err
+	}
+	for i := 0; i < 40; i++ { // the supervisor takes the request at once; dnsmasq restarts in ~1 s
+		if _, err := os.Stat(req); os.IsNotExist(err) {
+			return nil
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	sdnRemoveFile(req) //nolint:errcheck
+	return fmt.Errorf("the DHCP service did not take the request (is znas-sdn-dhcp running?)")
 }
 
 // SDNWGPeerStatus is one peer as the kernel sees it.

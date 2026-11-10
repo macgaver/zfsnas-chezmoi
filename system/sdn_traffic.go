@@ -228,6 +228,9 @@ func StartSDNTraffic(configDir string) {
 				lastGeo = now
 				go func(gdir string) {
 					err := SDNUpdateGeoDB(gdir, time.Now())
+					if e := SDNUpdateRepLists(SDNRepDir(gdir), time.Now()); e != nil {
+						fmt.Printf("[sdn] reputation lists: %v\n", e)
+					}
 					c.mu.Lock()
 					c.status.GeoError = ""
 					if err != nil {

@@ -207,3 +207,48 @@ func TestSDNDHCPSupervisor_QueryLog(t *testing.T) {
 		t.Fatalf("DNS server not told: %v", signalled)
 	}
 }
+
+// "Delete lease": the network's server stops, the lease leaves its file,
+// the server starts again; the other leases and the request file don't stay.
+func TestSDNDHCPSupervisor_Release(t *testing.T) {
+	dir := t.TempDir()
+	confDir, hostsDir := filepath.Join(dir, "dhcp.d"), filepath.Join(dir, "hosts.d")
+	_ = os.MkdirAll(confDir, 0755)
+	_ = os.MkdirAll(hostsDir, 0755)
+	lease := filepath.Join(dir, "if000800.leases")
+	_ = os.WriteFile(filepath.Join(confDir, "if000800.conf"), []byte(strings.ReplaceAll(dhcpConf800, "LEASES", lease)), 0644)
+	_ = os.WriteFile(lease, []byte("1800000600 aa:bb:cc:00:00:01 10.128.8.120 phone *\n1800000600 aa:bb:cc:00:00:09 10.128.8.121 tv *\n"), 0644)
+	var started int
+	procs := []*fakeDHCPProc{}
+	s := &sdnDHCPSup{confDir: confDir, hostsDir: hostsDir, statusPath: filepath.Join(dir, "status.json"),
+		children: map[string]*sdnDHCPChild{},
+		start: func(id, path string) (sdnDHCPProc, error) {
+			started++
+			p := &fakeDHCPProc{done: make(chan error)}
+			procs = append(procs, p)
+			return p, nil
+		}}
+	now := time.Unix(1800000000, 0)
+	s.sync(now)
+	req := filepath.Join(confDir, "if000800-1.release")
+	_ = os.WriteFile(req, []byte("if000800 AA:BB:CC:00:00:09 10.128.8.121\nbad line\n"), 0644)
+	s.sync(now.Add(time.Second))
+	if !procs[0].stopped || started != 2 {
+		t.Fatalf("server not restarted: stopped=%v started=%d", procs[0].stopped, started)
+	}
+	if b, _ := os.ReadFile(lease); string(b) != "1800000600 aa:bb:cc:00:00:01 10.128.8.120 phone *\n" {
+		t.Fatalf("lease file: %q", b)
+	}
+	if _, err := os.Stat(req); !os.IsNotExist(err) {
+		t.Fatal("request file kept: the lease would be deleted again")
+	}
+	if b, _ := os.ReadFile(filepath.Join(hostsDir, "if000800")); strings.Contains(string(b), "tv") {
+		t.Fatalf("deleted lease still in DNS: %q", b)
+	}
+	// a request for a network not served is dropped, nothing restarts
+	_ = os.WriteFile(filepath.Join(confDir, "x.release"), []byte("if000999 aa:bb:cc:00:00:01 10.128.9.5\n"), 0644)
+	s.sync(now.Add(2 * time.Second))
+	if started != 2 {
+		t.Fatalf("restarted for another network: %d", started)
+	}
+}

@@ -236,7 +236,8 @@
       const exp = !l.expires || l.expires.startsWith('0001') ? 'never' : F.fmtTime(l.expires);
       return `<tr data-lip="${F.E(l.ip)}" data-lmac="${F.E((l.mac || '').toLowerCase())}"><td>${i ? `<span class="fw-pillx">${dot(i)}${F.E(i.name)}</span>` : '—'}</td><td>${F.E(l.hostname || '—')}</td>
         <td class="fw-mono">${F.E(l.ip)}</td><td class="fw-mono">${F.E(l.mac)}</td><td>${F.E(exp)}</td>
-        <td>${reserved ? '<span class="fw-badge lan">reserved</span>' : (admin && d ? `<button class="fw-icon-btn" data-static="${F.E(l.mac)}" data-ip="${F.E(l.ip)}" data-host="${F.E(l.hostname || '')}" data-if="${F.E(l.interface)}">${F.icon('pin', 12)}Make static</button>` : '')}</td></tr>`;
+        <td>${reserved ? '<span class="fw-badge lan">reserved</span>' : ''}</td>
+        <td class="fw-lease-acts">${admin && d ? `<button type="button" class="fw-rbtn" data-lmenu="${F.E(l.mac)}" data-ip="${F.E(l.ip)}" data-host="${F.E(l.hostname || '')}" data-if="${F.E(l.interface)}" data-res="${reserved ? 1 : 0}" title="Lease actions">${F.icon('more-vertical', 14)}</button>` : ''}</td></tr>`;
     }).join('');
     // Incus networks (host-nat): Incus' own dnsmasq serves them; shown, not changed here.
     const incusPill = n => `<span class="fw-pillx">${dot(null)}${F.E(n.name)}</span> ${incusTag(n)}`;
@@ -254,7 +255,7 @@
     const incusRows = incusNets.flatMap(n => n.leases.map(l => ({ n, l }))).sort((a, b) => a.n.name.localeCompare(b.n.name) || ip2n(a.l.address) - ip2n(b.l.address))
       .map(({ n, l }) => `<tr data-lip="${F.E(l.address)}" data-lmac="${F.E((l.mac || '').toLowerCase())}"><td>${incusPill(n)}</td><td>${F.E(l.hostname || '—')}</td>
         <td class="fw-mono">${F.E(l.address)}</td><td class="fw-mono">${F.E(l.mac || '—')}</td><td>—</td>
-        <td>${l.type === 'static' ? '<span class="fw-badge lan" title="Fixed in the instance\'s settings (VMs &amp; Containers)">reserved</span>' : ''}</td></tr>`).join('');
+        <td>${l.type === 'static' ? '<span class="fw-badge lan" title="Fixed in the instance\'s settings (VMs &amp; Containers)">reserved</span>' : ''}</td><td></td></tr>`).join('');
     const nLeases = leases.length + incusNets.reduce((a, n) => a + n.leases.length, 0);
     const dnsNets = dns.interfaces.map(id => ifaceById(id)).filter(Boolean);
     return `
@@ -279,8 +280,8 @@
       </div>
       ${unnamedHTML(c, admin)}
       <div class="fw-tcard" style="margin-top:18px"><div class="fw-tch"><h3>Leases</h3><span class="fw-sub">${nLeases} device${nLeases === 1 ? '' : 's'} · refreshed every 10 s</span></div>
-        <div class="fw-tscroll"><table class="fw-table"><thead><tr><th>Network</th><th>Host name</th><th>Address</th><th>MAC</th><th>Expires</th><th></th></tr></thead>
-        <tbody>${leaseRows + incusRows || '<tr><td colspan="6" style="color:var(--text-3)">No lease yet.</td></tr>'}</tbody></table></div></div>`;
+        <div class="fw-tscroll"><table class="fw-table"><thead><tr><th>Network</th><th>Host name</th><th>Address</th><th>MAC</th><th>Expires</th><th></th><th></th></tr></thead>
+        <tbody>${leaseRows + incusRows || '<tr><td colspan="7" style="color:var(--text-3)">No lease yet.</td></tr>'}</tbody></table></div></div>`;
   }
 
   function wireDHCP(root) {
@@ -303,16 +304,169 @@
       if (!d) return false;
       d.names = (d.names || []).filter(x => x.mac !== b.dataset.unrm);
     }).then(ok => { if (ok) F.toast('Name removed from the draft — Apply to take effect', 'success'); }));
-    root.querySelectorAll('[data-static]').forEach(b => b.onclick = () => F.saveDraft(n => {
-      const d = n.dhcp.find(x => x.interface === b.dataset.if);
+    root.querySelectorAll('[data-lmenu]').forEach(b => b.onclick = e => { e.stopPropagation(); openLeaseMenu(b); });
+  }
+
+  // ── a lease row's ⋮ menu: make static / remove the reservation / delete ──
+  function openLeaseMenu(b) {
+    const old = document.querySelector('.fw-menu.fw-lease-menu');
+    if (old) { const same = old.dataset.for === b.dataset.lmenu + b.dataset.ip; old.remove(); if (same) return; }
+    const l = { mac: b.dataset.lmenu.toLowerCase(), ip: b.dataset.ip, host: b.dataset.host, iface: b.dataset.if };
+    const reserved = b.dataset.res === '1';
+    const m = document.createElement('div');
+    m.className = 'fw-menu fw-lease-menu';
+    m.dataset.for = b.dataset.lmenu + b.dataset.ip;
+    const r = b.getBoundingClientRect();
+    Object.assign(m.style, { position: 'fixed', top: (r.bottom + 6) + 'px', left: Math.max(8, Math.min(r.right - 240, window.innerWidth - 248)) + 'px', right: 'auto', minWidth: '240px', whiteSpace: 'nowrap' });
+    m.innerHTML = (reserved
+      ? `<div class="fw-menu-item" data-m="reserve" title="Another fixed address or name for this device">${F.icon('pencil')}Change reservation…</div>
+         <div class="fw-menu-item" data-m="unres" title="The device goes back to any free address of the range at its next renewal">${F.icon('x')}Remove reservation</div>`
+      : `<div class="fw-menu-item" data-m="static" title="This device always gets ${F.E(l.ip)}">${F.icon('pin')}Make static</div>
+         <div class="fw-menu-item" data-m="reserve" title="This device always gets an address you choose, with an optional name">${F.icon('pin')}Reserve another address…</div>`)
+      + `<div class="fw-menu-sep"></div><div class="fw-menu-item fw-danger" data-m="del">${F.icon('trash')}Delete lease…</div>`;
+    document.body.appendChild(m);
+    m.onclick = ev => ev.stopPropagation();
+    const close = () => { m.remove(); document.removeEventListener('click', close); window.removeEventListener('scroll', close, true); };
+    m.querySelectorAll('[data-m]').forEach(el => el.onclick = () => {
+      close();
+      ({ static: () => makeStatic(l), reserve: () => reserveDialog(l), unres: () => removeReservation(l), del: () => deleteLease(l) })[el.dataset.m]();
+    });
+    setTimeout(() => { document.addEventListener('click', close); window.addEventListener('scroll', close, true); }, 0);
+  }
+
+  function makeStatic(l) {
+    F.saveDraft(n => {
+      const d = n.dhcp.find(x => x.interface === l.iface);
       if (!d) return false;
       d.reservations = d.reservations || [];
-      const mac = b.dataset.static.toLowerCase();
       // A name that was following this device moves onto its reservation.
-      const had = (d.names || []).find(x => x.mac === mac);
+      const had = (d.names || []).find(x => x.mac === l.mac);
       if (had) d.names = d.names.filter(x => x !== had);
-      d.reservations.push({ mac, ip: b.dataset.ip, hostname: had ? had.hostname : (b.dataset.host || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 63) });
-    }).then(ok => { if (ok) F.toast('Reservation added to the draft — Apply to keep it', 'success'); }));
+      d.reservations.push({ mac: l.mac, ip: l.ip, hostname: had ? had.hostname : (l.host || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 63) });
+    }).then(ok => { if (ok) F.toast('Reservation added to the draft — Apply to keep it', 'success'); });
+  }
+
+  // "Reserve another address…": a fixed address of the admin's choice for
+  // this device, and a name. A short name (or one in the network's domain)
+  // is the reservation's; any other FQDN also gets a Local DNS record.
+  const labelRe = /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+  const fqdnRe = /^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+  function reserveDialog(l) {
+    const c = F.cfg();
+    const i = ifaceById(l.iface), d = c.dhcp.find(x => x.interface === l.iface);
+    if (!i || !d) return;
+    const dom = (d.domain || c.dns.domain || '').toLowerCase();
+    const net = netOf(i.ipv4), own = ip2n(ipOf(i.ipv4));
+    const lo = ip2n(d.range_start), hi = ip2n(d.range_end);
+    const res = (d.reservations || []).find(r => r.mac === l.mac);
+    const oldHost = res && c.dns.hosts.find(h => h.ip === res.ip && h.name.includes('.'));
+    const takenBy = ip => {
+      const n = ip2n(ip);
+      if (n === own) return 'the router itself (' + i.name + ')';
+      const r = (d.reservations || []).find(x => x.ip === ip && x.mac !== l.mac);
+      if (r) return 'reserved for ' + (r.hostname || r.mac);
+      const le = leases.find(x => x.ip === ip && (x.mac || '').toLowerCase() !== l.mac);
+      if (le) return 'leased to ' + (le.hostname || le.mac) + ' right now';
+      return '';
+    };
+    // Suggest the first free address outside the range (cleaner), else in it.
+    let sugg = res ? res.ip : '';
+    if (!sugg) {
+      for (let n = net.base + 1; n < net.base + net.size - 1; n++) {
+        if ((n < lo || n > hi) && !takenBy(n2ip(n))) { sugg = n2ip(n); break; }
+      }
+    }
+    const nm = (d.names || []).find(x => x.mac === l.mac);
+    const name0 = oldHost ? oldHost.name : (res && res.hostname) || (nm && nm.hostname) || (l.host || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 63);
+    const md = F.modal({ title: res ? 'Change reservation' : 'Reserve an address', width: 500,
+      body: `<p style="margin-top:0">Device <span class="fw-mono">${F.E(l.mac)}</span>${l.host ? ` (${F.E(l.host)})` : ''}, now on <span class="fw-mono">${F.E(l.ip)}</span>, on ${F.E(i.name)} (<span class="fw-mono">${F.E(net.base ? n2ip(net.base) + '/' + net.bits : i.ipv4)}</span>).</p>
+        <div class="fw-field"><label>Address</label><input type="text" id="fwr-ip" class="fw-mono" value="${F.E(sugg)}" placeholder="${F.E(n2ip(net.base + 2))}"><div class="fw-note" id="fwr-ip-note" style="margin:4px 0 0"></div><div class="fw-err" id="fwr-ip-err"></div></div>
+        <div class="fw-field" style="margin-top:10px"><label>Name <span style="color:var(--text-3);font-weight:400">(optional)</span></label><input type="text" id="fwr-name" value="${F.E(name0)}" placeholder="nas, or nas.example.com"><div class="fw-note" id="fwr-name-note" style="margin:4px 0 0"></div><div class="fw-err" id="fwr-name-err"></div></div>
+        <p style="color:var(--text-3);font-size:12.5px;margin-bottom:0">Saved in the draft: Apply to make it live. The device moves to the new address at its next renewal; Delete lease afterwards to make it ask sooner.</p>`,
+      buttons: [{ label: 'Cancel' }, { label: res ? 'Save to draft' : 'Reserve', cls: 'btn-primary', onClick: close => { if (save()) close(); } }] });
+    const q = sel => md.el.querySelector(sel);
+    const parse = () => {
+      const ip = q('#fwr-ip').value.trim(), name = q('#fwr-name').value.trim().replace(/\.$/, '');
+      let ipErr = '', ipNote = '', nameErr = '', nameNote = '', host = '', fqdn = '';
+      if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip) || ip.split('.').some(x => +x > 255)) ipErr = 'Enter an IPv4 address';
+      else {
+        const n = ip2n(ip);
+        if (n <= net.base || n >= net.base + net.size - 1) ipErr = `Must be inside ${n2ip(net.base)}/${net.bits}`;
+        else if (takenBy(ip)) ipErr = 'Already used: ' + takenBy(ip);
+        else ipNote = n >= lo && n <= hi ? 'Inside the DHCP range: allowed, but an address outside the range is cleaner.' : 'Outside the DHCP range.';
+      }
+      if (name) {
+        const low = name.toLowerCase();
+        if (labelRe.test(name)) host = name;
+        else if (dom && low.endsWith('.' + dom) && labelRe.test(name.slice(0, -dom.length - 1))) host = name.slice(0, -dom.length - 1);
+        else if (fqdnRe.test(name) && name.length <= 253) { fqdn = name; host = name.split('.')[0]; }
+        else nameErr = 'Letters, digits and - only, with dots between the parts of a full name';
+        if (host && !nameErr) {
+          const dup = (d.reservations || []).find(r => r.mac !== l.mac && (r.hostname || '').toLowerCase() === host.toLowerCase())
+            || (d.names || []).find(x => x.mac !== l.mac && x.hostname.toLowerCase() === host.toLowerCase());
+          if (dup) nameErr = `${host} is already the name of ${dup.mac} on this network`;
+        }
+        if (!nameErr) nameNote = fqdn
+          ? `Answers as <span class="fw-mono">${F.E(fqdn)}</span> (Local DNS record)${dom ? ` and <span class="fw-mono">${F.E(host + '.' + dom)}</span>` : ''}.${c.dns.enabled ? '' : ' Local DNS is off: the names answer once it is on.'}`
+          : `Answers as <span class="fw-mono">${F.E(host)}</span>${dom ? ` and <span class="fw-mono">${F.E(host + '.' + dom)}</span>` : ''}.`;
+      }
+      return { ip, host, fqdn, ipErr, ipNote, nameErr, nameNote };
+    };
+    const show = () => {
+      const v = parse();
+      q('#fwr-ip-err').textContent = q('#fwr-ip').value.trim() ? v.ipErr : '';
+      q('#fwr-ip-note').textContent = v.ipErr ? '' : v.ipNote;
+      q('#fwr-name-err').textContent = v.nameErr;
+      q('#fwr-name-note').innerHTML = v.nameErr ? '' : v.nameNote;
+      return v;
+    };
+    q('#fwr-ip').oninput = show; q('#fwr-name').oninput = show; show();
+    function save() {
+      const v = show();
+      if (v.ipErr || v.nameErr) { q('#fwr-ip-err').textContent = v.ipErr; return false; }
+      F.saveDraft(n => {
+        const dd = n.dhcp.find(x => x.interface === l.iface);
+        if (!dd) return false;
+        dd.reservations = dd.reservations || [];
+        const prev = dd.reservations.find(r => r.mac === l.mac);
+        dd.reservations = dd.reservations.filter(r => r !== prev);
+        dd.names = (dd.names || []).filter(x => x.mac !== l.mac); // the reservation carries the name now
+        const r = Object.assign({}, prev || {}, { mac: l.mac, ip: v.ip, hostname: v.host });
+        if (!r.hostname) delete r.hostname;
+        dd.reservations.push(r);
+        // the record this dialog showed goes; the new one comes
+        if (oldHost) n.dns.hosts = n.dns.hosts.filter(h => !(h.ip === oldHost.ip && h.name === oldHost.name));
+        if (v.fqdn) n.dns.hosts = n.dns.hosts.filter(h => h.name.toLowerCase() !== v.fqdn.toLowerCase()).concat([{ name: v.fqdn, ip: v.ip }]);
+      }).then(ok => { if (ok) F.toast(`Reservation of ${v.ip} in the draft — Apply to keep it`, 'success'); });
+      return true;
+    }
+  }
+
+  function removeReservation(l) {
+    F.saveDraft(n => {
+      const d = n.dhcp.find(x => x.interface === l.iface);
+      const res = d && (d.reservations || []).find(x => x.mac === l.mac);
+      if (!res) return false;
+      d.reservations = d.reservations.filter(x => x !== res);
+      // Its name keeps following the device, as a DHCP name.
+      if (res.hostname && !(d.names || []).some(x => x.mac === l.mac)) d.names = (d.names || []).concat([{ mac: l.mac, hostname: res.hostname }]);
+      // A full name pointed at the reserved address (Reserve another address…): the address is no longer this device's.
+      n.dns.hosts = n.dns.hosts.filter(h => !(h.ip === res.ip && h.name.includes('.')));
+    }).then(ok => { if (ok) F.toast('Reservation removed from the draft — Apply to take effect', 'success'); });
+  }
+
+  function deleteLease(l) {
+    F.modal({ title: 'Delete this lease?', width: 480,
+      body: `<p>The DHCP server forgets that <span class="fw-mono">${F.E(l.ip)}</span> is leased to <span class="fw-mono">${F.E(l.mac)}</span>${l.host ? ` (${F.E(l.host)})` : ''}, and its name leaves DNS. The address is free again.</p>
+        <p style="color:var(--text-3);font-size:12.5px">A device still on the network keeps using the address until its next renewal, and may get it back then. The DHCP server of this network restarts for about a second; other networks and DNS are not affected.</p>`,
+      buttons: [{ label: 'Cancel' }, { label: 'Delete lease', cls: 'btn-danger', onClick: async (close, btn) => {
+        btn.disabled = true; btn.textContent = 'Deleting…';
+        const r = await F.api('POST', '/api/sdn/dhcp/leases/delete', { interface: l.iface, mac: l.mac, ip: l.ip });
+        close();
+        if (!r.ok) { F.toast((r.data && r.data.error) || 'Could not delete the lease', 'error'); return; }
+        F.toast(`Lease of ${l.ip} deleted`, 'success');
+        await loadDHCP(); F.rerender();
+      } }] });
   }
 
   // ── DHCP "i" cards ──

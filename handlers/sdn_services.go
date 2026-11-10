@@ -4,8 +4,10 @@ package handlers
 // status and key generation.
 
 import (
+	"encoding/json"
 	"net/http"
 
+	"zfsnas/internal/audit"
 	"zfsnas/internal/config"
 	"zfsnas/internal/sdn"
 	"zfsnas/system"
@@ -89,6 +91,35 @@ func HandleSDNLeases(appCfg *config.AppConfig) http.HandlerFunc {
 			return
 		}
 		jsonOK(w, system.SDNDHCPLeases(c))
+	}
+}
+
+// HandleSDNDeleteLease — POST /api/sdn/dhcp/leases/delete {interface, mac, ip}
+func HandleSDNDeleteLease(appCfg *config.AppConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ Interface, MAC, IP string }
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			jsonErr(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		c, err := sdnStoreFor(appCfg).LoadConfirmed()
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		sess := MustSession(r)
+		err = system.SDNDeleteDHCPLease(c, b.Interface, b.MAC, b.IP)
+		res := audit.ResultOK
+		if err != nil {
+			res = audit.ResultError
+		}
+		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionSDNApply, Target: "dhcp lease",
+			Result: res, Details: "deleted lease " + b.IP + " (" + b.MAC + ")"})
+		if err != nil {
+			jsonErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		jsonOK(w, map[string]bool{"ok": true})
 	}
 }
 

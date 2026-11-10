@@ -253,6 +253,7 @@ func writeIfChanged(path, text string) {
 // names for DNS and writes the status. Called every 2 s and on SIGHUP.
 func (s *sdnDHCPSup) sync(now time.Time) {
 	confs := s.confs()
+	s.releases(confs)
 	for id, ch := range s.children {
 		text, ok := confs[id]
 		sum := sha256.Sum256([]byte(text))
@@ -339,6 +340,61 @@ func (s *sdnDHCPSup) sync(now time.Time) {
 	if b, err := json.Marshal(st); err == nil && string(b) != s.lastStatus {
 		s.lastStatus = string(b)
 		writeIfChanged(s.statusPath, string(b)+"\n")
+	}
+}
+
+// releases carries out the portal's "Delete lease" requests: files
+// "<anything>.release" in the config folder, each "id mac ip" line one lease.
+// dnsmasq keeps its leases in memory, so the network's server is stopped,
+// the line removed from its lease file, and the server started again (later
+// in this sync). Other networks and DNS are not touched.
+func (s *sdnDHCPSup) releases(confs map[string]string) {
+	files, _ := filepath.Glob(filepath.Join(s.confDir, "*.release"))
+	want := map[string][][2]string{}
+	for _, f := range files {
+		b, _ := os.ReadFile(f)
+		os.Remove(f) //nolint:errcheck
+		for _, l := range strings.Split(string(b), "\n") {
+			if x := strings.Fields(l); len(x) == 3 && sdnDHCPIDRe.MatchString(x[0]) {
+				want[x[0]] = append(want[x[0]], [2]string{strings.ToLower(x[1]), x[2]})
+			}
+		}
+	}
+	for id, drop := range want {
+		text, ok := confs[id]
+		if !ok {
+			continue
+		}
+		info := parseSDNDHCPConf(text)
+		if info.leaseFile == "" {
+			continue
+		}
+		if ch := s.children[id]; ch != nil && ch.running {
+			ch.proc.Stop()
+			ch.running, ch.next, ch.fails = false, time.Time{}, 0
+		}
+		b, err := os.ReadFile(info.leaseFile)
+		if err != nil {
+			continue
+		}
+		var keep strings.Builder
+		n := 0
+		for _, l := range strings.SplitAfter(string(b), "\n") {
+			f := strings.Fields(l)
+			gone := false
+			for _, d := range drop {
+				if len(f) >= 3 && strings.ToLower(f[1]) == d[0] && f[2] == d[1] {
+					gone = true
+				}
+			}
+			if gone {
+				n++
+				continue
+			}
+			keep.WriteString(l)
+		}
+		writeIfChanged(info.leaseFile, keep.String())
+		log.Printf("[sdn-dhcp] %s: %d lease(s) deleted", id, n)
 	}
 }
 
