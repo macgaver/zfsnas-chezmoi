@@ -43,7 +43,8 @@ func TestOpenScrubsStoredImpossibleValues(t *testing.T) {
 		s.push(CapSample{TS: ts + 2, Min: 3, Avg: 3, Max: 3, N: 1})
 		tier.get("pool:tank:used").push(CapSample{TS: ts, Min: 8e15, Avg: 8e15, Max: 8e15, N: 1})
 	}
-	if err := db.Flush(); err != nil {
+	db.dirty = true // filled directly, not through Record
+	if err := db.FlushNow(); err != nil {
 		t.Fatal(err)
 	}
 	r, _ := Open(p)

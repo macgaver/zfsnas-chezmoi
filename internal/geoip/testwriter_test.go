@@ -260,3 +260,51 @@ func TestDecodePointerCycle(t *testing.T) {
 		t.Fatal("pointer cycle not detected")
 	}
 }
+
+// The mapped and the ReadAt paths give the same answers, and a lookup after
+// Close fails cleanly instead of reading unmapped memory.
+func TestLookup_MappedMatchesReadAtAndClose(t *testing.T) {
+	p := writeTestDB(t, 6, 28, "DBIP-City-Lite", map[string]map[string]any{
+		"89.160.20.0/24": cityRec("SE", "Sweden", "Stockholm", 59.33, 18.07),
+		"81.2.69.0/24":   cityRec("GB", "United Kingdom", "London", 51.5, -0.12),
+	})
+	mapped, err := Open(p)
+	if err != nil || mapped.data == nil {
+		t.Fatalf("not mapped: %v", err)
+	}
+	plain, _ := Open(p)
+	plain.data = nil // force the ReadAt path
+	for _, ip := range []string{"89.160.20.112", "81.2.69.1", "8.8.8.8"} {
+		a, okA, errA := mapped.Lookup(netip.MustParseAddr(ip))
+		b, okB, errB := plain.Lookup(netip.MustParseAddr(ip))
+		if okA != okB || errA != nil || errB != nil || str(a, "city", "names", "en") != str(b, "city", "names", "en") {
+			t.Fatalf("%s: mapped %v %v %v, readat %v %v %v", ip, a, okA, errA, b, okB, errB)
+		}
+	}
+	n := 0
+	if err := mapped.Networks(func(netip.Prefix, map[string]any) bool { n++; return true }); err != nil || n != 2 {
+		t.Fatalf("walk on mapped db: %d %v", n, err)
+	}
+	// lookups racing a Close: none may crash
+	done := make(chan bool)
+	for g := 0; g < 4; g++ {
+		go func() {
+			for i := 0; i < 2000; i++ {
+				_, _, _ = mapped.Lookup(netip.MustParseAddr("89.160.20.112"))
+			}
+			done <- true
+		}()
+	}
+	mapped.Close()
+	for g := 0; g < 4; g++ {
+		<-done
+	}
+	if _, _, err := mapped.Lookup(netip.MustParseAddr("89.160.20.112")); err == nil {
+		t.Fatal("lookup after Close should fail")
+	}
+	if mapped.Close() != nil {
+		t.Fatal("second Close should be a no-op")
+	}
+	plain.Close()
+}
+

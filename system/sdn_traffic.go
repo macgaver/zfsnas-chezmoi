@@ -339,12 +339,25 @@ func (c *sdnCollector) events(ctx context.Context) {
 
 // SDNTrafficQuery answers the Traffic page.
 func SDNTrafficQuery(q traffic.Query) traffic.Result {
+	return SDNTrafficQueryMany([]traffic.Query{q})[0]
+}
+
+// SDNTrafficQueryMany answers several views of one period in one pass.
+func SDNTrafficQueryMany(qs []traffic.Query) []traffic.Result {
+	if len(qs) == 0 {
+		return nil
+	}
+	q := &qs[0]
 	c := sdnTC
 	c.mu.Lock()
 	store := c.store
 	c.mu.Unlock()
 	if store == nil || c.agg == nil {
-		return traffic.Result{KPI: map[string]traffic.KPI{}}
+		out := make([]traffic.Result, len(qs))
+		for i := range out {
+			out[i] = traffic.Result{KPI: map[string]traffic.KPI{}}
+		}
+		return out
 	}
 	if g := SDNGeo(); g != nil {
 		q.Locate = func(remote string) (geoip.Info, bool) {
@@ -355,7 +368,20 @@ func SDNTrafficQuery(q traffic.Query) traffic.Result {
 			return g.Lookup(a), true
 		}
 	}
-	return store.Query(q, c.agg.Snapshot(), time.Now())
+	return store.QueryMany(qs, c.agg.Snapshot(), time.Now())
+}
+
+// SDNTrafficInsideTotals is every inside address' data over [from, to), in
+// one pass over the statistics.
+func SDNTrafficInsideTotals(from, to time.Time) map[string]uint64 {
+	c := sdnTC
+	c.mu.Lock()
+	store := c.store
+	c.mu.Unlock()
+	if store == nil || c.agg == nil {
+		return map[string]uint64{}
+	}
+	return store.InsideTotals(from, to, c.agg.Snapshot(), time.Now())
 }
 
 func SDNTrafficStatusNow() SDNTrafficStatus {

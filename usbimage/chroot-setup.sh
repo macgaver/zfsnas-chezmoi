@@ -161,6 +161,10 @@ for drv in r8168 r8125; do
         && [ -n "$ko" ]; then
         cp "$ko" "$VENDOR_DIR/"
         echo "realtek: built $drv for $KVER"
+    elif ls "$VENDOR_DIR/${drv}.ko"* >/dev/null 2>&1; then
+        # Reused rootfs: DKMS skips the install when this kernel already has
+        # the module from an earlier build of the same source version.
+        echo "realtek: $drv for $KVER kept from an earlier build"
     else
         echo "WARNING: realtek: $drv did not build for $KVER — the image ships without it" >&2
     fi

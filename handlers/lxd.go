@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -1005,10 +1006,36 @@ var lxdConsoleUpgrader = websocket.Upgrader{
 	},
 }
 
+// lxdConsoleUserRe: a Linux account name for ?user= (no leading "-", so it
+// can never be read as an option by su/login).
+var lxdConsoleUserRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}$`)
+
+// lxdConsoleArgs builds the `incus` arguments for an instance console.
+// Root (or no user) keeps the historical behaviour: a password prompt
+// (`login`) when root has a password, else a root shell. Another user gets
+// `login USER` (its own password) when root has a password, else `su -l USER`
+// — the same trust level as the root shell the portal would otherwise open.
+func lxdConsoleArgs(name, user string, rootHasPassword bool, hasBash func() bool) []string {
+	base := []string{"exec", name, "--"}
+	if user == "" || user == "root" {
+		if rootHasPassword {
+			return append(base, "login")
+		}
+		if hasBash() {
+			return append(base, "bash")
+		}
+		return append(base, "sh")
+	}
+	if rootHasPassword {
+		return append(base, "login", user)
+	}
+	return append(base, "su", "-l", user)
+}
+
 // HandleLXDConsole opens a WebSocket attached to a persistent terminal
 // session targeting an LXD/Incus instance. Same attach/detach contract as
 // HandleTerminal — see handlers/terminal.go for the session lifecycle.
-// WS /ws/lxd-console?name=<name>[&session_id=<id>]
+// WS /ws/lxd-console?name=<name>[&user=<account>][&session_id=<id>]
 func HandleLXDConsole(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
@@ -1023,17 +1050,15 @@ func HandleLXDConsole(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	sess := MustSession(r)
+	user := strings.TrimSpace(r.URL.Query().Get("user"))
+	if user != "" && !lxdConsoleUserRe.MatchString(user) {
+		conn.WriteMessage(websocket.TextMessage, []byte("\r\ninvalid username\r\n"))
+		return
+	}
 	wsAttachOrCreate(conn, r, sess.UserID, termsessions.KindLXD, name, name, func() (*exec.Cmd, *os.File, error) {
-		var cmd *exec.Cmd
-		if lxcRootHasPassword(name) {
-			cmd = exec.Command("incus", "exec", name, "--", "login")
-		} else {
-			shell := "bash"
-			if exec.Command("incus", "exec", name, "--", "which", "bash").Run() != nil {
-				shell = "sh"
-			}
-			cmd = exec.Command("incus", "exec", name, "--", shell)
-		}
+		cmd := exec.Command("incus", lxdConsoleArgs(name, user, lxcRootHasPassword(name), func() bool {
+			return exec.Command("incus", "exec", name, "--", "which", "bash").Run() == nil
+		})...)
 		cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 		ptmx, err := pty.Start(cmd)
 		return cmd, ptmx, err

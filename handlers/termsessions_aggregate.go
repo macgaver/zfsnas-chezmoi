@@ -184,6 +184,9 @@ func HandleInterlinkTerminalProxyWS(appCfg *config.AppConfig) http.HandlerFunc {
 				return
 			}
 			peerPath = "/ws/lxd-console?name=" + url.QueryEscape(target)
+			if u := q.Get("user"); u != "" {
+				peerPath += "&user=" + url.QueryEscape(u)
+			}
 		case termsessions.KindCompose:
 			stack, container, ok := splitTwo(target, ":")
 			if !ok {

@@ -103,6 +103,7 @@ func GetPool() (*Pool, error) {
 		return nil, err
 	}
 	// Populate usable capacity from `zfs list` (root dataset used + avail).
+	endStatus := beginPoolStatus(p.Name)
 	p.UsableUsed, p.UsableAvail = poolRootUsage(p.Name)
 	p.UsableSize = p.UsableUsed + p.UsableAvail
 	// Populate member devices from `zpool status -P`.
@@ -119,6 +120,7 @@ func GetPool() (*Pool, error) {
 	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	p.Vdevs = poolVdevGroups(p.Name)
 	p.setErrorSummary(poolErrorSummary(p.Name, p.Vdevs))
+	endStatus()
 	return p, nil
 }
 
@@ -166,6 +168,7 @@ func GetAllPools() ([]*Pool, error) {
 		if err != nil {
 			continue
 		}
+		endStatus := beginPoolStatus(p.Name)
 		p.UsableUsed, p.UsableAvail = poolRootUsage(p.Name)
 		p.UsableSize = p.UsableUsed + p.UsableAvail
 		p.Members, p.MemberDevices, p.MemberRoles = poolMembers(p.Name)
@@ -181,6 +184,7 @@ func GetAllPools() ([]*Pool, error) {
 		p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 		p.Vdevs = poolVdevGroups(p.Name)
 		p.setErrorSummary(poolErrorSummary(p.Name, p.Vdevs))
+		endStatus()
 		pools = append(pools, p)
 	}
 	return pools, nil
@@ -201,6 +205,7 @@ func GetPoolByName(name string) (*Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+	endStatus := beginPoolStatus(p.Name)
 	p.UsableUsed, p.UsableAvail = poolRootUsage(p.Name)
 	p.UsableSize = p.UsableUsed + p.UsableAvail
 	p.Members, p.MemberDevices, p.MemberRoles = poolMembers(p.Name)
@@ -216,6 +221,7 @@ func GetPoolByName(name string) (*Pool, error) {
 	p.Encrypted, p.KeyLocked, p.EncryptionAlgorithm = poolEncryptionStatus(p.Name)
 	p.Vdevs = poolVdevGroups(p.Name)
 	p.setErrorSummary(poolErrorSummary(p.Name, p.Vdevs))
+	endStatus()
 	return p, nil
 }
 
@@ -257,8 +263,7 @@ func zpoolStatusDevices(poolName, section string, withFullPaths bool) []string {
 	if withFullPaths {
 		args = append(args, "-P")
 	}
-	args = append(args, poolName)
-	out, err := exec.Command(args[0], args[1:]...).Output()
+	out, err := zpoolStatusOut(poolName, args[3:]...)
 	if err != nil {
 		return nil
 	}
@@ -408,7 +413,7 @@ func poolMembers(poolName string) (raw, resolved, roles []string) {
 
 // poolMemberRoles returns the vdev role for each data member in order.
 func poolMemberRoles(poolName string, count int) []string {
-	out, err := exec.Command("sudo", "zpool", "status", "-P", poolName).Output()
+	out, err := zpoolStatusOut(poolName, "-P")
 	if err != nil || count == 0 {
 		roles := make([]string, count)
 		for i := range roles {
@@ -540,11 +545,11 @@ func poolCacheDevs(poolName string) (raw, resolved []string) {
 // of the DATA section as a slice of VdevGroup values.  Cache / spare / log sections
 // are excluded; those are handled by poolCacheDevs / poolSpareDevs.
 func poolVdevGroups(poolName string) []VdevGroup {
-	outP, err := exec.Command("sudo", "zpool", "status", "-P", poolName).Output()
+	outP, err := zpoolStatusOut(poolName, "-P")
 	if err != nil {
 		return nil
 	}
-	outNP, _ := exec.Command("sudo", "zpool", "status", poolName).Output()
+	outNP, _ := zpoolStatusOut(poolName)
 
 	validStates := map[string]bool{
 		"ONLINE": true, "DEGRADED": true, "FAULTED": true,
@@ -894,7 +899,7 @@ func poolErrorSummary(poolName string, vdevs []VdevGroup) poolErrors {
 			pe.Cksum += d.CksumErr
 		}
 	}
-	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	out, err := zpoolStatusOut(poolName)
 	if err != nil {
 		return pe
 	}
@@ -914,7 +919,7 @@ func poolErrorSummary(poolName string, vdevs []VdevGroup) poolErrors {
 	// superset: it replaces the "N data errors" line with the file header, so
 	// the count has to come from the plain output above.
 	pe.Count = parseDataErrorCount(status)
-	if outV, errV := exec.Command("sudo", "zpool", "status", "-v", poolName).Output(); errV == nil {
+	if outV, errV := zpoolStatusOut(poolName, "-v"); errV == nil {
 		pe.Files = parseDataErrorFiles(string(outV))
 	}
 	pe.Unresolved = dataErrorUnresolved(pe.Count, len(pe.Files))
@@ -931,7 +936,7 @@ func poolSpareDevs(poolName string) (raw, resolved, statuses []string) {
 	rawNames := zpoolStatusDevices(poolName, "spares", true)
 	resolvedNames := zpoolStatusDevices(poolName, "spares", false)
 	// Collect statuses directly from zpool status output.
-	out, _ := exec.Command("sudo", "zpool", "status", poolName).Output()
+	out, _ := zpoolStatusOut(poolName)
 	spareStatus := map[string]string{}
 	inSpares := false
 	inConfig := false
@@ -1011,7 +1016,7 @@ func poolSpareDevs(poolName string) (raw, resolved, statuses []string) {
 // poolMemberStatuses returns the per-device state for every leaf device in the
 // pool's data vdevs (same order as poolMembers).
 func poolMemberStatuses(poolName string) []string {
-	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	out, err := zpoolStatusOut(poolName)
 	if err != nil {
 		return nil
 	}
@@ -1961,7 +1966,7 @@ func SetPoolProperties(poolName string, props map[string]string) error {
 // poolVdevType inspects `zpool status` and returns the top-level vdev type:
 // "raidz1", "raidz2", "raidz3", "mirror", or "stripe" (default when no named vdev is found).
 func poolVdevType(poolName string) string {
-	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	out, err := zpoolStatusOut(poolName)
 	if err != nil {
 		return "stripe"
 	}
@@ -1999,7 +2004,7 @@ func poolVdevType(poolName string) string {
 // poolOperation returns the current background operation on the pool:
 // "scrubbing", "resilvering", "expanding", or "" when idle.
 func poolOperation(poolName string) string {
-	out, err := exec.Command("sudo", "zpool", "status", poolName).Output()
+	out, err := zpoolStatusOut(poolName)
 	if err != nil {
 		return ""
 	}

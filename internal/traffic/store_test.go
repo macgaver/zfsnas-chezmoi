@@ -1,6 +1,7 @@
 package traffic
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -172,5 +173,70 @@ func TestStore_HostIPsFollowHosts(t *testing.T) {
 	row := r.Rows[0]
 	if len(row.Hosts) != 2 || row.Hosts[0] != "nas.lan" || row.HostIPs[0] != "10.0.0.5" || row.Hosts[1] != "10.0.0.9" || row.HostIPs[1] != "10.0.0.9" {
 		t.Fatalf("hosts %v / %v", row.Hosts, row.HostIPs)
+	}
+}
+
+// One pass gives every inside address its total, stored tiers plus the
+// open (in-memory) buckets, and agrees with the per-host query.
+func TestStore_InsideTotals(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	a := rec("in", "1.1.1.1", "AU", 100, 1, day)
+	b := rec("out", "8.8.8.8", "US", 40, 1, day)
+	b.Inside, b.BytesOut = "10.97.8.11", 5
+	_ = s.Write([]Bucket{bucket(day, a, b)})
+	open := []Bucket{bucket(day.Add(30*time.Minute), rec("in", "1.1.1.1", "AU", 7, 1, day.Add(30*time.Minute)))}
+	got := s.InsideTotals(day, day.Add(time.Hour), open, day.Add(time.Hour))
+	if got["10.97.8.10"] != 107 || got["10.97.8.11"] != 45 || len(got) != 2 {
+		t.Fatalf("%v", got)
+	}
+	one := s.Query(Query{From: day, To: day.Add(time.Hour), Dir: "all", Group: "ip", Inside: "10.97.8.11"}, open, day.Add(time.Hour))
+	if len(one.Rows) != 1 || one.Rows[0].BytesIn+one.Rows[0].BytesOut != got["10.97.8.11"] {
+		t.Fatalf("per-host query disagrees: %+v", one.Rows)
+	}
+}
+
+// A query for one inside host locates only that host's remotes again.
+func TestStore_QueryInsideLocatesOnlyItsRemotes(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	other := rec("in", "89.160.20.112", "SE", 10, 1, day)
+	other.Inside = "10.97.8.99"
+	_ = s.Write([]Bucket{bucket(day, rec("in", "24.50.76.243", "CA", 100, 1, day), other)})
+	var asked []string
+	q := Query{From: day, To: day.Add(time.Hour), Dir: "all", Group: "ip", Inside: "10.97.8.10", Locate: func(ip string) (geoip.Info, bool) {
+		asked = append(asked, ip)
+		return geoip.Info{CountryCode: "CA", Country: "Canada", City: "Roberval"}, true
+	}}
+	r := s.Query(q, nil, day.Add(time.Hour))
+	if len(asked) != 1 || asked[0] != "24.50.76.243" {
+		t.Fatalf("asked %v", asked)
+	}
+	if len(r.Rows) != 1 || r.Rows[0].City != "Roberval" {
+		t.Fatalf("%+v", r.Rows)
+	}
+}
+
+// One pass for several views answers exactly what separate queries do.
+func TestStore_QueryManyMatchesSeparate(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	out := rec("out", "8.8.8.8", "US", 40, 2, day)
+	out.Port = 53
+	blk := rec("blk", "45.1.1.1", "NL", 0, 0, day)
+	blk.Pkts, blk.Port = 9, 22
+	_ = s.Write([]Bucket{bucket(day, rec("in", "1.1.1.1", "AU", 100, 1, day), out, blk, rec("in", "89.160.20.112", "SE", 10, 1, day))})
+	open := []Bucket{bucket(day.Add(20*time.Minute), rec("in", "1.1.1.1", "AU", 5, 1, day.Add(20*time.Minute)))}
+	qs := []Query{
+		{From: day, To: day.Add(time.Hour), Dir: "in", Group: "ip"},
+		{From: day, To: day.Add(time.Hour), Dir: "out", Group: "ip"},
+		{From: day, To: day.Add(time.Hour), Dir: "blk", Group: "country"},
+		{From: day, To: day.Add(time.Hour), Dir: "in", Group: "ip", Filter: "SE"},
+	}
+	many := s.QueryMany(qs, open, day.Add(time.Hour))
+	for i, q := range qs {
+		one := s.Query(q, open, day.Add(time.Hour))
+		a, _ := json.Marshal(one)
+		b, _ := json.Marshal(many[i])
+		if string(a) != string(b) {
+			t.Fatalf("view %d differs:\n one %s\nmany %s", i, a, b)
+		}
 	}
 }

@@ -401,8 +401,9 @@ func sdnTopoReadUsage(now time.Time) (u sdnTopoUsage, ready bool, down, up int64
 	return
 }
 
-// sdnTopo24h keeps each address' last-24-hours total. Adding them up is a
-// query per host, so it runs in the background, at most every two minutes.
+// sdnTopo24h keeps each address' last-24-hours total: one pass over the
+// statistics for all of them, in the background, at most every ten minutes
+// (the stored statistics only change at each 10-minute flush).
 var sdnTopo24h = struct {
 	sync.Mutex
 	bytes   map[string]uint64
@@ -410,24 +411,23 @@ var sdnTopo24h = struct {
 	running bool
 }{bytes: map[string]uint64{}}
 
-func sdnTopoRefresh24h(ips []string, now time.Time) {
+func sdnTopoRefresh24h(now time.Time) {
 	sdnTopo24h.Lock()
 	defer sdnTopo24h.Unlock()
-	if sdnTopo24h.running || now.Sub(sdnTopo24h.started) < 2*time.Minute {
+	if sdnTopo24h.running || (!sdnTopo24h.started.IsZero() && now.Sub(sdnTopo24h.started) < sdnTopo24hEvery) {
 		return
 	}
 	sdnTopo24h.running, sdnTopo24h.started = true, now
 	go func() {
-		m := make(map[string]uint64, len(ips))
-		for _, ip := range ips {
-			t := sdnHostTraffic(ip, time.Now())
-			m[ip] = t.BytesIn + t.BytesOut
-		}
+		t := time.Now()
+		m := SDNTrafficInsideTotals(t.Add(-24*time.Hour), t.Add(time.Minute))
 		sdnTopo24h.Lock()
 		sdnTopo24h.bytes, sdnTopo24h.running = m, false
 		sdnTopo24h.Unlock()
 	}()
 }
+
+const sdnTopo24hEvery = 10 * time.Minute
 
 var sdnTopoCache = struct {
 	sync.Mutex
@@ -544,13 +544,12 @@ func buildSDNTopology(c *sdn.Config, inst []sdnTopoInstance, now time.Time) SDNT
 	})
 
 	// Names from reverse DNS for what is still nameless: a few at a time, kept.
-	var nameless, all []string
+	var nameless []string
 	for _, n := range t.Networks {
 		for _, h := range n.Hosts {
 			if h.IP == "" {
 				continue
 			}
-			all = append(all, h.IP)
 			if h.Name == "" {
 				nameless = append(nameless, h.IP)
 			}
@@ -581,7 +580,7 @@ func buildSDNTopology(c *sdn.Config, inst []sdnTopoInstance, now time.Time) SDNT
 		}
 	}
 	sdnTopoPTR.Unlock()
-	sdnTopoRefresh24h(all, now)
+	sdnTopoRefresh24h(now)
 	return t
 }
 

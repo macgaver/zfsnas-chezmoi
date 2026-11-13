@@ -130,7 +130,7 @@ func (r *Resolver) Lookup(ip netip.Addr) Info {
 		}
 	}
 	r.mu.Lock()
-	if len(r.cache) > 4096 {
+	if len(r.cache) > 65536 { // ~10 MB; a day of traffic has ~10 000 remotes
 		r.cache = map[netip.Addr]Info{}
 	}
 	r.cache[ip] = in

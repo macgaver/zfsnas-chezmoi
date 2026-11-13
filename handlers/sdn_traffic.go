@@ -37,6 +37,30 @@ func HandleSDNTraffic(w http.ResponseWriter, r *http.Request) {
 	q.Offset, _ = strconv.Atoi(qv.Get("offset"))
 	limit, _ := strconv.Atoi(qv.Get("limit"))
 	q.Limit = sdnTrafficLimit(limit)
+	// dirs=in,out,blk: the page's three tables from one pass, as
+	// {"in": …, "out": …, "blk": …}; blocked lines group by IP or country.
+	if ds := qv.Get("dirs"); ds != "" {
+		var names []string
+		var qs []traffic.Query
+		for _, d := range strings.Split(ds, ",") {
+			if d != "in" && d != "out" && d != "blk" && d != "all" {
+				continue
+			}
+			x := q
+			x.Dir = d
+			if d == "blk" && x.Group != "ip" {
+				x.Group = "country"
+			}
+			names, qs = append(names, d), append(qs, x)
+		}
+		res := system.SDNTrafficQueryMany(qs)
+		out := make(map[string]traffic.Result, len(res))
+		for i, n := range names {
+			out[n] = res[i]
+		}
+		jsonOK(w, out)
+		return
+	}
 	jsonOK(w, system.SDNTrafficQuery(q))
 }
 

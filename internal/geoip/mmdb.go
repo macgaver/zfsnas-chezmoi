@@ -13,14 +13,19 @@ import (
 	"math"
 	"net/netip"
 	"os"
+	"sync"
+	"syscall"
 )
 
 var metaMarker = []byte("\xab\xcd\xefMaxMind.com")
 
-// DB is an open .mmdb file. Lookups use ReadAt: the file is not loaded into
-// memory (the city database is ~130 MB).
+// DB is an open .mmdb file. The file is memory-mapped read-only: lookups
+// read the shared page cache with no system call and no private copy (the
+// city database is ~130 MB). Where mapping fails, lookups use ReadAt.
 type DB struct {
 	f          *os.File
+	data       []byte   // the mapped file, nil when not mapped
+	st         *dbState // shared by the Networks walker's copy
 	nodeCount  uint32
 	recordSize int
 	ipVersion  int
@@ -31,6 +36,27 @@ type DB struct {
 	Type       string
 	BuildEpoch uint64
 }
+
+// dbState guards the mapping: Close waits for lookups in progress before
+// unmapping, and lookups after Close fail instead of touching freed memory.
+type dbState struct {
+	mu     sync.RWMutex
+	closed bool
+}
+
+var errClosed = errors.New("database closed")
+
+// enter holds the database open for one public call.
+func (d *DB) enter() error {
+	d.st.mu.RLock()
+	if d.st.closed {
+		d.st.mu.RUnlock()
+		return errClosed
+	}
+	return nil
+}
+
+func (d *DB) leave() { d.st.mu.RUnlock() }
 
 func Open(path string) (*DB, error) {
 	f, err := os.Open(path)
@@ -69,7 +95,16 @@ func Open(path string) (*DB, error) {
 		f.Close()
 		return nil, errors.New("metadata is not a map")
 	}
-	d := &DB{f: f}
+	d := &DB{f: f, st: &dbState{}}
+	if n > 0 && n < 1<<31 {
+		if m, err := syscall.Mmap(int(f.Fd()), 0, int(n), syscall.PROT_READ, syscall.MAP_SHARED); err == nil {
+			d.data = m
+		}
+	}
+	fail := func(err error) (*DB, error) {
+		d.Close()
+		return nil, err
+	}
 	d.nodeCount = uint32(asUint(m["node_count"]))
 	d.recordSize = int(asUint(m["record_size"]))
 	d.ipVersion = int(asUint(m["ip_version"]))
@@ -78,19 +113,20 @@ func Open(path string) (*DB, error) {
 	switch d.recordSize {
 	case 24, 28, 32:
 	default:
-		f.Close()
-		return nil, fmt.Errorf("unsupported record size %d", d.recordSize)
+		return fail(fmt.Errorf("unsupported record size %d", d.recordSize))
 	}
 	d.treeSize = int64(d.recordSize*2/8) * int64(d.nodeCount)
 	d.dataStart = d.treeSize + 16
+	if d.dataStart > n {
+		return fail(errors.New("truncated MaxMind DB file"))
+	}
 	if d.ipVersion == 6 {
 		// IPv4 lives at ::a.b.c.d: follow 96 zero bits.
 		node := uint32(0)
 		for i := 0; i < 96 && node < d.nodeCount; i++ {
 			l, _, err := d.node(node)
 			if err != nil {
-				f.Close()
-				return nil, err
+				return fail(err)
 			}
 			node = l
 		}
@@ -99,7 +135,20 @@ func Open(path string) (*DB, error) {
 	return d, nil
 }
 
-func (d *DB) Close() error { return d.f.Close() }
+// Close waits for lookups in progress, then unmaps and closes the file.
+func (d *DB) Close() error {
+	d.st.mu.Lock()
+	defer d.st.mu.Unlock()
+	if d.st.closed {
+		return nil
+	}
+	d.st.closed = true
+	if d.data != nil {
+		_ = syscall.Munmap(d.data)
+		d.data = nil
+	}
+	return d.f.Close()
+}
 
 func asUint(v any) uint64 {
 	switch x := v.(type) {
@@ -119,11 +168,18 @@ func asUint(v any) uint64 {
 func (d *DB) node(n uint32) (uint32, uint32, error) {
 	size := d.recordSize * 2 / 8
 	var b []byte
-	if d.tree != nil {
-		b = d.tree[int64(n)*int64(size) : int64(n+1)*int64(size)]
-	} else {
+	off := int64(n) * int64(size)
+	switch {
+	case d.tree != nil:
+		b = d.tree[off : off+int64(size)]
+	case d.data != nil:
+		if off+int64(size) > d.treeSize {
+			return 0, 0, errors.New("search tree node out of range (corrupt database)")
+		}
+		b = d.data[off : off+int64(size)]
+	default:
 		b = make([]byte, size)
-		if _, err := d.f.ReadAt(b, int64(n)*int64(size)); err != nil {
+		if _, err := d.f.ReadAt(b, off); err != nil {
 			return 0, 0, err
 		}
 	}
@@ -144,6 +200,10 @@ func (d *DB) Lookup(ip netip.Addr) (map[string]any, bool, error) {
 	if !ip.Is4() {
 		return nil, false, nil
 	}
+	if err := d.enter(); err != nil {
+		return nil, false, err
+	}
+	defer d.leave()
 	a := ip.As4()
 	node := d.ipv4Start
 	for i := 0; i < 32 && node < d.nodeCount; i++ {
@@ -178,6 +238,15 @@ func (d *DB) record(rec uint32) (map[string]any, bool, error) {
 func (d *DB) decodeAt(off int64) (any, error) { return d.decodeAtDepth(off, 0) }
 
 func (d *DB) decodeAtDepth(off int64, depth int) (any, error) {
+	if d.data != nil {
+		start := d.dataStart + off
+		if off < 0 || start >= int64(len(d.data)) {
+			return nil, errors.New("data offset out of range (corrupt database)")
+		}
+		dec := &decoder{b: d.data[start:], base: off, db: d, depth: depth}
+		v, _, err := dec.decode(0)
+		return v, err
+	}
 	for win := int64(4096); ; win *= 4 {
 		b := make([]byte, win)
 		n, err := d.f.ReadAt(b, d.dataStart+off)
@@ -198,6 +267,10 @@ func (d *DB) decodeAtDepth(off int64, depth int) (any, error) {
 // Networks walks the IPv4 part of the tree and calls fn for every network
 // that has data. Returning false stops the walk.
 func (d *DB) Networks(fn func(p netip.Prefix, rec map[string]any) bool) error {
+	if err := d.enter(); err != nil {
+		return err
+	}
+	defer d.leave()
 	type item struct {
 		node uint32
 		ip   uint32
@@ -206,7 +279,11 @@ func (d *DB) Networks(fn func(p netip.Prefix, rec map[string]any) bool) error {
 	// A private copy of the tree for the walk: lookups running at the same
 	// time keep reading the file (no shared mutable state).
 	walker := d
-	if d.treeSize < 256<<20 {
+	if d.data != nil {
+		cp := *d
+		cp.tree = d.data[:d.treeSize]
+		walker = &cp
+	} else if d.treeSize < 256<<20 {
 		t := make([]byte, d.treeSize)
 		if _, err := d.f.ReadAt(t, 0); err != nil {
 			return err

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -59,13 +60,35 @@ func GetCpuProcsSnapshot() *CpuProcsSnapshot {
 	return cpuProcsLatest
 }
 
-// StartCpuProcsPoller samples per-process CPU usage every 3 s.
+// procsViewedAt is when someone last asked for the per-process CPU or
+// memory figures (unix nanoseconds). Nobody looking for two minutes: the
+// pollers slow down to one sample every 30 s (each reads ~1 000 /proc files
+// on a busy host).
+var procsViewedAt atomic.Int64
+
+// MarkProcsViewed tells the pollers their figures are on a screen.
+func MarkProcsViewed() { procsViewedAt.Store(time.Now().UnixNano()) }
+
+// procsIdleSkip reports whether this tick may be skipped: nobody has looked
+// for two minutes and the last sample is younger than 30 s.
+func procsIdleSkip(last time.Time, now time.Time) bool {
+	viewed := time.Unix(0, procsViewedAt.Load())
+	return now.Sub(viewed) > 2*time.Minute && now.Sub(last) < 30*time.Second
+}
+
+// StartCpuProcsPoller samples per-process CPU usage every 3 s (30 s while
+// nobody looks).
 func StartCpuProcsPoller() {
 	cpuProcsPrev = make(map[int]uint64)
 	go func() {
 		tick := time.NewTicker(3 * time.Second)
 		defer tick.Stop()
-		for range tick.C {
+		var last time.Time
+		for now := range tick.C {
+			if procsIdleSkip(last, now) {
+				continue
+			}
+			last = now
 			snap := sampleCpuProcs()
 			if snap != nil {
 				cpuProcsMu.Lock()
@@ -296,6 +319,33 @@ func readProcCmdline(pid int) string {
 // It first checks by process name for well-known services, then falls back
 // to cgroup inspection for LXD VMs (qemu) and containers.
 func categorizeProc(pid int, name string) string {
+	procCatCache.Lock()
+	if e, ok := procCatCache.m[pid]; ok && e.name == name {
+		procCatCache.Unlock()
+		return e.cat
+	}
+	procCatCache.Unlock()
+	cat := categorizeProcUncached(pid, name)
+	procCatCache.Lock()
+	if len(procCatCache.m) > 16384 {
+		procCatCache.m = map[int]procCat{}
+	}
+	procCatCache.m[pid] = procCat{name, cat}
+	procCatCache.Unlock()
+	return cat
+}
+
+// procCatCache: a process keeps its category (by name, then cgroup) for
+// its life, so the cgroup file is read once per process, not every sample.
+// A reused pid with another name is categorized again.
+type procCat struct{ name, cat string }
+
+var procCatCache = struct {
+	sync.Mutex
+	m map[int]procCat
+}{m: map[int]procCat{}}
+
+func categorizeProcUncached(pid int, name string) string {
 	lower := strings.ToLower(name)
 
 	// ── VMs: QEMU processes spawned by LXD ───────────────────────────────────

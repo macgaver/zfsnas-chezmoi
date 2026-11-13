@@ -47,7 +47,7 @@ name: Appliance image
 env:
   APPLIANCE_UBUNTU_VERSION: "26.04.1"
   APPLIANCE_BUILD: "5"
-  APPLIANCE_INCUS_VERSION: "7.5.1"
+  APPLIANCE_INCUS_VERSION: "7.6"
   APPLIANCE_REPO: macgaver/znas-usb-appliance
 
 on:

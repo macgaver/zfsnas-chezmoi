@@ -9,15 +9,49 @@
 package capacityrrd
 
 import (
-	"log"
-
-	"zfsnas/internal/rrd"
-
+	"bufio"
+	"compress/gzip"
 	"encoding/json"
+	"io"
+	"log"
 	"os"
 	"sync"
 	"time"
+
+	"zfsnas/internal/rrd"
 )
+
+// On disk a DB is <path>.gz: gzip'd JSON, written whole to a temporary file
+// then renamed over the old one (a crash never leaves half a file). The
+// plain <path> of older builds is still read; whichever of the two is newer
+// wins (a restored backup may hold the plain one), and the plain file goes
+// at the next write.
+//
+// Writes happen only when something changed, at most every WriteEvery
+// (samples keep their 5-minute resolution in memory); FlushNow writes at
+// once (shutdown).
+var WriteEvery = 30 * time.Minute
+
+// registry: every open DB, for FlushAll at shutdown.
+var registry = struct {
+	sync.Mutex
+	dbs map[*DB]bool
+}{dbs: map[*DB]bool{}}
+
+// FlushAll writes every open DB that has unsaved samples (shutdown).
+func FlushAll() {
+	registry.Lock()
+	dbs := make([]*DB, 0, len(registry.dbs))
+	for db := range registry.dbs {
+		dbs = append(dbs, db)
+	}
+	registry.Unlock()
+	for _, db := range dbs {
+		if err := db.FlushNow(); err != nil {
+			log.Printf("[rrd] %s: %v", db.path, err)
+		}
+	}
+}
 
 const (
 	Tier0Slots = 2016 // 7 * 24 * 12  (5-min resolution, 1 week)
@@ -215,6 +249,10 @@ type DB struct {
 	// In-memory accumulators for Tier1 (30-min) and Tier2 (daily) aggregation.
 	t1 pendingBucket
 	t2 pendingBucket
+
+	dirty   bool      // samples not on disk yet
+	written time.Time // last write (or open)
+	closed  bool      // Close: never written again (its file was deleted)
 }
 
 // Open loads a DB from disk, or creates a new empty one if the file doesn't exist.
@@ -230,14 +268,22 @@ func Open(path string) (*DB, error) {
 		t2: pendingBucket{pending: make(map[string][]CapSample)},
 	}
 
-	b, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return db, nil
-	}
+	db.written = time.Now()
+	registry.Lock()
+	registry.dbs[db] = true
+	registry.Unlock()
+
+	src, gz, err := newestFile(path)
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(b, &db.data); err != nil {
+	if src == "" {
+		return db, nil
+	}
+	if !gz {
+		db.dirty = true // moves to the compressed file at the next write
+	}
+	if err := decodeFile(src, gz, &db.data); err != nil {
 		// Corrupt file — start fresh.
 		db.data = dbData{
 			Tier0: newTierStore(Tier0Slots),
@@ -299,6 +345,7 @@ func (db *DB) RecordAgg(key string, mn, avg, mx float64, n int, now time.Time) {
 func (db *DB) record(key string, cs CapSample, now time.Time) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	db.dirty = true
 
 	// --- Tier 0: raw 5-min sample ---
 	cs.TS = now.Unix() / tier0Secs * tier0Secs
@@ -413,6 +460,23 @@ func (db *DB) Keys() []string {
 	return keys
 }
 
+// AllKeys returns every series name of any tier.
+func (db *DB) AllKeys() []string {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	seen := map[string]bool{}
+	for _, t := range []*tierStore{&db.data.Tier0, &db.data.Tier1, &db.data.Tier2} {
+		for k := range t.Series {
+			seen[k] = true
+		}
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // OldestTS returns the Unix timestamp of the oldest Tier0 sample across all series.
 // Returns 0 if no data exists.
 func (db *DB) OldestTS() int64 {
@@ -436,6 +500,13 @@ func (db *DB) OldestTS() int64 {
 func (db *DB) DeleteKey(key string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	if _, ok := db.data.Tier0.Series[key]; ok {
+		db.dirty = true
+	} else if _, ok := db.data.Tier1.Series[key]; ok {
+		db.dirty = true
+	} else if _, ok := db.data.Tier2.Series[key]; ok {
+		db.dirty = true
+	}
 	delete(db.data.Tier0.Series, key)
 	delete(db.data.Tier1.Series, key)
 	delete(db.data.Tier2.Series, key)
@@ -443,13 +514,108 @@ func (db *DB) DeleteKey(key string) {
 	delete(db.t2.pending, key)
 }
 
-// Flush persists the DB to disk atomically.
+// Flush writes the DB when it has unsaved samples and the last write is
+// at least WriteEvery old. Collectors call it after every sample.
 func (db *DB) Flush() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	b, err := json.Marshal(&db.data)
+	if !db.dirty || db.closed || time.Since(db.written) < WriteEvery {
+		return nil
+	}
+	return db.writeLocked()
+}
+
+// FlushNow writes unsaved samples at once.
+func (db *DB) FlushNow() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if !db.dirty || db.closed {
+		return nil
+	}
+	return db.writeLocked()
+}
+
+// Close forgets the DB: it is never written again (its file is about to be
+// deleted) and FlushAll skips it.
+func (db *DB) Close() {
+	db.mu.Lock()
+	db.closed = true
+	db.mu.Unlock()
+	registry.Lock()
+	delete(registry.dbs, db)
+	registry.Unlock()
+}
+
+// Files returns the paths a DB stored at path may occupy (compressed, plain).
+func Files(path string) []string { return []string{path + ".gz", path} }
+
+func (db *DB) writeLocked() error {
+	dst := db.path + ".gz"
+	tmp := dst + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0640)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(db.path, b, 0640)
+	bw := bufio.NewWriterSize(f, 256<<10)
+	zw, _ := gzip.NewWriterLevel(bw, gzip.BestSpeed)
+	err = json.NewEncoder(zw).Encode(&db.data)
+	if e := zw.Close(); err == nil {
+		err = e
+	}
+	if e := bw.Flush(); err == nil {
+		err = e
+	}
+	if e := f.Close(); err == nil {
+		err = e
+	}
+	if err == nil {
+		err = os.Rename(tmp, dst)
+	}
+	if err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if _, e := os.Stat(db.path); e == nil {
+		os.Remove(db.path) // the plain file of an older build: replaced
+	}
+	db.dirty, db.written = false, time.Now()
+	return nil
+}
+
+// newestFile picks the file to load: the newer of <path>.gz and <path>
+// ("" when neither exists).
+func newestFile(path string) (src string, gz bool, err error) {
+	gzInfo, gerr := os.Stat(path + ".gz")
+	plainInfo, perr := os.Stat(path)
+	switch {
+	case gerr == nil && (perr != nil || !plainInfo.ModTime().After(gzInfo.ModTime())):
+		return path + ".gz", true, nil
+	case perr == nil:
+		return path, false, nil
+	case os.IsNotExist(gerr) && os.IsNotExist(perr):
+		return "", false, nil
+	case !os.IsNotExist(perr):
+		return "", false, perr
+	default:
+		return "", false, gerr
+	}
+}
+
+// decodeFile streams a stored DB into v (no whole-file buffer).
+func decodeFile(path string, gz bool, v any) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	var r io.Reader = bufio.NewReaderSize(f, 256<<10)
+	if gz {
+		zr, err := gzip.NewReader(r)
+		if err != nil {
+			return err
+		}
+		defer zr.Close()
+		r = zr
+	}
+	return json.NewDecoder(r).Decode(v)
 }

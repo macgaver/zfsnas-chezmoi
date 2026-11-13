@@ -18,6 +18,7 @@ import (
 	"zfsnas/handlers"
 	"zfsnas/internal/alerts"
 	"zfsnas/internal/audit"
+	"zfsnas/internal/capacityrrd"
 	"zfsnas/internal/certgen"
 	"zfsnas/internal/config"
 	"zfsnas/internal/keystore"
@@ -676,6 +677,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	system.SDNDNSStatsSave()
+	// Charts history: samples since the last (30-minute) write.
+	capacityrrd.FlushAll()
 	srv.Shutdown(ctx)
 	if srv443 != nil {
 		srv443.Shutdown(ctx)

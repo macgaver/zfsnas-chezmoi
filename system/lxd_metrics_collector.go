@@ -119,7 +119,53 @@ func GetLXDInstanceMetricsDB(instance string) *capacityrrd.DB {
 		return nil
 	}
 	lxdMetricsDBs[instance] = db
+	pruneLXDMetricSeries(db, time.Now())
 	return db
+}
+
+// lxdTransientDevice: devices that come and go by the hundred inside an
+// instance — a nested Docker/Podman container's veth, a nested VM's tap, a
+// snap's loop disk. Each would get its own 5-year series (one container held
+// 718 veth series, 70 MB on disk and in memory), so they are not recorded.
+func lxdTransientDevice(dev string) bool {
+	for _, p := range []string{"veth", "tap", "loop"} {
+		if strings.HasPrefix(dev, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// pruneLXDMetricSeries drops the series of transient devices, and those of
+// any device silent for 30 days while the instance itself kept reporting
+// (a removed NIC or disk). A stopped instance keeps all its history.
+func pruneLXDMetricSeries(db *capacityrrd.DB, now time.Time) int {
+	newest := func(key string) int64 {
+		var ts int64
+		for tier := 0; tier <= 2; tier++ {
+			if q := db.Query(tier, key); len(q) > 0 && q[len(q)-1].TS > ts {
+				ts = q[len(q)-1].TS
+			}
+		}
+		return ts
+	}
+	alive := now.Unix()-newest("cpu") < 86400 || now.Unix()-newest("mem") < 86400
+	n := 0
+	for _, key := range db.AllKeys() {
+		i := strings.IndexByte(key, ':')
+		if i < 0 {
+			continue
+		}
+		kind, dev := key[:i], key[i+1:]
+		if kind != "net_rx" && kind != "net_tx" && kind != "disk_r" && kind != "disk_w" {
+			continue
+		}
+		if lxdTransientDevice(dev) || (alive && now.Unix()-newest(key) > 30*86400) {
+			db.DeleteKey(key)
+			n++
+		}
+	}
+	return n
 }
 
 // ListLXDMetricInstances returns the names of every LXD instance that has a
@@ -140,11 +186,10 @@ func ListLXDMetricInstances() []string {
 				if e.IsDir() {
 					continue
 				}
-				n := e.Name()
-				if !strings.HasSuffix(n, ".rrd.json") {
+				name, ok := lxdMetricsFileInstance(e.Name())
+				if !ok {
 					continue
 				}
-				name := strings.TrimSuffix(n, ".rrd.json")
 				if name == "" {
 					continue
 				}
@@ -170,6 +215,9 @@ func DeleteLXDInstanceMetrics(instance string) error {
 		return nil
 	}
 	lxdMetricsMu.Lock()
+	if db := lxdMetricsDBs[instance]; db != nil {
+		db.Close() // never written again: its file goes below
+	}
 	delete(lxdMetricsDBs, instance)
 	lxdMetricsMu.Unlock()
 
@@ -183,11 +231,25 @@ func DeleteLXDInstanceMetrics(instance string) error {
 	}
 
 	path := filepath.Join(lxdMetricsDir, sanitizeInstanceForFilename(instance)+".rrd.json")
-	err := os.Remove(path)
-	if os.IsNotExist(err) {
-		return nil
+	var firstErr error
+	for _, f := range capacityrrd.Files(path) {
+		if err := os.Remove(f); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return err
+	return firstErr
+}
+
+// lxdMetricsFileInstance maps a file of the metrics directory to its
+// instance: <name>.rrd.json.gz, or <name>.rrd.json from older builds.
+func lxdMetricsFileInstance(file string) (string, bool) {
+	for _, suf := range []string{".rrd.json.gz", ".rrd.json"} {
+		if strings.HasSuffix(file, suf) {
+			name := strings.TrimSuffix(file, suf)
+			return name, name != ""
+		}
+	}
+	return "", false
 }
 
 // SweepOrphanLXDMetrics removes RRD files for instances LXD no longer knows
@@ -216,11 +278,10 @@ func SweepOrphanLXDMetrics() {
 		if entry.IsDir() {
 			continue
 		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".rrd.json") {
+		instance, ok := lxdMetricsFileInstance(entry.Name())
+		if !ok {
 			continue
 		}
-		instance := strings.TrimSuffix(name, ".rrd.json")
 		if liveSet[instance] {
 			continue
 		}
@@ -299,6 +360,15 @@ func StartLXDMetricsCollector(configDir string, getEnabled func() bool) {
 			if sweepTicks >= 24 { // ~2h
 				sweepTicks = 0
 				SweepOrphanLXDMetrics()
+				lxdMetricsMu.Lock()
+				open := make([]*capacityrrd.DB, 0, len(lxdMetricsDBs))
+				for _, db := range lxdMetricsDBs {
+					open = append(open, db)
+				}
+				lxdMetricsMu.Unlock()
+				for _, db := range open {
+					pruneLXDMetricSeries(db, now)
+				}
 			}
 		}
 	}()
@@ -376,19 +446,19 @@ func scrapeLXDMetricsOnce(now time.Time) error {
 				memTotal[instance] = s.value
 			}
 		case "lxd_network_receive_bytes_total":
-			if dev := s.labels["device"]; dev != "" {
+			if dev := s.labels["device"]; dev != "" && !lxdTransientDevice(dev) {
 				recs = append(recs, rec{seriesKey{instance, "net_rx:" + dev, true}, s.value})
 			}
 		case "lxd_network_transmit_bytes_total":
-			if dev := s.labels["device"]; dev != "" {
+			if dev := s.labels["device"]; dev != "" && !lxdTransientDevice(dev) {
 				recs = append(recs, rec{seriesKey{instance, "net_tx:" + dev, true}, s.value})
 			}
 		case "lxd_disk_read_bytes_total":
-			if dev := s.labels["device"]; dev != "" {
+			if dev := s.labels["device"]; dev != "" && !lxdTransientDevice(dev) {
 				recs = append(recs, rec{seriesKey{instance, "disk_r:" + dev, true}, s.value})
 			}
 		case "lxd_disk_written_bytes_total":
-			if dev := s.labels["device"]; dev != "" {
+			if dev := s.labels["device"]; dev != "" && !lxdTransientDevice(dev) {
 				recs = append(recs, rec{seriesKey{instance, "disk_w:" + dev, true}, s.value})
 			}
 		case "lxd_filesystem_size_bytes", "lxd_filesystem_avail_bytes", "lxd_filesystem_free_bytes":

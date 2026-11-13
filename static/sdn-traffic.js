@@ -111,9 +111,10 @@
 
   const TABLE_MAX = 2000, PAGE_SIZE = 20;
   async function loadTraffic() {
-    const qs = d => `/api/sdn/traffic?range=${T.range}&dir=${d}&group=${d === 'blk' && T.group !== 'ip' ? 'country' : T.group}&q=${encodeURIComponent(T.q)}&limit=${TABLE_MAX}`;
-    const [a, b, c, s] = await Promise.all([api(qs('in')), api(qs('out')), api(qs('blk')), api('/api/sdn/traffic/status')]);
-    T.data = { in: a.data, out: b.data, blk: c.data };
+    // the three tables in one request: the server reads the period once
+    const [a, s] = await Promise.all([api(`/api/sdn/traffic?range=${T.range}&dirs=in,out,blk&group=${T.group}&q=${encodeURIComponent(T.q)}&limit=${TABLE_MAX}`), api('/api/sdn/traffic/status')]);
+    const d = (a.ok && a.data) || {};
+    T.data = { in: d.in || {}, out: d.out || {}, blk: d.blk || {} };
     T.status = s.data;
     await loadLand();
   }

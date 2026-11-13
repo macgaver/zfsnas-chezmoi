@@ -5318,6 +5318,13 @@
               <button onclick="ciTerminalBottom()" style="display:block;width:100%;text-align:left;padding:9px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-1);">LXD Bottom Terminal</button>
               <button onclick="ciTerminalNewTab()" style="display:block;width:100%;text-align:left;padding:9px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-1);">LXD Tab Terminal</button>
               <button onclick="ciTerminalNewWindow()" style="display:block;width:100%;text-align:left;padding:9px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-1);">LXD Window Terminal</button>
+              <hr class="menu-sep">
+              <label onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:8px;padding:7px 12px 9px 16px;font-size:12px;color:var(--text-3);cursor:default;" title="Account the LXD terminals log in as, remembered for this instance">
+                User
+                <input id="ci-term-user" type="text" value="root" maxlength="32" spellcheck="false" autocomplete="off" autocapitalize="off"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();ciTerminalBottom();}else if(event.key==='Escape'){_ciCloseTermMenu();}"
+                  style="flex:1;min-width:0;width:90px;padding:4px 7px;font-size:12px;background:var(--bg);color:var(--text-1);border:1px solid var(--border);border-radius:5px;outline:none;">
+              </label>
             </div>
           </div>
           <!-- Burger menu -->
@@ -50223,14 +50230,58 @@ function ciToggleTermMenu(e) {
   const wasOpen = !menu.classList.contains('hidden');
   _ciCloseAllTopMenus('ci-term-menu');
   if (wasOpen) { menu.classList.add('hidden'); return; }
+  const userInput = document.getElementById('ci-term-user');
+  if (userInput) userInput.value = _ciTermUserLoad(_ciCurrentName);
   menu.classList.remove('hidden');
   const close = () => { menu.classList.add('hidden'); document.removeEventListener('click', close); };
   setTimeout(() => document.addEventListener('click', close), 0);
 }
 function _ciCloseTermMenu() { document.getElementById('ci-term-menu').classList.add('hidden'); }
 
-function ciTerminalNewTab()    { _ciCloseTermMenu(); if (_ciCurrentName) openLXDConsole(_ciCurrentName); }
-function ciTerminalNewWindow() { _ciCloseTermMenu(); if (_ciCurrentName) openTermWindow('lxd:' + _ciCurrentName); }
+// LXD terminal user (bottom of the Terminal menu): remembered per instance
+// (and per viewed InterLink server) in this browser; "root" by default.
+const _CI_TERM_USER_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}$/;
+function _ciTermUserKey(name) {
+  const host = (typeof _relayActive !== 'undefined' && _relayActive && _relayHostname) ? _relayHostname : '';
+  return 'znas-ci-term-user:' + host + ':' + name;
+}
+function _ciTermUserLoad(name) {
+  try { const v = localStorage.getItem(_ciTermUserKey(name)); if (v && _CI_TERM_USER_RE.test(v)) return v; } catch (_) {}
+  return 'root';
+}
+// Reads the box; returns the account to use, or null (after a toast) when
+// it is not a valid account name. Remembers a valid one for this instance.
+function _ciTermUserTake() {
+  // Opened without the menu (e.g. Reconnect): the box may still hold another
+  // instance's value, so use what is remembered for this one.
+  const menu = document.getElementById('ci-term-menu');
+  if (!menu || menu.classList.contains('hidden')) return _ciTermUserLoad(_ciCurrentName);
+  const el = document.getElementById('ci-term-user');
+  const v = ((el && el.value) || '').trim() || 'root';
+  if (!_CI_TERM_USER_RE.test(v)) {
+    if (typeof _showToast === 'function') _showToast('Invalid username: letters, digits, "_", "." or "-" (not first), 32 max.', 'warning');
+    if (el) el.focus();
+    return null;
+  }
+  try {
+    if (v === 'root') localStorage.removeItem(_ciTermUserKey(_ciCurrentName));
+    else localStorage.setItem(_ciTermUserKey(_ciCurrentName), v);
+  } catch (_) {}
+  return v;
+}
+// 'lxd:NAME' or 'lxd:NAME@USER' (instance names never contain "@").
+function _ciTermLXDSpec(name, user) { return 'lxd:' + name + (user && user !== 'root' ? '@' + user : ''); }
+
+function ciTerminalNewTab() {
+  if (!_ciCurrentName) return;
+  const user = _ciTermUserTake(); if (user === null) return;
+  _ciCloseTermMenu(); openTermTab(_ciTermLXDSpec(_ciCurrentName, user));
+}
+function ciTerminalNewWindow() {
+  if (!_ciCurrentName) return;
+  const user = _ciTermUserTake(); if (user === null) return;
+  _ciCloseTermMenu(); openTermWindow(_ciTermLXDSpec(_ciCurrentName, user));
+}
 // VGA console now opens as a tab inside the consolidated /terminal-multi
 // window (spec "vga:<name>"), with the SPICE button bar pinned to the bottom
 // of the tab. See handlers/terminal_multi.go (buildPane vga branch) and the
@@ -50238,9 +50289,15 @@ function ciTerminalNewWindow() { _ciCloseTermMenu(); if (_ciCurrentName) openTer
 function ciVGAConsole()       { _ciCloseTermMenu(); if (_ciCurrentName) openTermTab('vga:' + _ciCurrentName); }
 
 function ciTerminalBottom() {
-  _ciCloseTermMenu();
   if (!_ciCurrentName) return;
+  const user = _ciTermUserTake(); if (user === null) return;
+  _ciCloseTermMenu();
   _ciTermEnsureVisible();
+  if (user !== 'root') {
+    _ciTermOpenInstanceSession(user + '@' + _ciCurrentName,
+      '/ws/incus-console?name=' + encodeURIComponent(_ciCurrentName) + '&user=' + encodeURIComponent(user));
+    return;
+  }
   // v6.6.11 — always open a NEW session; if one for this instance is already
   // open, suffix the label "(1)", "(2)" and use a unique key so both live side
   // by side. (Restored sessions are keyed by id, so they coexist already.)

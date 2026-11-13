@@ -66,6 +66,13 @@ func HandleLoginPage(staticContent func(name string) ([]byte, error), appCfg *co
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
+		// First start, no account yet: there is nobody to sign in as, so send
+		// the visitor to /setup (they reach / → /login without having read
+		// the docs). A users.json that can't be read is not "no users".
+		if users, err := config.LoadUsers(); err == nil && len(users) == 0 {
+			http.Redirect(w, r, "/setup", http.StatusSeeOther)
+			return
+		}
 		data, err := staticContent("login.html")
 		if err != nil {
 			http.Error(w, "login page not found", http.StatusInternalServerError)

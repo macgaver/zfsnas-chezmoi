@@ -113,12 +113,18 @@ func GetMemProcsSnapshot() *MemProcsSnapshot {
 	return memProcsLatest
 }
 
-// StartMemProcsPoller samples per-process memory usage every 5 s.
+// StartMemProcsPoller samples per-process memory usage every 5 s (30 s
+// while nobody looks; the history collector reads it every 5 minutes).
 func StartMemProcsPoller() {
 	go func() {
 		tick := time.NewTicker(5 * time.Second)
 		defer tick.Stop()
-		for range tick.C {
+		var last time.Time
+		for now := range tick.C {
+			if procsIdleSkip(last, now) {
+				continue
+			}
+			last = now
 			snap := sampleMemProcs()
 			if snap != nil {
 				memProcsMu.Lock()
@@ -192,11 +198,12 @@ func sampleMemProcs() *MemProcsSnapshot {
 	// anonymous private swap, so a 23 GB VM with 5 GB paged out shows up as
 	// VmSwap=45 MB while smaps_rollup correctly reports 5 GB. Threshold of
 	// 256 MB shmem keeps the cost negligible — typically just QEMU/X server.
+	swapInUse := swapUsedKB() > 0 // no swap used: no process has any
 	for i := range procs {
-		if procs[i].shmemKB < 256*1024 {
+		if !swapInUse || procs[i].shmemKB < 256*1024 {
 			continue
 		}
-		if total, ok := readSmapsRollupSwapKB(procs[i].pid); ok && total > procs[i].swapKB {
+		if total, ok := smapsSwapCached(procs[i].pid); ok && total > procs[i].swapKB {
 			procs[i].swapKB = total
 		}
 	}
@@ -675,6 +682,65 @@ func readProcMemStatus(pid int) (name string, rssKB, swapKB, shmemKB uint64, err
 // for processes owned by another user (zfsnas can't open smaps_rollup of
 // nobody-owned QEMU processes without elevation). Returns (0, false) when
 // neither path works — caller keeps VmSwap as the best available figure.
+// smapsSwapCached is readSmapsRollupSwapKB kept a minute per process:
+// reading smaps_rollup walks the whole address space of a VM (and goes
+// through sudo), and its swap moves slowly.
+func smapsSwapCached(pid int) (uint64, bool) {
+	now := time.Now()
+	smapsCache.Lock()
+	if e, ok := smapsCache.m[pid]; ok && now.Sub(e.at) < time.Minute {
+		smapsCache.Unlock()
+		return e.kb, e.ok
+	}
+	smapsCache.Unlock()
+	kb, ok := readSmapsRollupSwapKB(pid)
+	smapsCache.Lock()
+	for p, e := range smapsCache.m {
+		if now.Sub(e.at) > 5*time.Minute {
+			delete(smapsCache.m, p)
+		}
+	}
+	smapsCache.m[pid] = smapsEntry{kb, ok, now}
+	smapsCache.Unlock()
+	return kb, ok
+}
+
+type smapsEntry struct {
+	kb uint64
+	ok bool
+	at time.Time
+}
+
+var smapsCache = struct {
+	sync.Mutex
+	m map[int]smapsEntry
+}{m: map[int]smapsEntry{}}
+
+// swapUsedKB is SwapTotal - SwapFree from /proc/meminfo (0 when unreadable).
+func swapUsedKB() uint64 {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	var total, free uint64
+	for _, line := range strings.Split(string(data), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue
+		}
+		switch f[0] {
+		case "SwapTotal:":
+			total, _ = strconv.ParseUint(f[1], 10, 64)
+		case "SwapFree:":
+			free, _ = strconv.ParseUint(f[1], 10, 64)
+		}
+	}
+	if free > total {
+		return 0
+	}
+	return total - free
+}
+
 func readSmapsRollupSwapKB(pid int) (uint64, bool) {
 	path := fmt.Sprintf("/proc/%d/smaps_rollup", pid)
 	data, err := os.ReadFile(path)

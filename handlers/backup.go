@@ -157,7 +157,7 @@ func collectConfigFiles(dir string, opts backup.ExportOptions) (map[string][]byt
 			return nil
 		case name == "audit.log" && !opts.IncludeAudit:
 			return nil
-		case strings.HasSuffix(name, ".rrd.json") && !opts.IncludeCharts:
+		case (strings.HasSuffix(name, ".rrd.json") || strings.HasSuffix(name, ".rrd.json.gz")) && !opts.IncludeCharts:
 			return nil
 		case sdnLocalFiles[filepath.ToSlash(rel)]:
 			return nil

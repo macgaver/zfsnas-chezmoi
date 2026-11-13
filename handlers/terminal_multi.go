@@ -869,12 +869,14 @@ function attachTab(tab, opts) {
     // to the peer's per-kind WS endpoint.
     path = '/ws/interlink-terminal?server_id=' + encodeURIComponent(tab.serverId)
          + '&kind=' + encodeURIComponent(tab.kind)
-         + '&target=' + encodeURIComponent(tab.target || '');
+         + '&target=' + encodeURIComponent(tab.target || '')
+         + (tab.user ? '&user=' + encodeURIComponent(tab.user) : '');
   } else {
     switch (tab.kind) {
       case 'host':    path = '/ws/terminal'; break;
       case 'updater': path = '/ws/updater'; break; // target carries the host label only
-      case 'lxd':     path = '/ws/lxd-console?name=' + encodeURIComponent(tab.target); break;
+      case 'lxd':     path = '/ws/lxd-console?name=' + encodeURIComponent(tab.target)
+                           + (tab.user ? '&user=' + encodeURIComponent(tab.user) : ''); break;
       case 'compose': {
         const [stack, container] = tab.target.split(':');
         path = '/ws/compose-console?stack=' + encodeURIComponent(stack) + '&container=' + encodeURIComponent(container);
@@ -1224,12 +1226,18 @@ function addTabFromSpec(spec, displayTitle) {
     kind   = idx === -1 ? spec : spec.slice(0, idx);
     target = idx === -1 ? '' : spec.slice(idx+1);
   }
+  // lxd:NAME@USER — console logged in as USER (instance names have no "@").
+  let user = '';
+  if (kind === 'lxd') {
+    const at = target.indexOf('@');
+    if (at !== -1) { user = target.slice(at+1); target = target.slice(0, at); }
+  }
   // v6.6.11 — opening a target that already has a tab spawns ANOTHER independent
   // session, labelled "<base> (1)", "(2)", … (next free index among same-base
   // tabs). The suffixed title is sent to the server (tab.openTitle → ?title=) so
   // every window shows the same label.
   const base = (kind === 'updater') ? ('updater:' + (target || 'host'))
-                                    : (displayTitle || target || kind);
+                                    : (displayTitle || (user ? user + '@' + target : target) || kind);
   const used = new Set();
   TABS.forEach(t => {
     if ((t.serverId||'') !== serverId || t.kind !== kind || t.target !== target) return;
@@ -1239,7 +1247,7 @@ function addTabFromSpec(spec, displayTitle) {
   let suffix = 0;
   while (used.has(suffix)) suffix++;
   const title = suffix === 0 ? base : (base + ' (' + suffix + ')');
-  const tab = { id:'', kind, target, serverId, title, openTitle: title, terminated:false };
+  const tab = { id:'', kind, target, serverId, user, title, openTitle: title, terminated:false };
   TABS.push(tab);
   renderTabBar();
   buildPane(tab);

@@ -70,6 +70,7 @@ func gatewayNetNamed(g system.GatewayNet, c *sdn.Config) system.GatewayNet {
 
 // HandleGetCpuProcs returns the latest per-process CPU usage snapshot.
 func HandleGetCpuProcs(w http.ResponseWriter, r *http.Request) {
+	system.MarkProcsViewed()
 	snap := system.GetCpuProcsSnapshot()
 	if snap == nil {
 		jsonOK(w, map[string]interface{}{
@@ -84,6 +85,7 @@ func HandleGetCpuProcs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetMemProcs returns the latest per-process memory usage snapshot.
 func HandleGetMemProcs(w http.ResponseWriter, r *http.Request) {
+	system.MarkProcsViewed()
 	snap := system.GetMemProcsSnapshot()
 	if snap == nil {
 		jsonOK(w, map[string]interface{}{

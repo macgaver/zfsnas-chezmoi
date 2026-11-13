@@ -485,9 +485,34 @@ func matches(r Rec, f string) bool {
 	return strings.Contains(hay, f)
 }
 
+// InsideTotals adds up the data of every inside address over [from, to) in
+// one pass (stored tiers plus the open buckets): bytes in + out, keyed by
+// the inside address. No location lookups.
+func (s *Store) InsideTotals(from, to time.Time, open []Bucket, now time.Time) map[string]uint64 {
+	m := map[string]uint64{}
+	s.collect(Query{From: from, To: to}, open, now, func(b Bucket) {
+		for _, r := range b.Recs {
+			if r.Inside != "" {
+				m[r.Inside] += r.BytesIn + r.BytesOut
+			}
+		}
+	})
+	return m
+}
+
 // Query aggregates the stored and open buckets for one view.
 func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
-	res := Result{KPI: map[string]KPI{}}
+	return s.QueryMany([]Query{q}, open, now)[0]
+}
+
+// QueryMany answers several views of the same period (From, To and Locate
+// taken from the first) with one pass over the statistics: the files are
+// read and decoded once, each remote is placed once. The Traffic page asks
+// for incoming, outgoing and blocked together.
+func (s *Store) QueryMany(qs []Query, open []Bucket, now time.Time) []Result {
+	if len(qs) == 0 {
+		return nil
+	}
 	type acc struct {
 		row    Row
 		ips    map[string]bool
@@ -495,18 +520,30 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 		hosts  map[string]uint64
 		hostIP map[string]string
 	}
-	rows := map[string]*acc{}
+	type view struct {
+		q    Query
+		rows map[string]*acc
+	}
+	base := qs[0]
+	views := make([]*view, len(qs))
+	anyAll := false // a view over every inside host (not one host's card)
+	for i, q := range qs {
+		q.From, q.To, q.Locate = base.From, base.To, base.Locate
+		views[i] = &view{q: q, rows: map[string]*acc{}}
+		anyAll = anyAll || q.Inside == ""
+	}
+	kpi := map[string]KPI{}
 	remotes := map[string]map[string]bool{}
 	countries := map[string]map[string]uint64{}
-	span := q.To.Sub(q.From)
+	span := base.To.Sub(base.From)
 	located := map[string]*geoip.Info{} // remote → current answer (nil: keep the recorded one)
 	relocate := func(r *Rec) {
-		if q.Locate == nil || r.Remote == "" {
+		if base.Locate == nil || r.Remote == "" {
 			return
 		}
 		g, seen := located[r.Remote]
 		if !seen {
-			if in, ok := q.Locate(r.Remote); ok && in.CountryCode != "" {
+			if in, ok := base.Locate(r.Remote); ok && in.CountryCode != "" {
 				g = &in
 			}
 			located[r.Remote] = g
@@ -515,18 +552,34 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 			r.geo(*g)
 		}
 	}
-	res.Tier = s.collect(q, open, now, func(b Bucket) {
-		slot := int(b.Start.Sub(q.From) * 24 / maxDur(span, time.Second))
+	wanted := func(r Rec) bool {
+		if anyAll {
+			return true
+		}
+		for _, v := range views {
+			if v.q.Inside == r.Inside {
+				return true
+			}
+		}
+		return false
+	}
+	tier := s.collect(base, open, now, func(b Bucket) {
+		slot := int(b.Start.Sub(base.From) * 24 / maxDur(span, time.Second))
 		if slot > 23 {
 			slot = 23
 		}
 		for _, r := range b.Recs {
+			// one host's query skips the others' remotes: placing them again
+			// would only feed totals that query does not show
+			if !wanted(r) {
+				continue
+			}
 			relocate(&r)
-			k := res.KPI[r.Dir]
+			k := kpi[r.Dir]
 			k.Bytes += r.BytesIn + r.BytesOut
 			k.Sessions += r.Sessions
 			k.Pkts += r.Pkts
-			res.KPI[r.Dir] = k
+			kpi[r.Dir] = k
 			if remotes[r.Dir] == nil {
 				remotes[r.Dir], countries[r.Dir] = map[string]bool{}, map[string]uint64{}
 			}
@@ -536,45 +589,48 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 			if r.CC != "" {
 				countries[r.Dir][r.Country] += volume(r)
 			}
-			if (q.Dir != "" && q.Dir != "all" && r.Dir != q.Dir) || !matches(r, q.Filter) || (q.Inside != "" && r.Inside != q.Inside) {
-				continue
-			}
-			gk := groupKey(r, q.Group)
-			a := rows[gk]
-			if a == nil {
-				a = &acc{row: Row{Rec: r, Trend: make([]uint64, 24)}, ips: map[string]bool{}, ports: map[uint16]uint64{}, hosts: map[string]uint64{}, hostIP: map[string]string{}}
-				a.row.BytesIn, a.row.BytesOut, a.row.Pkts, a.row.Sessions = 0, 0, 0, 0
-				if q.Group == "country" || q.Group == "city" {
-					a.row.Remote, a.row.Inside, a.row.Name, a.row.ASN, a.row.ASOrg = "", "", "", 0, ""
+			for _, v := range views {
+				q := v.q
+				if (q.Dir != "" && q.Dir != "all" && r.Dir != q.Dir) || !matches(r, q.Filter) || (q.Inside != "" && r.Inside != q.Inside) {
+					continue
 				}
-				rows[gk] = a
-			}
-			merge(&a.row.Rec, r)
-			if slot >= 0 {
-				a.row.Trend[slot] += volume(r)
-			}
-			if r.Remote != "" {
-				a.ips[r.Remote] = true
-			}
-			if r.Dir == "blk" {
-				a.ports[r.Port] += r.Pkts
-			}
-			if r.Dir == "out" {
-				if r.Port != 0 { // 0: ICMP and other port-less protocols
-					a.ports[r.Port] += r.BytesIn + r.BytesOut + r.Sessions // sessions: a port with no bytes yet still counts
+				gk := groupKey(r, q.Group)
+				a := v.rows[gk]
+				if a == nil {
+					a = &acc{row: Row{Rec: r, Trend: make([]uint64, 24)}, ips: map[string]bool{}, ports: map[uint16]uint64{}, hosts: map[string]uint64{}, hostIP: map[string]string{}}
+					a.row.BytesIn, a.row.BytesOut, a.row.Pkts, a.row.Sessions = 0, 0, 0, 0
+					if q.Group == "country" || q.Group == "city" {
+						a.row.Remote, a.row.Inside, a.row.Name, a.row.ASN, a.row.ASOrg = "", "", "", 0, ""
+					}
+					v.rows[gk] = a
 				}
-				h := r.Name
-				if h == "" {
-					h = r.Inside
+				merge(&a.row.Rec, r)
+				if slot >= 0 {
+					a.row.Trend[slot] += volume(r)
 				}
-				a.hosts[h] += r.BytesIn + r.BytesOut
-				if r.Inside != "" {
-					a.hostIP[h] = r.Inside
+				if r.Remote != "" {
+					a.ips[r.Remote] = true
+				}
+				if r.Dir == "blk" {
+					a.ports[r.Port] += r.Pkts
+				}
+				if r.Dir == "out" {
+					if r.Port != 0 { // 0: ICMP and other port-less protocols
+						a.ports[r.Port] += r.BytesIn + r.BytesOut + r.Sessions // sessions: a port with no bytes yet still counts
+					}
+					h := r.Name
+					if h == "" {
+						h = r.Inside
+					}
+					a.hosts[h] += r.BytesIn + r.BytesOut
+					if r.Inside != "" {
+						a.hostIP[h] = r.Inside
+					}
 				}
 			}
 		}
 	})
-	for dir, k := range res.KPI {
+	for dir, k := range kpi {
 		k.Remotes, k.Countries = len(remotes[dir]), len(countries[dir])
 		type cv struct {
 			c string
@@ -588,46 +644,55 @@ func (s *Store) Query(q Query, open []Bucket, now time.Time) Result {
 		for i := 0; i < len(cs) && i < 3; i++ {
 			k.TopCountries = append(k.TopCountries, cs[i].c)
 		}
-		res.KPI[dir] = k
+		kpi[dir] = k
 	}
-	var all []Row
-	for _, a := range rows {
-		a.row.IPs = len(a.ips)
-		nPorts := 3
-		if a.row.Dir == "out" {
-			nPorts = 5
+	out := make([]Result, len(views))
+	for vi, v := range views {
+		res := Result{Tier: tier, KPI: map[string]KPI{}}
+		for d, k := range kpi {
+			k.TopCountries = append([]string(nil), k.TopCountries...)
+			res.KPI[d] = k
 		}
-		a.row.Ports = topKeys(a.ports, nPorts)
-		a.row.Hosts = topKeys(a.hosts, 3)
-		if len(a.row.Hosts) > 0 {
-			a.row.HostIPs = make([]string, len(a.row.Hosts))
-			for i, h := range a.row.Hosts {
-				a.row.HostIPs[i] = a.hostIP[h]
+		var all []Row
+		for _, a := range v.rows {
+			a.row.IPs = len(a.ips)
+			nPorts := 3
+			if a.row.Dir == "out" {
+				nPorts = 5
+			}
+			a.row.Ports = topKeys(a.ports, nPorts)
+			a.row.Hosts = topKeys(a.hosts, 3)
+			if len(a.row.Hosts) > 0 {
+				a.row.HostIPs = make([]string, len(a.row.Hosts))
+				for i, h := range a.row.Hosts {
+					a.row.HostIPs[i] = a.hostIP[h]
+				}
+			}
+			all = append(all, a.row)
+		}
+		sort.Slice(all, func(i, j int) bool {
+			if vi, vj := volume(all[i].Rec), volume(all[j].Rec); vi != vj {
+				return vi > vj
+			}
+			return all[i].Remote < all[j].Remote
+		})
+		for _, r := range all {
+			if (r.Lat != 0 || r.Lon != 0) && len(res.Points) < 150 {
+				res.Points = append(res.Points, r)
 			}
 		}
-		all = append(all, a.row)
-	}
-	sort.Slice(all, func(i, j int) bool {
-		if vi, vj := volume(all[i].Rec), volume(all[j].Rec); vi != vj {
-			return vi > vj
+		res.Total = len(all)
+		lim := v.q.Limit
+		if lim <= 0 {
+			lim = 100
 		}
-		return all[i].Remote < all[j].Remote
-	})
-	for _, r := range all {
-		if (r.Lat != 0 || r.Lon != 0) && len(res.Points) < 150 {
-			res.Points = append(res.Points, r)
+		if v.q.Offset < len(all) {
+			end := min(v.q.Offset+lim, len(all))
+			res.Rows = all[v.q.Offset:end]
 		}
+		out[vi] = res
 	}
-	res.Total = len(all)
-	lim := q.Limit
-	if lim <= 0 {
-		lim = 100
-	}
-	if q.Offset < len(all) {
-		end := min(q.Offset+lim, len(all))
-		res.Rows = all[q.Offset:end]
-	}
-	return res
+	return out
 }
 
 func maxDur(a, b time.Duration) time.Duration {
