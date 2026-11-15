@@ -1581,12 +1581,17 @@
     if (!status) { st.textContent = 'Unavailable'; btn.style.display = 'none'; showMenu(false); return; }
     btn.style.display = isAdmin() ? '' : 'none';
     if (status.enabled) {
-      st.textContent = status.safe_mode_reason ? 'Enabled — SAFE MODE' : 'Enabled'; st.style.color = status.safe_mode_reason ? 'var(--fw-blk)' : 'var(--accent-3)';
+      // Same look as the other rows' "✓ Installed": green check, bold.
+      const ok = !status.safe_mode_reason;
+      const check = ok && typeof window.znasIcon === 'function'
+        ? window.znasIcon('check', { size: 14, style: 'color:#30d158;vertical-align:-0.15em' }) + ' ' : '';
+      st.innerHTML = check + (ok ? 'Enabled' : 'Enabled — SAFE MODE');
+      st.style.color = ok ? '#30d158' : 'var(--fw-blk)'; st.style.fontWeight = '600';
       btn.style.display = 'none';
       showMenu(isAdmin());
     } else {
       showMenu(false);
-      st.textContent = status.installed ? 'Not enabled' : 'Not installed'; st.style.color = 'var(--text-3)';
+      st.textContent = status.installed ? 'Not enabled' : 'Not installed'; st.style.color = 'var(--text-3)'; st.style.fontWeight = '';
       const missing = status.missing_packages || [];
       btn.textContent = status.installed && !missing.length ? 'Enable' : 'Install & Enable';
       btn.title = missing.length ? 'Installs ' + missing.join(', ') : '';
