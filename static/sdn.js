@@ -1571,12 +1571,21 @@
     const st = document.getElementById('sdnfeat-status');
     const btn = document.getElementById('sdnfeat-btn');
     if (!st || !btn) return;
-    if (!status) { st.textContent = 'Unavailable'; btn.style.display = 'none'; return; }
+    // Like every other optional feature: the button only installs/enables, and
+    // once the Firewall is on, Disable lives in the ⋮ menu.
+    const menu = document.getElementById('sdnfeat-menu-wrap');
+    const showMenu = on => {
+      if (typeof window._renderOptFeatMenu === 'function') window._renderOptFeatMenu('sdn', on, false);
+      if (menu) { menu.style.visibility = on ? 'visible' : 'hidden'; menu.style.pointerEvents = on ? '' : 'none'; }
+    };
+    if (!status) { st.textContent = 'Unavailable'; btn.style.display = 'none'; showMenu(false); return; }
     btn.style.display = isAdmin() ? '' : 'none';
     if (status.enabled) {
       st.textContent = status.safe_mode_reason ? 'Enabled — SAFE MODE' : 'Enabled'; st.style.color = status.safe_mode_reason ? 'var(--fw-blk)' : 'var(--accent-3)';
-      btn.textContent = 'Disable'; btn.disabled = false; btn.onclick = openDisable; btn.title = '';
+      btn.style.display = 'none';
+      showMenu(isAdmin());
     } else {
+      showMenu(false);
       st.textContent = status.installed ? 'Not enabled' : 'Not installed'; st.style.color = 'var(--text-3)';
       const missing = status.missing_packages || [];
       btn.textContent = status.installed && !missing.length ? 'Enable' : 'Install & Enable';
@@ -1799,6 +1808,7 @@
     status: () => status, page: () => page, rerender: () => renderPage(), l3,
   };
   window.sdnLoadStatus = loadStatus;
+  window.sdnOpenDisable = openDisable; // Optional Features ⋮ menu → Disable Feature
   window.sdnModal = modal;
   window.sdnReloadTopbar = async () => { await loadDraft(); renderPage(); };
   window.sdnOnShowPage = onShowPage;

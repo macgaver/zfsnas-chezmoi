@@ -1690,7 +1690,7 @@
               <span id="prereq-mergerfs-status" style="font-size:13px;color:var(--text-3);">Not installed</span>
               <label class="appliance-only optfeat-appl-check" data-status="prereq-mergerfs-status" title="Built into the appliance image"><input type="checkbox" disabled> Enabled</label>
               <button id="prereq-mergerfs-btn" class="btn btn-ghost btn-sm" onclick="installMergerFS()" style="font-size:12px;white-space:nowrap;">Install MergerFS</button>
-              <span class="optfeat-menu-slot" aria-hidden="true"></span>
+              <span id="prereq-mergerfs-menu-wrap" class="hidden" onclick="_optFeatMenu(event,'mergerfs')" title="Options" style="background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;padding:2px 6px;line-height:1;user-select:none;">⋮</span>
             </div>
             <!-- SDN — Routing & Firewall. Kept actionable on the appliance too
                  (pre-installed there, the owner only clicks Enable). -->
@@ -1703,7 +1703,9 @@
               </div>
               <span id="sdnfeat-status" style="font-size:13px;color:var(--text-3);">Checking…</span>
               <button id="sdnfeat-btn" class="btn btn-ghost btn-sm" style="font-size:12px;white-space:nowrap;">Enable</button>
-              <span class="optfeat-menu-slot" aria-hidden="true"></span>
+              <!-- Not a prereq-*-menu-wrap: the appliance CSS hides those, and the
+                   Firewall stays actionable on the appliance. sdn.js shows it. -->
+              <span id="sdnfeat-menu-wrap" class="optfeat-menu-slot" onclick="_optFeatMenu(event,'sdn')" title="Options" style="visibility:hidden;pointer-events:none;background:none;border:none;cursor:pointer;color:var(--text-2);font-size:18px;line-height:1;user-select:none;">⋮</span>
             </div>
             <div id="optfeat-lxd-enable-row" style="display:none;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
@@ -15778,6 +15780,7 @@ async function loadPrereqs() {
 async function _updateMergerFSPrereqStatus() {
   const stat = document.getElementById('prereq-mergerfs-status');
   const btn  = document.getElementById('prereq-mergerfs-btn');
+  const menuWrap = document.getElementById('prereq-mergerfs-menu-wrap');
   if (!stat) return;
   try {
     const r = await fetch('/api/mergerfs/status');
@@ -15786,10 +15789,15 @@ async function _updateMergerFSPrereqStatus() {
     if (d.installed) {
       stat.innerHTML = znasIcon('check', {size:14, style:'color:#30d158;vertical-align:-0.15em'}) + ' Installed';
       stat.style.color = '#30d158'; stat.style.fontWeight = '600';
-      if (btn) { btn.textContent = 'Uninstall'; btn.disabled = false; btn.setAttribute('onclick','uninstallMergerFS()'); btn.classList.add('uninstall-ui'); }
+      // Uninstall lives in the ⋮ menu, like every other optional feature.
+      if (btn) btn.style.display = 'none';
+      _renderOptFeatMenu('mergerfs', true, false);
+      if (menuWrap) menuWrap.classList.remove('hidden');
     } else {
       stat.textContent = 'Not installed'; stat.style.color = 'var(--text-3)'; stat.style.fontWeight = '';
-      if (btn) { btn.style.display = ''; btn.disabled = false; btn.textContent = 'Install MergerFS'; btn.setAttribute('onclick','installMergerFS()'); btn.classList.remove('uninstall-ui'); }
+      if (btn) { btn.style.display = ''; btn.disabled = false; btn.textContent = 'Install MergerFS'; }
+      _renderOptFeatMenu('mergerfs', false, false);
+      if (menuWrap) menuWrap.classList.add('hidden');
     }
   } catch (_) {}
 }
@@ -15824,8 +15832,9 @@ async function uninstallMergerFS() {
         confirmLabel:'Uninstall', confirmDanger:true, onConfirm:()=>resolve(true), onCancel:()=>resolve(false) })
     : resolve(window.confirm('Uninstall MergerFS?')));
   if (!ok) return;
-  const btn = document.getElementById('prereq-mergerfs-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Uninstalling…'; }
+  // The install button is hidden while installed, so show progress in the status column.
+  const stat = document.getElementById('prereq-mergerfs-status');
+  if (stat) { stat.textContent = 'Uninstalling…'; stat.style.color = 'var(--text-3)'; stat.style.fontWeight = ''; }
   try {
     const r = await fetch('/api/prerequisites/uninstall-mergerfs', { method: 'POST' });
     const d = await r.json();
@@ -31252,6 +31261,8 @@ function _renderOptFeatMenu(feature, installed, hidden) {
   else if (feature === 'ups') { _optFeatMenuState._ups = { installed, hidden }; }
   else if (feature === 'diskpower') { _optFeatMenuState._diskpower = { installed, hidden }; }
   else if (feature === 'lxd') { _optFeatMenuState._lxd = { installed, hidden }; }
+  else if (feature === 'mergerfs') { _optFeatMenuState._mergerfs = { installed, hidden }; }
+  else if (feature === 'sdn') { _optFeatMenuState._sdn = { installed, hidden }; }
 }
 
 function _optFeatMenu(e, feature) {
@@ -31274,9 +31285,18 @@ function _optFeatMenu(e, feature) {
   // VMs & Containers ("lxd") has its own pre-flight (must have zero
   // instances) and its own multi-step uninstall job, separate from the
   // generic apt-purge flow used by the simpler features.
+  // MergerFS and the Firewall (SDN) have their own confirm dialogs. The
+  // Firewall is switched off rather than uninstalled, and stays available on
+  // the appliance, so its item is not an .uninstall-ui (hidden there).
   const uninstallCall = feature === 'lxd'
     ? `_closeOptFeatMenus();openLXDUninstallModal()`
+    : feature === 'mergerfs'
+    ? `_closeOptFeatMenus();uninstallMergerFS()`
+    : feature === 'sdn'
+    ? `_closeOptFeatMenus();window.sdnOpenDisable&&window.sdnOpenDisable()`
     : `_closeOptFeatMenus();uninstallFeature('${pkg}')`;
+  const uninstallLabel = feature === 'sdn' ? 'Disable Feature' : 'Uninstall Feature';
+  const uninstallCls = feature === 'sdn' ? '' : 'uninstall-ui';
   // UPS also gets the widget-visibility toggle. This burger is reachable from
   // Requisites whether or not the topbar widget is showing, so it stays the
   // way back once the widget is hidden.
@@ -31288,7 +31308,7 @@ function _optFeatMenu(e, feature) {
         ? '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> Show in menu'
         : '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg> Hide from menu'}</button>`
     : '';
-  const itemHtml = s3HideBtn + upsHideBtn + redetectBtn + `<button class="uninstall-ui" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> Uninstall Feature</button>`;
+  const itemHtml = s3HideBtn + upsHideBtn + redetectBtn + `<button class="${uninstallCls}" onclick="${uninstallCall}" style="display:block;width:100%;padding:9px 14px;text-align:left;background:none;border:none;color:var(--accent-danger);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg> ${uninstallLabel}</button>`;
   dd.innerHTML = itemHtml;
   document.body.appendChild(dd);
   const rect = btn.getBoundingClientRect();
