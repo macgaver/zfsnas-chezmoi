@@ -3905,8 +3905,13 @@ body.appliance #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"]:not(#prereq
 #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"].hidden { display: inline-block !important; visibility: hidden; pointer-events: none; }
 /* Column order in each row: name · action button · status · ⋮ menu. The status
    has a fixed width so "Installed" / "Not installed" line up as a column. */
-#ptab-panel-optfeat [id^="prereq-"][id$="-btn"] { order: 1; }
+/* The Firewall (SDN) row uses sdnfeat-* ids (it stays actionable on the
+   appliance, so it must not match the prereq-* appliance rules above) but
+   takes the same columns. */
+#ptab-panel-optfeat [id^="prereq-"][id$="-btn"],
+#ptab-panel-optfeat #sdnfeat-btn { order: 1; }
 #ptab-panel-optfeat [id^="prereq-"][id$="-status"],
+#ptab-panel-optfeat #sdnfeat-status,
 #ptab-panel-optfeat .optfeat-appl-check { order: 2; flex: 0 0 104px; }
 #ptab-panel-optfeat [id^="prereq-"][id$="-menu-wrap"],
 #ptab-panel-optfeat .optfeat-menu-slot { order: 3; }
