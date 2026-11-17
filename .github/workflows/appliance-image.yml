@@ -90,6 +90,28 @@ jobs:
             || { echo "::error::APPLIANCE_INCUS_VERSION must be x.y or x.y.z (e.g. 7.5.1)"; exit 1; }
           [ -n "${GH_TOKEN:-}" ] \
             || { echo "::error::secret APPLIANCE_PUBLISH_TOKEN is not set in this repository"; exit 1; }
+          # Prove the publish token works BEFORE the build VM spends ~15 min
+          # on an image it then cannot publish. Fine-grained PATs expire:
+          # GitHub reports the expiry in a response header, so warn while
+          # there is still time to renew it.
+          hdrs=$(mktemp)
+          code=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$APPLIANCE_REPO")
+          if [ "$code" != 200 ]; then
+            echo "::error::APPLIANCE_PUBLISH_TOKEN is rejected by GitHub (HTTP $code on $APPLIANCE_REPO) — it has most likely expired. Create a new fine-grained PAT (repo $APPLIANCE_REPO, Contents: read and write), save it as the APPLIANCE_PUBLISH_TOKEN secret, then re-run this workflow."
+            exit 1
+          fi
+          exp=$(sed -n 's/^github-authentication-token-expiration: *//Ip' "$hdrs" | tr -d '\r')
+          if [ -n "$exp" ]; then
+            left=$(( ( $(date -d "$exp" +%s) - $(date +%s) ) / 86400 ))
+            if [ "$left" -lt 30 ]; then
+              echo "::warning::APPLIANCE_PUBLISH_TOKEN expires in $left day(s) ($exp) — renew it before the next image."
+            else
+              echo "publish token valid until $exp ($left days)"
+            fi
+          fi
+
           if [ ! -f usbimage/conf.sh ]; then
             echo "::notice::usbimage/ is not in the repo yet — nothing to build"
             echo "build=false" >> "$GITHUB_OUTPUT"; exit 0

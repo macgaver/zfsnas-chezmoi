@@ -2,7 +2,7 @@
   <img src="static/logo.svg" alt="ZNAS Logo" width="700"/>
 </p>
 <p align="center">
-  <strong>Your ZFS storage, file shares, VMs and containers in one fast, beautiful portal.</strong><br/>
+  <strong>Your ZFS storage, file shares, VMs, containers and home router in one fast, beautiful portal.</strong><br/>
   Single binary. No database. No containers to babysit. Or boot it straight from a USB stick.
 </p>
 <p align="center">
@@ -33,6 +33,9 @@ configuration. ZNAS is the opposite.
   The whole portal, UI included, is a single file that starts in under a second.
 - **Storage, sharing and virtualization together.** ZFS pools, SMB/NFS/iSCSI shares,
   VMs, containers and Compose stacks, all managed from the same place.
+- **Your router too, if you want.** Turn on the Firewall and ZNAS replaces your
+  OPNsense or pfSense box: rules by country, failover between Internet links, DHCP and
+  DNS with ad blocking, WireGuard, intrusion detection, and a live map of every connection.
 - **Always current, never disruptive.** Updates are signed, applied in one click and take
   effect in seconds, like a modern browser. The previous version stays as a fallback.
 - **Secure by design.** HTTPS only, roles with fine-grained permissions, two-factor
@@ -60,6 +63,11 @@ screen. That's it.
 - **Everything included.** Every feature (virtualization, iSCSI, UPS, disk power,
   MergerFS and more) is built in and ready. Nothing to install.
 - **No OS disk needed.** All your drives stay free for your pools.
+- **Or install it on an internal disk, from the web interface.** Prefer to run from an
+  SSD or NVMe drive? **Platform → Where ZNAS runs → Move to an internal disk…** copies
+  the system and your settings to the disk you pick (and can create a ZFS pool on the
+  rest of it). Same immutable system, same signed upgrades, no installer and no
+  command line.
 
 ### 🐧 On your own Debian or Ubuntu server
 
@@ -94,6 +102,16 @@ service account, the portal and its systemd service. See [Installation](#install
 - **Services**: publish the web apps you host and open them from the ZNAS menu, even embedded in the portal.
 - **Memory compression** (zram) and swappiness tuning for denser hosts.
 
+### 🧱 Firewall and router
+An optional feature that turns ZNAS into the router of your home or lab (IPv4). Enable it in **Requisites → Optional Features**; it starts in monitor-only mode, so you can watch your traffic before enforcing any rule. Full guide in the [wiki](https://github.com/macgaver/zfsnas-chezmoi/wiki/Firewall).
+- **Interfaces**: adopt your ports, create VLANs and PPPoE links, add virtual IPs, and route and filter the networks of your VMs.
+- **Rules**: per interface, with groups of hosts and ports and **whole countries**, plus port forwards, NAT reflection and automatic, hybrid or manual outbound NAT.
+- **Safe changes**: every edit is a draft; Apply shows what changes, with an optional 30-second auto-revert if you lock yourself out, and the last 15 changes one click away.
+- **Routing**: several Internet links with health checks, latency, automatic failover and return, PPPoE that redials by itself, local routes, and a history of every outage.
+- **Services**: DHCP per network with reservations, DNS with blocklists and Pi-hole-style reports, WireGuard tunnels with QR codes for phones, Dynamic DNS (Cloudflare, DuckDNS, No-IP…) and Suricata intrusion detection.
+- **See who talks to whom**: Local Topo (every host on every network), Traffic & GeoMap (connections by country and city on a live world map, kept up to 5 years), live connections, and cards with everything known about any inside or Internet address.
+- **Works with your dashboards**: Pi-hole and OPNsense compatible API for homepage widgets.
+
 ### 🛡️ Protection and backups
 - **VM and container backups**: ZFS-native, incremental and fast, to a local pool or another ZNAS, with retention and one-click restore.
 - **ZFS replication**: send datasets to another server on a schedule.
@@ -126,10 +144,10 @@ service account, the portal and its systemd service. See [Installation](#install
 
 | Install type | Best for | How |
 |---|---|---|
-| **USB appliance** | A dedicated NAS: the simplest and most secure option | [Option A](#option-a--usb-appliance-recommended-for-a-dedicated-nas) |
+| **USB appliance** | A dedicated NAS or router: the simplest and most secure option. Runs from the stick or, after a few clicks in the portal, from an internal disk | [Option A](#option-a--usb-appliance-recommended-for-a-dedicated-nas) |
 | **Quick installer** | An existing Debian 13+ or Ubuntu 26.04+ server | [Option B](#option-b--quick-installer-on-debian-or-ubuntu) |
 | **Proxmox VM** | Running ZNAS inside Proxmox, with disks passed through | [Wiki: Proxmox VM](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation-Proxmox-VM) |
-| **Bare metal** | Installing Debian or Ubuntu yourself on NAS hardware | [Wiki: Hardware](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation-Hardware) |
+| **Bare metal** | Installing Debian or Ubuntu yourself on NAS hardware, then running the quick installer | [Wiki: Installation](https://github.com/macgaver/zfsnas-chezmoi/wiki/Installation) |
 | **Binary or source** | Development and custom builds | [Option C](#option-c--release-binary-or-build-from-source) |
 
 ### Option A — USB appliance (recommended for a dedicated NAS)
@@ -148,6 +166,12 @@ service account, the portal and its systemd service. See [Installation](#install
    RAM or more (more is better with ZFS). UEFI with Secure Boot and legacy BIOS both work.
 4. **Open** the address shown on the screen, `https://<nas-ip>:8443/setup`, and create
    your admin account.
+
+5. **Optional: move it to an internal disk.** In **Platform → Where ZNAS runs**, click
+   **Move to an internal disk…**, pick an SSD or NVMe drive of 32 GB or more, and choose
+   whether to create a ZFS pool on the rest of it. When it's done, remove the stick and
+   restart: ZNAS now starts from the internal disk. See the
+   [wiki](https://github.com/macgaver/zfsnas-chezmoi/wiki/USB-Appliance#moving-to-an-internal-disk).
 
 Upgrades then appear in **Platform → USB Appliance Upgrades**. Want to build the image
 yourself? See [usbimage/HOW-TO-BUILD-ISO.md](usbimage/HOW-TO-BUILD-ISO.md).
@@ -197,7 +221,7 @@ systemd service) and lets you import your existing ZFS pools or create new ones.
 
 | | |
 |---|---|
-| **USB appliance** | An x86-64 machine with 4 GB of RAM or more, and a USB stick of 8 GB minimum (32 GB or more on USB 3 or faster recommended) |
+| **USB appliance** | An x86-64 machine with 4 GB of RAM or more, and a USB stick of 8 GB minimum (32 GB or more on USB 3 or faster recommended). To run it from an internal disk instead: a disk of 32 GB or more (UEFI for NVMe) |
 | **Operating system** (other installs) | Debian 13 (Trixie) or later, or Ubuntu 26.04 LTS or later |
 | **Privileges** | Passwordless `sudo` for the portal's service account (restrictable, see [SECURITY.md](SECURITY.md)) |
 | **Building from source** | Go 1.22 or later |
