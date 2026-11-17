@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  ZFS NAS Portal — Quick Installer for Debian / Ubuntu
-#  Script version 1.4
+#  Script version 1.5
 #  https://github.com/macgaver/zfsnas-chezmoi
 #
 #  Usage (run as root or with sudo):
@@ -33,6 +33,7 @@ SUDOERS_FILE="/etc/sudoers.d/zfsnas"
 UNIT_FILE="/etc/systemd/system/zfsnas.service"
 GITHUB_REPO="macgaver/zfsnas-chezmoi"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+ZFS_NEEDS_MOK=false          # set when Secure Boot refuses the freshly built ZFS module
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 header "ZFS NAS Portal — Quick Installer"
@@ -69,7 +70,7 @@ else
   if [[ "${DISTRO}" == "debian" ]]; then
     echo -e "    • Ensure ${BOLD}contrib${RESET} is enabled in /etc/apt/sources.list"
   fi
-  echo -e "    • Install linux-headers for the current kernel"
+  [[ "${DISTRO}" == "debian" ]] && echo -e "    • Install the kernel headers, so the ZFS module can be built for this and future kernels"
   echo -e "    • Install zfsutils-linux"
   echo -e "    • Load the ZFS kernel module"
   echo
@@ -134,23 +135,67 @@ else
       info "Updating package index…"
       apt-get update -qq
 
-      # ── Install kernel headers ──────────────────────────────────────────────
       _KVER=$(uname -r)
-      info "Installing linux-headers-${_KVER}…"
-      apt-get install -y -q --no-install-recommends "linux-headers-${_KVER}" || \
-        warn "Could not install linux-headers-${_KVER} — ZFS DKMS build may fail. Continuing anyway."
+
+      # ── Install kernel headers (Debian: the ZFS module is built by DKMS) ────
+      # Ubuntu ships the ZFS module with its kernels, so it needs no headers.
+      # Debian builds it with DKMS against the headers of each kernel: install
+      # the running kernel's headers AND the headers metapackage of its flavour
+      # (linux-headers-amd64, -cloud-amd64, -rt-amd64…). The metapackage pulls
+      # the headers of every future kernel, so DKMS rebuilds ZFS on each kernel
+      # update. Without it, the first kernel update leaves the next boot with
+      # no ZFS module and no pools.
+      if [[ "${DISTRO}" == "debian" ]]; then
+        _HDR_PKGS=("linux-headers-${_KVER}")
+        # 6.12.57+deb13-amd64 → amd64 · 6.12.57+deb13-cloud-amd64 → cloud-amd64 · 6.1.0-28-amd64 → amd64
+        _FLAVOUR=$(sed -E 's/^[0-9.]+(\+deb[0-9]+)?(-[0-9]+)?-//' <<<"${_KVER}")
+        if apt-cache show "linux-headers-${_FLAVOUR}" &>/dev/null; then
+          _HDR_PKGS+=("linux-headers-${_FLAVOUR}")
+        fi
+        info "Installing kernel headers: ${_HDR_PKGS[*]}…"
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "${_HDR_PKGS[@]}" || \
+          warn "Could not install ${_HDR_PKGS[*]} — the ZFS module build may fail. Continuing anyway."
+      fi
 
       # ── Install zfsutils-linux ──────────────────────────────────────────────
-      info "Installing zfsutils-linux…"
-      apt-get install -y -q zfsutils-linux
+      # noninteractive: zfs-dkms otherwise stops on a full-screen licence notice.
+      info "Installing zfsutils-linux (on Debian the ZFS module is compiled now: this takes a few minutes)…"
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q zfsutils-linux
       success "zfsutils-linux installed"
 
       # ── Load the ZFS kernel module ──────────────────────────────────────────
       info "Loading ZFS kernel module (modprobe zfs)…"
-      if modprobe zfs; then
+      if _MODPROBE_ERR=$(modprobe zfs 2>&1); then
         success "ZFS kernel module loaded"
+      elif grep -q 'Key was rejected' <<<"${_MODPROBE_ERR}"; then
+        # Secure Boot only loads modules signed with a key the firmware trusts.
+        # DKMS signed ZFS with its own key: the firmware must be told to trust
+        # it (MOK enrolment), which takes a reboot and a confirmation on the
+        # server's screen.
+        ZFS_NEEDS_MOK=true
+        _MOK_PUB=/var/lib/dkms/mok.pub
+        warn "Secure Boot is on, and it refuses the ZFS module until its signing key is enrolled."
+        if [[ -f "${_MOK_PUB}" ]]; then
+          command -v mokutil &>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -q mokutil
+          if mokutil --test-key "${_MOK_PUB}" 2>/dev/null | grep -q 'already enrolled'; then
+            warn "The key is already enrolled: reboot the server to load ZFS."
+          else
+            echo
+            echo -e "  To trust the key, choose a ${BOLD}one-time password${RESET} now. You will type it"
+            echo -e "  once more on the server's screen after the reboot."
+            echo
+            if mokutil --import "${_MOK_PUB}"; then
+              success "Signing key queued for enrolment"
+            else
+              warn "Key enrolment was not queued. Run it later with:  mokutil --import ${_MOK_PUB}"
+            fi
+          fi
+        else
+          warn "DKMS signing key ${_MOK_PUB} not found: enrol your module signing key with mokutil, or turn Secure Boot off."
+        fi
       else
-        warn "modprobe zfs failed — a reboot may be required to activate the module."
+        warn "modprobe zfs failed: ${_MODPROBE_ERR}"
+        warn "The installation goes on; ZFS is needed before pools can be used."
       fi
       ;;
     *)
@@ -307,7 +352,7 @@ RELEASE_JSON=$(curl -fsSL "${GITHUB_API}" 2>/dev/null) || fatal "Could not reach
 # Extract the first .tar.gz or bare binary download URL
 DOWNLOAD_URL=$(echo "${RELEASE_JSON}" \
   | grep '"browser_download_url"' \
-  | grep -v '\.sha256\|\.md5\|\.txt' \
+  | grep -v '\.sha256"\|\.md5"\|\.txt"\|\.sig"' \
   | head -1 \
   | sed 's/.*"browser_download_url": "\(.*\)"/\1/')
 
@@ -322,7 +367,7 @@ trap 'rm -f "${TMPFILE}"' EXIT
 curl -fsSL --progress-bar -o "${TMPFILE}" "${DOWNLOAD_URL}"
 
 # If it's a tar archive, extract the binary
-if file "${TMPFILE}" | grep -q 'gzip\|tar'; then
+if [[ "$(head -c2 "${TMPFILE}" | od -An -tx1 | tr -d ' ')" == "1f8b" ]]; then
   info "Extracting archive…"
   TMPDIR_EXTRACT=$(mktemp -d /tmp/zfsnas-extract.XXXXXX)
   tar -xzf "${TMPFILE}" -C "${TMPDIR_EXTRACT}"
@@ -383,6 +428,7 @@ systemctl daemon-reload
 systemctl enable zfsnas
 systemctl restart zfsnas
 success "Service enabled and started"
+sync   # flush the binary and unit to disk before anyone reboots or powers off
 
 # ── Detect IP for setup URL ───────────────────────────────────────────────────
 SETUP_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1 || echo "YOUR-SERVER-IP")
@@ -393,6 +439,14 @@ echo -e "${GREEN}$(printf '═%.0s' {1..60})${RESET}"
 echo -e "${BOLD}${GREEN}  ZFS NAS Portal installed successfully!${RESET}"
 echo -e "${GREEN}$(printf '═%.0s' {1..60})${RESET}"
 echo
+if [[ "${ZFS_NEEDS_MOK}" == "true" ]]; then
+  echo -e "  ${YELLOW}${BOLD}ZFS is installed but not active yet (Secure Boot).${RESET}"
+  echo -e "  1. Reboot the server:  ${CYAN}reboot${RESET}"
+  echo -e "  2. On the server's screen a blue ${BOLD}MOK management${RESET} menu appears:"
+  echo -e "     choose ${BOLD}Enroll MOK${RESET} → ${BOLD}Continue${RESET} → ${BOLD}Yes${RESET}, type the one-time password, then ${BOLD}Reboot${RESET}."
+  echo -e "  ZFS then loads at every boot. (Or turn Secure Boot off in the firmware.)"
+  echo
+fi
 echo -e "  ${BOLD}Open your browser and complete setup at:${RESET}"
 echo
 echo -e "    ${CYAN}${BOLD}https://${SETUP_IP}:8443/setup${RESET}"
