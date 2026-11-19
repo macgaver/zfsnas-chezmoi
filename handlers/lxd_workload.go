@@ -43,6 +43,29 @@ func isPhysicalIface(dev string) bool {
 	return ifaceAllowRe.MatchString(dev)
 }
 
+// instanceNICs picks the NICs to show for one instance (mirror of the
+// frontend _pickInstanceNics). Normally the guest's own names that
+// isPhysicalIface accepts. A VM without the Incus agent (Windows…) is
+// measured from the host, and Incus labels its NICs with the Incus device
+// names (net0, lan…): when no name looks like a guest NIC, keep every name
+// that isn't obviously virtual plumbing.
+func instanceNICs(devs []string) map[string]bool {
+	pick := map[string]bool{}
+	for _, d := range devs {
+		if isPhysicalIface(d) {
+			pick[d] = true
+		}
+	}
+	if len(pick) == 0 {
+		for _, d := range devs {
+			if d != "" && !ifaceExcludeRe.MatchString(d) {
+				pick[d] = true
+			}
+		}
+	}
+	return pick
+}
+
 // HandleLXDWorkloadPerf serves the per-instance RRD samples for the
 // metrics shown on the Workload tab — cpu, mem, net_rx, net_tx, disk_r,
 // disk_w — keyed by instance name. Network and disk samples are summed
@@ -238,6 +261,15 @@ func HandleLXDInstancesMetrics(w http.ResponseWriter, r *http.Request) {
 		sort.Slice(s.Filesystems, func(i, j int) bool { return s.Filesystems[i].Pct > s.Filesystems[j].Pct })
 
 		// NICs: pair net_rx:<dev> / net_tx:<dev>. Sum non-loopback for the headline.
+		var nicDevs []string
+		for _, k := range keys {
+			if d := strings.TrimPrefix(k, "net_rx:"); d != k {
+				nicDevs = append(nicDevs, d)
+			} else if d := strings.TrimPrefix(k, "net_tx:"); d != k {
+				nicDevs = append(nicDevs, d)
+			}
+		}
+		nicPick := instanceNICs(nicDevs)
 		nicSeen := map[string]bool{}
 		for _, k := range keys {
 			var dev string
@@ -253,7 +285,7 @@ func HandleLXDInstancesMetrics(w http.ResponseWriter, r *http.Request) {
 			}
 			nicSeen[dev] = true
 			// Only the guest's real uplink NICs — drop loopback/veth/bridge/etc.
-			if !isPhysicalIface(dev) {
+			if !nicPick[dev] {
 				continue
 			}
 			rx, ts1, _ := latestSample(db, "net_rx:"+dev)

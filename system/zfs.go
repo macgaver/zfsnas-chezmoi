@@ -1251,6 +1251,11 @@ func DetachPoolDisk(poolName, device string) error {
 // if it is already a mirror this adds a 3rd leg.
 // newDevice is partitioned (GPT, type BF01) first so ZFS tracks it by stable PARTUUID.
 func AttachPoolDisk(poolName, existingDevice, newDevice string) error {
+	// Check the size before PrepareZFSPartition wipes the disk: a disk that
+	// is too small would be erased and then refused by zpool attach.
+	if err := CheckMirrorFits(existingDevice, newDevice); err != nil {
+		return err
+	}
 	puPath, err := PrepareZFSPartition(newDevice)
 	if err != nil {
 		return fmt.Errorf("prepare %s: %w", newDevice, err)
@@ -1260,6 +1265,88 @@ func AttachPoolDisk(poolName, existingDevice, newDevice string) error {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// mirrorPartOverhead is what PrepareZFSPartition's single partition loses on
+// a whole disk: sgdisk starts it on the 1 MiB boundary and ends it before
+// the backup GPT (one header sector plus 16 KiB of partition entries).
+// On a 512 B-sector disk that is exactly 2048+33 sectors.
+func mirrorPartOverhead(sectorSize uint64) uint64 {
+	if sectorSize == 0 {
+		sectorSize = 512
+	}
+	return 1<<20 + sectorSize + 16<<10
+}
+
+// logicalSectorSize reads the disk's logical block size from sysfs (512 when unknown).
+func logicalSectorSize(dev string) uint64 {
+	name := filepath.Base(resolveDevPath(dev))
+	b, err := os.ReadFile("/sys/class/block/" + name + "/queue/logical_block_size")
+	if err != nil {
+		return 512
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 64)
+	if err != nil || n == 0 {
+		return 512
+	}
+	return n
+}
+
+// BlockDeviceSize returns the size in bytes of a disk or partition, following
+// /dev/disk/by-* links.
+func BlockDeviceSize(dev string) (uint64, error) {
+	out, err := exec.Command("lsblk", "-bdno", "SIZE", resolveDevPath(dev)).Output()
+	if err != nil {
+		return 0, fmt.Errorf("cannot read the size of %s", dev)
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("cannot read the size of %s", dev)
+	}
+	return n, nil
+}
+
+// MirrorMinDiskSize is the smallest whole disk that can mirror the pool
+// member existingDevice once it gets its ZFS partition.
+func MirrorMinDiskSize(existingDevice string) (memberSize, minDisk uint64, err error) {
+	memberSize, err = BlockDeviceSize(existingDevice)
+	if err != nil {
+		return 0, 0, err
+	}
+	return memberSize, memberSize + mirrorPartOverhead(512), nil
+}
+
+// CheckMirrorFits refuses a new mirror disk that is smaller than the member
+// it would mirror, or that is the member's own disk.
+func CheckMirrorFits(existingDevice, newDevice string) error {
+	if diskBaseName(filepath.Base(resolveDevPath(existingDevice))) == filepath.Base(resolveDevPath(newDevice)) {
+		return fmt.Errorf("%s is the disk already in the pool", newDevice)
+	}
+	member, err := BlockDeviceSize(existingDevice)
+	if err != nil {
+		return err
+	}
+	minDisk := member + mirrorPartOverhead(logicalSectorSize(newDevice))
+	have, err := BlockDeviceSize(newDevice)
+	if err != nil {
+		return err
+	}
+	if have < minDisk {
+		return fmt.Errorf("%s is too small to mirror this disk: it has %s, at least %s is needed. Nothing was changed on it",
+			newDevice, humanBytesSI(have), humanBytesSI(minDisk))
+	}
+	return nil
+}
+
+func humanBytesSI(b uint64) string {
+	switch {
+	case b >= 1e12:
+		return strconv.FormatFloat(float64(b)/1e12, 'f', 2, 64) + " TB"
+	case b >= 1e9:
+		return strconv.FormatFloat(float64(b)/1e9, 'f', 1, 64) + " GB"
+	default:
+		return strconv.FormatFloat(float64(b)/1e6, 'f', 0, 64) + " MB"
+	}
 }
 
 // resolveDevPath resolves symlinks (e.g. /dev/disk/by-id/... or

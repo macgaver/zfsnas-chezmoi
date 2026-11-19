@@ -703,6 +703,16 @@ func HandleAttachPoolDisk(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "no pool available")
 		return
 	}
+	// The disk about to be wiped must be free: not a pool member, spare,
+	// cache or mounted anywhere.
+	if disks, lerr := system.ListDisks(config.Dir()); lerr == nil {
+		for _, d := range disks {
+			if d.Device == req.NewDevice && d.InUse {
+				jsonErr(w, http.StatusBadRequest, req.NewDevice+" is in use, pick a free disk")
+				return
+			}
+		}
+	}
 	if err := system.AttachPoolDisk(pool.Name, req.ExistingDevice, req.NewDevice); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -719,6 +729,22 @@ func HandleAttachPoolDisk(w http.ResponseWriter, r *http.Request) {
 	})
 	updated, _ := system.GetPoolByName(pool.Name)
 	jsonOK(w, updated)
+}
+
+// HandleMirrorInfo tells the Add Mirror Disk dialog how big the pool member
+// is, so it can rule out disks that are too small before anything is wiped.
+func HandleMirrorInfo(w http.ResponseWriter, r *http.Request) {
+	dev := strings.TrimSpace(r.URL.Query().Get("device"))
+	if dev == "" || !strings.HasPrefix(dev, "/dev/") {
+		jsonErr(w, http.StatusBadRequest, "device is required")
+		return
+	}
+	member, minDisk, err := system.MirrorMinDiskSize(dev)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]uint64{"member_size": member, "min_disk_size": minDisk})
 }
 
 func HandleDetachPoolDisk(w http.ResponseWriter, r *http.Request) {

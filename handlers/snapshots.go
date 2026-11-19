@@ -101,6 +101,9 @@ func HandleCreateSnapshot(w http.ResponseWriter, r *http.Request) {
 func HandleRestoreSnapshot(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
+		// Children also rolls back every child dataset holding a snapshot of
+		// the same name (a recursive policy's set), all or nothing.
+		Children bool `json:"children"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -110,12 +113,29 @@ func HandleRestoreSnapshot(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "valid snapshot name required")
 		return
 	}
+	sess := MustSession(r)
+	if req.Children {
+		done, err := system.RestoreSnapshotSet(req.Name, true)
+		result := audit.ResultOK
+		details := fmt.Sprintf("rollback -r applied to %d dataset(s): %s", len(done), strings.Join(done, ", "))
+		if err != nil {
+			result = audit.ResultError
+			details = err.Error()
+		}
+		audit.Log(audit.Entry{User: sess.Username, Role: sess.Role, Action: audit.ActionRestoreSnapshot,
+			Target: req.Name, Result: result, Details: details})
+		if err != nil {
+			jsonErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		jsonOK(w, map[string]any{"message": "snapshot restored", "restored": done})
+		return
+	}
 	if err := system.RollbackSnapshot(req.Name); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	sess := MustSession(r)
 	audit.Log(audit.Entry{
 		User:    sess.Username,
 		Role:    sess.Role,
@@ -126,6 +146,19 @@ func HandleRestoreSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 
 	jsonOK(w, map[string]string{"message": "snapshot restored"})
+}
+
+// HandleRestorePlan tells the Restore dialog what a rollback to ?name=
+// touches: the newer snapshots it destroys and, with ?children=1, the child
+// datasets that hold the same snapshot.
+func HandleRestorePlan(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	plan, err := system.PlanRestore(name, r.URL.Query().Get("children") == "1")
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonOK(w, plan)
 }
 
 func HandleCloneSnapshot(w http.ResponseWriter, r *http.Request) {

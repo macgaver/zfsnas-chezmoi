@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 	"zfsnas/internal/alerts"
@@ -250,7 +249,7 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 	if label == "" {
 		label = "auto"
 	}
-	name, err := system.CreateSnapshot(p.Dataset, label)
+	name, nChildren, err := system.CreatePolicySnapshot(p.Dataset, label, p.ID, p.Recursive, replicationDestinations())
 	p.LastRun = time.Now()
 	if err != nil {
 		p.LastStatus = "error"
@@ -274,14 +273,23 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 	p.LastStatus = "ok"
 	p.LastError = ""
 	p.LastDetails = "Snapshot: " + name
+	details := fmt.Sprintf("scheduled policy %s", p.ID)
+	if p.Recursive {
+		p.LastDetails += fmt.Sprintf(" + %d child dataset%s", nChildren, plural(nChildren))
+		details += fmt.Sprintf(", recursive: %d child dataset%s", nChildren, plural(nChildren))
+	}
 	audit.Log(audit.Entry{
 		Action:  audit.ActionCreateSnapshot,
 		Target:  name,
 		Result:  audit.ResultOK,
-		Details: fmt.Sprintf("scheduled policy %s", p.ID),
+		Details: details,
 	})
 	if p.Retention > 0 {
-		pruneSnapshots(p.Dataset, label, p.Retention)
+		if _, errs := system.PrunePolicySnapshots(p.Dataset, label, p.ID, p.Retention); len(errs) > 0 {
+			for _, e := range errs {
+				log.Printf("[scheduler] prune policy %s: %v", p.ID, e)
+			}
+		}
 	}
 
 	// Run local replication if configured for this policy.
@@ -412,29 +420,41 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 	return nil
 }
 
-func pruneSnapshots(dataset, labelPrefix string, keep int) {
-	snaps, err := system.ListSnapshots(dataset)
+// replicationDestinations lists the local replication targets of every
+// policy: a recursive policy must not snapshot them, or the next
+// incremental receive into them fails.
+func replicationDestinations() map[string]bool {
+	dest := map[string]bool{}
+	policies, _ := scheduler.LoadPolicies()
+	for _, q := range policies {
+		if q.LocalReplEnabled && q.LocalReplDataset != "" {
+			dest[q.LocalReplDataset] = true
+		}
+	}
+	return dest
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// HandleScheduleTree previews which child datasets a recursive policy on
+// ?dataset= would snapshot, and which it leaves out and why.
+func HandleScheduleTree(w http.ResponseWriter, r *http.Request) {
+	ds := strings.TrimSpace(r.URL.Query().Get("dataset"))
+	if ds == "" || strings.ContainsAny(ds, "@ ") {
+		jsonErr(w, http.StatusBadRequest, "dataset is required")
+		return
+	}
+	tree, err := system.PolicyTree(ds, replicationDestinations())
 	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var ours []system.Snapshot
-	for _, s := range snaps {
-		if s.Dataset == dataset &&
-			(strings.HasPrefix(s.SnapName, labelPrefix+"-") || s.SnapName == labelPrefix) {
-			ours = append(ours, s)
-		}
-	}
-	if len(ours) <= keep {
-		return
-	}
-	sort.Slice(ours, func(i, j int) bool {
-		return ours[i].Creation.Before(ours[j].Creation)
-	})
-	for _, s := range ours[:len(ours)-keep] {
-		if err := system.DestroySnapshot(s.Name); err != nil {
-			log.Printf("[scheduler] prune %s: %v", s.Name, err)
-		}
-	}
+	jsonOK(w, tree)
 }
 
 // findLinkedServerByHost returns the LinkedServer whose URL hostname matches host,

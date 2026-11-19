@@ -232,6 +232,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleAddPoolSpare)))).Methods("POST")
 	r.Handle("/api/pool/spare",
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleRemovePoolSpare)))).Methods("DELETE")
+	r.Handle("/api/pool/mirror-info",
+		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleMirrorInfo)))).Methods("GET")
 	r.Handle("/api/pool/attach-disk",
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleAttachPoolDisk)))).Methods("POST")
 	r.Handle("/api/pool/detach-disk",
@@ -312,6 +314,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_snapshots")(http.HandlerFunc(HandleCreateSnapshot)))).Methods("POST")
 	r.Handle("/api/snapshots/restore",
 		RequireAuth(RequirePermission("manage_snapshots")(http.HandlerFunc(HandleRestoreSnapshot)))).Methods("POST")
+	r.Handle("/api/snapshots/restore-plan",
+		RequireAuth(RequirePermission("manage_snapshots")(http.HandlerFunc(HandleRestorePlan)))).Methods("GET")
 	r.Handle("/api/snapshots/clone",
 		RequireAuth(RequirePermission("manage_snapshots")(http.HandlerFunc(HandleCloneSnapshot)))).Methods("POST")
 	r.Handle("/api/snapshots/delete",
@@ -499,6 +503,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleListSchedules))).Methods("GET")
 	r.Handle("/api/snapshot-schedules",
 		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleCreateSchedule)))).Methods("POST")
+	r.Handle("/api/snapshot-schedules/tree",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleScheduleTree)))).Methods("GET")
 	r.Handle("/api/snapshot-schedules/{id}",
 		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleUpdateSchedule)))).Methods("PUT")
 	r.Handle("/api/snapshot-schedules/{id}",

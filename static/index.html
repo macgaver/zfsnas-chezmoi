@@ -7568,27 +7568,35 @@ Select the Console tab to load.</pre>
   </div>
 </div>
 
-<!-- Attach Mirror Disk Modal -->
+<!-- Add Mirror Disk Modal (guided) -->
 <div class="modal-backdrop hidden" id="modal-attach-disk" onclick="if(event.target===this)closeAttachDiskModal()">
-  <div class="modal" style="max-width:460px;">
+  <div class="modal" style="max-width:580px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
-      <h3>Attach Mirror Disk</h3>
+      <h3 id="attach-disk-title">Add Mirror Disk</h3>
       <button class="modal-close" onclick="closeAttachDiskModal()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto;">
       <div class="alert alert-error hidden" id="attach-disk-alert"></div>
-      <p style="font-size:14px;">Attach a new mirror partner to <strong id="attach-disk-existing-name" style="font-family:monospace;color:var(--text-1);"></strong> in pool <strong id="attach-disk-pool" style="font-family:monospace;color:var(--text-1);"></strong>.</p>
-      <div style="font-size:13px;color:var(--text-2);background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;line-height:1.6;">
-        ZFS will immediately start mirroring (resilver) the selected disk. The pool stays online during the process. Use this to restore or create a mirror after a disk was detached.
+      <div id="attach-disk-explain"></div>
+      <div>
+        <div class="mirror-step-label">1 · Disk in pool <strong id="attach-disk-pool" style="font-family:monospace;color:var(--text-1);"></strong></div>
+        <div id="attach-disk-current"></div>
       </div>
-      <div class="form-group" style="margin-bottom:0;">
-        <label>New Mirror Disk</label>
-        <select id="attach-disk-select" style="width:100%;"></select>
+      <div>
+        <div class="mirror-step-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>2 · Pick the new disk</span>
+          <button class="btn btn-ghost btn-sm" id="attach-disk-rescan" onclick="rescanAttachDisks()" style="font-size:11px;padding:3px 9px;">Rescan disks</button>
+        </div>
+        <div id="attach-disk-list" style="display:flex;flex-direction:column;gap:8px;"></div>
       </div>
+      <label id="attach-disk-ack-row" class="hidden" style="display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;background:rgba(255,59,48,0.07);border:1px solid rgba(255,59,48,0.35);border-radius:var(--radius-sm);padding:10px 12px;cursor:pointer;">
+        <input type="checkbox" id="attach-disk-ack" onchange="_attachDiskSync()" style="margin-top:3px;flex-shrink:0;">
+        <span>3 · Everything on <strong id="attach-disk-ack-dev" style="font-family:monospace;"></strong> will be erased. I checked it holds nothing I need.</span>
+      </label>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeAttachDiskModal()">Cancel</button>
-      <button class="btn btn-primary" id="btn-attach-disk-confirm" onclick="confirmAttachDisk()">Attach &amp; Mirror</button>
+      <button class="btn btn-primary" id="btn-attach-disk-confirm" onclick="confirmAttachDisk()" disabled>Add Mirror</button>
     </div>
   </div>
 </div>
@@ -10460,6 +10468,15 @@ Select the Console tab to load.</pre>
         <div class="form-group">
           <label>Dataset or ZVol <i class="info-tip tip-down" data-tip="Select the dataset or zvol to snapshot. Both filesystem datasets and block-device zvols are listed."></i></label>
           <select id="sched-dataset"></select>
+        </div>
+        <div id="sched-recursive-group" class="form-group" style="display:none;">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;font-weight:500;margin:0;">
+            <input type="checkbox" id="sched-recursive" onchange="_schedRecursivePreview()" style="width:15px;height:15px;margin-top:2px;accent-color:var(--accent-2);flex-shrink:0;">
+            <span>Include child datasets
+              <span class="text-3" style="display:block;font-size:12px;font-weight:400;line-height:1.45;">Snapshots the child datasets too, all at the same instant, with this policy's schedule and retention.</span>
+            </span>
+          </label>
+          <div id="sched-recursive-preview" style="display:none;margin-top:8px;"></div>
         </div>
         <div class="form-group">
           <label>Label <span class="text-3 text-xs">(snapshot name prefix)</span></label>
@@ -20777,7 +20794,7 @@ function _treeDiskRow(raw, dev, status, poolName, indent, canDetach, allowOnline
     <div style="position:relative;flex-shrink:0;">
       <button onclick="toggleDiskMenu('${menuId}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:18px;line-height:1;padding:2px 6px;border-radius:4px;" title="Disk actions">⋮</button>
       <div id="${menuId}" style="display:none;position:absolute;right:0;top:100%;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);min-width:200px;overflow:hidden;">
-        ${canDetach ? `<button class="disk-menu-item" onclick="closeDiskMenus();openAttachDiskModal('${esc(poolName)}','${esc(raw)}','${esc(dev)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;">⊕ Attach Mirror Disk</button>` : ''}
+        ${canDetach ? `<button class="disk-menu-item" onclick="closeDiskMenus();openAttachDiskModal('${esc(poolName)}','${esc(raw)}','${esc(dev)}','mirror')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;">⊕ Attach Mirror Disk</button>` : ''}
         <button class="disk-menu-item" onclick="closeDiskMenus();openReplaceDiskModal('${esc(poolName)}','${esc(raw)}','${esc(dev)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent-warn);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Replace Disk</button>
         ${!isOffline ? `<button class="disk-menu-item" onclick="closeDiskMenus();openDiskOfflineModal('${esc(poolName)}','${esc(raw)}','${esc(dev)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent-warn);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg> Force Disk Offline</button>` : ''}
         ${isOffline ? `<button class="disk-menu-item" onclick="closeDiskMenus();submitDiskOnline('${esc(poolName)}','${esc(raw)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent-3);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m9 18 6-6-6-6"/></svg> Force Disk Online</button>` : ''}
@@ -20817,7 +20834,7 @@ function _vdevGroupBlock(vg, poolName) {
       <div style="position:relative;flex-shrink:0;">
         <button onclick="toggleDiskMenu('${menuId}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:18px;line-height:1;padding:2px 6px;border-radius:4px;">⋮</button>
         <div id="${menuId}" style="display:none;position:absolute;right:0;top:100%;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);min-width:200px;overflow:hidden;">
-          <button class="disk-menu-item" onclick="closeDiskMenus();openAttachDiskModal('${esc(poolName)}','${esc(d.raw)}','${esc(d.device)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;">⊕ Attach Mirror Disk</button>
+          <button class="disk-menu-item" onclick="closeDiskMenus();openAttachDiskModal('${esc(poolName)}','${esc(d.raw)}','${esc(d.device)}','stripe')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;">⊕ Attach Mirror Disk</button>
           <button class="disk-menu-item" onclick="closeDiskMenus();openReplaceDiskModal('${esc(poolName)}','${esc(d.raw)}','${esc(d.device)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent-warn);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Replace Disk</button>
           ${!isOffline?`<button class="disk-menu-item" onclick="closeDiskMenus();openDiskOfflineModal('${esc(poolName)}','${esc(d.raw)}','${esc(d.device)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent-warn);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg> Force Disk Offline</button>`:''}
           ${isOffline?`<button class="disk-menu-item" onclick="closeDiskMenus();submitDiskOnline('${esc(poolName)}','${esc(d.raw)}')" style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent-3);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m9 18 6-6-6-6"/></svg> Force Disk Online</button>`:''}
@@ -20878,7 +20895,7 @@ function _vdevGroupBlock(vg, poolName) {
   const diskRows = _directRows + _subVdevRows;
   const addBtn = isAdmin && canAttach && poolName ? `
     <div style="padding:6px 0 4px 28px;">
-      <button onclick="openAttachDiskModal('${esc(poolName)}','${esc(firstRaw)}','${esc(firstDev)}')"
+      <button onclick="openAttachDiskModal('${esc(poolName)}','${esc(firstRaw)}','${esc(firstDev)}','${esc(vg.type)}')"
         style="background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--text-3);cursor:pointer;width:100%;">
         ⊕ Add Disk to this ${_vdevLabel(vg.type)}
       </button>
@@ -20977,9 +20994,15 @@ function _buildPhysicalDisksCard(pool) {
   const membersHtml = (vdevTreeHtml||sectionsHtml)
     ? vdevTreeHtml + sectionsHtml
     : '<div class="text-3 text-sm" style="padding:10px 0;">No device info available (run SMART refresh)</div>';
+  // A pool on a single disk has no redundancy: offer to mirror it.
+  const dataDisks = (pool.vdevs || []).filter(g => g.type !== 'replacing').flatMap(g => g.disks || []);
+  const soleVdev = (pool.vdevs || []).length === 1 ? pool.vdevs[0] : null;
+  const mirrorBtn = soleVdev && soleVdev.type === 'stripe' && dataDisks.length === 1
+    ? `<button class="btn btn-sm" style="margin-top:8px;width:100%;background:rgba(10,132,255,0.12);border:1.5px solid rgba(10,132,255,0.4);color:#0a84ff;font-weight:600;" onclick="openAttachDiskModal('${esc(pool.name)}','${esc(dataDisks[0].raw)}','${esc(dataDisks[0].device)}','stripe')">+ Add Mirror Disk</button>`
+    : '';
   const addDiskBtn = hasPerm('manage_pool_dataset')
     ? `<button class="btn btn-sm" style="margin-top:14px;width:100%;background:rgba(48,209,88,0.15);border:1.5px solid rgba(48,209,88,0.45);color:#30d158;font-weight:600;" onclick="openAddDisksModal('${esc(pool.name)}')">+ Add Capacity</button>
-       <button class="btn btn-sm" style="margin-top:8px;width:100%;background:rgba(240,180,41,0.12);border:1.5px solid rgba(240,180,41,0.4);color:#f0b429;font-weight:600;" onclick="openAddSpareModal('${esc(pool.name)}')">+ Add Spare Disk</button>`
+       <button class="btn btn-sm" style="margin-top:8px;width:100%;background:rgba(240,180,41,0.12);border:1.5px solid rgba(240,180,41,0.4);color:#f0b429;font-weight:600;" onclick="openAddSpareModal('${esc(pool.name)}')">+ Add Spare Disk</button>${mirrorBtn}`
     : '';
   return {totalDisks, contentHtml: membersHtml + addDiskBtn};
 }
@@ -22999,65 +23022,209 @@ async function confirmReplaceDisk() {
 }
 
 let _attachDiskPending = null;
-async function openAttachDiskModal(poolName, rawPath, devPath) {
-  _attachDiskPending = {pool: poolName, existingDevice: rawPath, display: devPath || rawPath};
-  document.getElementById('attach-disk-existing-name').textContent = devPath || rawPath;
+// Guided "Add Mirror Disk": shows the disk already in the vdev, rates every
+// free disk against it (fits? same kind? same size?) and only enables the
+// button for a disk that fits, after the user confirms it will be erased.
+// Works for a single-disk vdev (becomes a 2-way mirror) and for an existing
+// mirror (adds one more copy).
+async function openAttachDiskModal(poolName, rawPath, devPath, vdevType) {
+  _attachDiskPending = {pool: poolName, existingDevice: rawPath, display: devPath || rawPath,
+                        vdevType: vdevType || 'stripe', disks: [], minDisk: 0, memberSize: 0, chosen: ''};
+  const isMirror = _attachDiskPending.vdevType === 'mirror';
+  document.getElementById('attach-disk-title').textContent = isMirror ? 'Add Another Mirror Copy' : 'Add Mirror Disk';
   document.getElementById('attach-disk-pool').textContent = poolName;
   document.getElementById('attach-disk-alert').classList.add('hidden');
+  document.getElementById('attach-disk-ack').checked = false;
+  document.getElementById('attach-disk-ack-row').classList.add('hidden');
   const btn = document.getElementById('btn-attach-disk-confirm');
-  btn.disabled = false;
-  btn.textContent = 'Attach & Mirror';
-  const sel = document.getElementById('attach-disk-select');
-  sel.innerHTML = '<option value="">Loading…</option>';
+  btn.disabled = true; btn.textContent = 'Add Mirror';
+  const disk = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="11" r="4"/><path d="M12 11h.01M7 18h2"/></svg>';
+  document.getElementById('attach-disk-explain').innerHTML = `
+    <div style="display:flex;gap:14px;align-items:center;background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;">
+      <div style="display:flex;align-items:center;gap:4px;color:var(--accent);flex-shrink:0;">
+        ${disk}<svg width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h22M20 1l4 4M24 9H2M6 13 2 9"/></svg>${disk}
+      </div>
+      <div style="font-size:13px;color:var(--text-2);line-height:1.55;">
+        ${isMirror
+          ? 'This vdev is already a mirror. A new disk adds one more identical copy, so the pool survives one more disk failure.'
+          : 'Today this pool lives on <strong>one disk</strong>: if it fails, the data is gone. A mirror keeps an identical copy on a second disk, so the pool keeps running when either one fails.'}
+        <div style="margin-top:4px;color:var(--text-3);font-size:12px;">Usable space does not change. The pool stays online while ZFS copies the data to the new disk (resilver).</div>
+      </div>
+    </div>`;
+  document.getElementById('attach-disk-current').innerHTML = '<div class="text-3 text-sm" style="padding:8px 0;">Loading…</div>';
+  document.getElementById('attach-disk-list').innerHTML = '';
   document.getElementById('modal-attach-disk').classList.remove('hidden');
-  try {
-    const resp = await fetch('/api/disks');
-    const disks = resp.ok ? await resp.json() : [];
-    const available = (disks || []).filter(d => !d.in_use && d.device);
-    sel.innerHTML = available.length === 0
-      ? '<option value="">No available disks</option>'
-      : available.map(d => {
-          const gb = d.size_bytes ? ' — ' + (d.size_bytes / 1e9).toFixed(0) + ' GB' : '';
-          const label = (d.model ? d.model + ' ' : '') + (d.name || d.device) + gb;
-          return `<option value="${esc(d.device)}">${esc(label)}</option>`;
-        }).join('');
-    initCustomSelect('attach-disk-select'); csRefresh('attach-disk-select');
-  } catch(e) {
-    sel.innerHTML = '<option value="">Error loading disks</option>';
-    initCustomSelect('attach-disk-select'); csRefresh('attach-disk-select');
-  }
+  await _attachDiskLoad(false);
 }
+
+async function _attachDiskLoad(rescan) {
+  const p = _attachDiskPending; if (!p) return;
+  const listEl = document.getElementById('attach-disk-list');
+  listEl.innerHTML = '<div class="text-3 text-sm" style="padding:8px 0;">' + (rescan ? 'Rescanning disks…' : 'Loading disks…') + '</div>';
+  try {
+    const [dr, mr] = await Promise.all([
+      rescan ? fetch('/api/disks/scan', {method: 'POST'}) : fetch('/api/disks'),
+      fetch('/api/pool/mirror-info?device=' + encodeURIComponent(p.existingDevice)),
+    ]);
+    p.disks = dr.ok ? (await dr.json() || []) : [];
+    const mi = mr.ok ? await mr.json() : {};
+    p.memberSize = mi.member_size || 0;
+    p.minDisk = mi.min_disk_size || 0;
+  } catch { p.disks = []; }
+  _attachDiskRender();
+}
+
+async function rescanAttachDisks() {
+  const b = document.getElementById('attach-disk-rescan');
+  b.disabled = true;
+  await _attachDiskLoad(true);
+  b.disabled = false;
+}
+
+// Rates a free disk against the one already in the pool.
+// level: ok | warn | bad (bad = cannot be used).
+function _attachDiskRate(d, cur, minDisk) {
+  const notes = [];
+  const kind = x => (x && (x.disk_type || (x.rotational ? 'HDD' : 'SSD'))) || '';
+  if (minDisk && d.size_bytes < minDisk) {
+    return {level: 'bad', badge: 'Too small', score: -1,
+            notes: ['Needs at least ' + fmtBytes(minDisk) + ' to hold a full copy.']};
+  }
+  let level = 'ok', badge = 'Compatible', score = 50;
+  const curSize = cur ? cur.size_bytes : 0;
+  const sameModel = cur && cur.model && d.model && cur.model.trim() === d.model.trim();
+  const close = curSize && Math.abs(d.size_bytes - curSize) <= curSize * 0.01;
+  if (sameModel && close) { badge = 'Perfect match'; score = 100; notes.push('Same model and size as the disk in the pool.'); }
+  else if (close) { score = 80; notes.push('Same size as the disk in the pool.'); }
+  if (cur && kind(cur) && kind(d) && kind(cur) !== kind(d)) {
+    level = 'warn'; badge = 'Works, with a catch'; score -= 30;
+    const slow = (kind(cur) === 'HDD' || kind(d) === 'HDD') ? 'the HDD' : 'the slower disk';
+    notes.push(kind(d) + ' with ' + kind(cur) + ': the mirror writes at the speed of ' + slow + '.');
+  }
+  if (curSize && d.size_bytes > curSize * 1.1) {
+    if (level === 'ok') { level = 'warn'; badge = 'Works, with a catch'; }
+    score -= 20;
+    notes.push(fmtBytes(d.size_bytes - curSize) + ' of this disk stays unused until the other disk is also replaced by a bigger one.');
+  }
+  if (d.smart_ok === false && d.smart_msg) {
+    level = 'warn'; badge = 'Works, with a catch'; score -= 40;
+    notes.push('SMART: ' + d.smart_msg);
+  }
+  if (d.wearout_pct != null && d.wearout_pct >= 80) {
+    level = 'warn'; badge = 'Works, with a catch'; score -= 25;
+    notes.push('Already ' + d.wearout_pct + '% worn out.');
+  }
+  return {level, badge, score, notes};
+}
+
+function _attachDiskRender() {
+  const p = _attachDiskPending; if (!p) return;
+  let curDev = p.display;
+  // The vdev holds a partition (/dev/sda1): its whole disk carries model/size.
+  const cur = p.disks.find(d => d.device === stripPart(curDev)) || p.disks.find(d => d.device === curDev) || null;
+  const kindOf = d => d.disk_type || (d.rotational ? 'HDD' : 'SSD');
+  const chip = (t, c) => `<span style="font-size:10px;font-weight:700;color:${c};background:${c}1f;border:1px solid ${c}55;padding:1px 6px;border-radius:4px;white-space:nowrap;">${esc(t)}</span>`;
+  document.getElementById('attach-disk-current').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;">
+      ${diskSVG(20)}
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:600;font-size:13px;">${esc(cur && cur.model ? cur.model : (curDev || ''))}</div>
+        <div style="font-family:monospace;font-size:11px;color:var(--text-3);">${esc(curDev)}${cur && cur.serial ? ' · ' + esc(cur.serial) : ''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-weight:700;font-size:13px;">${cur ? fmtBytes(cur.size_bytes) : (p.memberSize ? fmtBytes(p.memberSize) : '')}</div>
+        ${cur ? chip(kindOf(cur), 'var(--text-3)') : ''}
+      </div>
+    </div>`;
+
+  const free = p.disks.filter(d => !d.in_use && d.device && d.device !== (cur && cur.device));
+  const rated = free.map(d => ({d, r: _attachDiskRate(d, cur, p.minDisk)}))
+                    .sort((a, b) => b.r.score - a.r.score || a.d.size_bytes - b.d.size_bytes);
+  const listEl = document.getElementById('attach-disk-list');
+  if (!rated.length) {
+    p.chosen = '';
+    listEl.innerHTML = `
+      <div style="text-align:center;border:1px dashed var(--border);border-radius:var(--radius-sm);padding:18px 14px;font-size:13px;color:var(--text-2);line-height:1.6;">
+        No free disk found.<br>
+        Plug in a disk of at least <strong>${fmtBytes(p.minDisk || (cur && cur.size_bytes) || 0)}</strong>${cur ? ', ideally another ' + esc(kindOf(cur)) : ''}, then click <strong>Rescan disks</strong>.
+      </div>`;
+    _attachDiskSync();
+    return;
+  }
+  // Keep the user's pick across a rescan; otherwise preselect the best fit.
+  if (!rated.some(x => x.d.device === p.chosen && x.r.level !== 'bad')) {
+    const best = rated.find(x => x.r.level !== 'bad');
+    p.chosen = best ? best.d.device : '';
+  }
+  const col = {ok: '#30d158', warn: '#f0b429', bad: 'var(--accent-danger)'};
+  listEl.innerHTML = rated.map(({d, r}) => {
+    const on = d.device === p.chosen;
+    const bad = r.level === 'bad';
+    return `
+    <div class="mirror-pick${on ? ' on' : ''}${bad ? ' bad' : ''}" ${bad ? '' : `onclick="_attachDiskChoose('${esc(d.device)}')"`} role="radio" aria-checked="${on}" aria-disabled="${bad}">
+      <span class="mirror-radio"></span>
+      <div style="min-width:0;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-weight:600;font-size:13px;">${esc(d.model || d.name || d.device)}</span>
+          ${chip(r.badge, col[r.level])}
+        </div>
+        <div style="font-family:monospace;font-size:11px;color:var(--text-3);">${esc(d.device)}${d.serial ? ' · ' + esc(d.serial) : ''}${d.transport ? ' · ' + esc(d.transport.toUpperCase()) : ''}</div>
+        ${r.notes.length ? `<div style="font-size:12px;color:${r.level === 'ok' ? 'var(--text-2)' : col[r.level]};margin-top:3px;line-height:1.45;">${r.notes.map(esc).join('<br>')}</div>` : ''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-weight:700;font-size:13px;">${fmtBytes(d.size_bytes)}</div>
+        ${chip(kindOf(d), 'var(--text-3)')}
+      </div>
+    </div>`;
+  }).join('');
+  _attachDiskSync();
+}
+
+function _attachDiskChoose(dev) {
+  const p = _attachDiskPending; if (!p) return;
+  if (p.chosen !== dev) document.getElementById('attach-disk-ack').checked = false;
+  p.chosen = dev;
+  _attachDiskRender();
+}
+
+function _attachDiskSync() {
+  const p = _attachDiskPending;
+  const chosen = p && p.chosen;
+  document.getElementById('attach-disk-ack-row').classList.toggle('hidden', !chosen);
+  document.getElementById('attach-disk-ack-dev').textContent = chosen || '';
+  document.getElementById('btn-attach-disk-confirm').disabled = !chosen || !document.getElementById('attach-disk-ack').checked;
+}
+
 function closeAttachDiskModal() {
   document.getElementById('modal-attach-disk').classList.add('hidden');
 }
+
 async function confirmAttachDisk() {
-  const sel = document.getElementById('attach-disk-select');
-  const newDevice = sel.value;
+  const p = _attachDiskPending;
   const alertEl = document.getElementById('attach-disk-alert');
   alertEl.classList.add('hidden');
-  if (!newDevice) {
-    alertEl.textContent = 'Please select a disk to attach.';
-    alertEl.classList.remove('hidden');
-    return;
-  }
+  if (!p || !p.chosen || !document.getElementById('attach-disk-ack').checked) return;
   const btn = document.getElementById('btn-attach-disk-confirm');
   btn.disabled = true;
-  btn.textContent = 'Attaching…';
-  const resp = await fetch('/api/pool/attach-disk', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({pool: _attachDiskPending.pool, existing_device: _attachDiskPending.existingDevice, new_device: newDevice}),
-  });
-  const data = await resp.json().catch(() => ({}));
-  btn.disabled = false;
-  btn.textContent = 'Attach & Mirror';
-  if (!resp.ok) {
-    alertEl.textContent = data.error || 'Failed to attach disk.';
+  btn.textContent = 'Adding…';
+  let resp, data = {};
+  try {
+    resp = await fetch('/api/pool/attach-disk', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pool: p.pool, existing_device: p.existingDevice, new_device: p.chosen}),
+    });
+    data = await resp.json().catch(() => ({}));
+  } catch (e) { resp = null; }
+  btn.textContent = 'Add Mirror';
+  if (!resp || !resp.ok) {
+    btn.disabled = false;
+    alertEl.textContent = (data && data.error) || 'Failed to add the mirror disk.';
     alertEl.classList.remove('hidden');
     return;
   }
   closeAttachDiskModal();
-  showToast('Mirror disk attached — resilver started.', 'success');
+  showToast('Mirror disk added. ZFS is copying the data (resilver); the pool stays online.', 'success');
   loadPool();
 }
 
@@ -25590,6 +25757,35 @@ async function confirmForceDelete() {
   loadDatasets();
 }
 
+// A share stores a filesystem path (/mnt/RAID6TB/TERADisk), not a dataset
+// name (RAID6TB/TERADisk), and the dataset list may not be loaded yet when
+// the user comes straight to the Shares page. Resolve the path to the
+// dataset that holds it: exact mountpoint, then name, then the deepest
+// mountpoint containing it.
+async function openEditDatasetForPath(path) {
+  if (!datasetCache || !datasetCache.length) {
+    try {
+      const r = await fetch('/api/datasets');
+      if (r.ok) datasetCache = await r.json() || [];
+    } catch {}
+  }
+  const p = (path || '').replace(/\/+$/, '');
+  const list = datasetCache || [];
+  let d = list.find(x => x.mountpoint === p)
+       || list.find(x => x.name === p.replace(/^\//, ''));
+  if (!d) {
+    let best = null;
+    for (const x of list) {
+      const m = x.mountpoint || '';
+      if (!m.startsWith('/')) continue;
+      if (p.startsWith(m.endsWith('/') ? m : m + '/') && (!best || m.length > best.mountpoint.length)) best = x;
+    }
+    d = best;
+  }
+  if (!d) { showToast('No dataset found for ' + p); return; }
+  openEditDataset(d.name);
+}
+
 function openEditDataset(name) {
   const d = (datasetCache || []).find(x => x.name === name);
   if (!d) return;
@@ -27202,7 +27398,7 @@ function renderSchedules(el, policies) {
     }
 
     return `<tr>
-      <td style="font-family:monospace;font-size:12px;text-align:left;">${esc(p.dataset)}</td>
+      <td style="font-family:monospace;font-size:12px;text-align:left;">${esc(p.dataset)}${p.recursive ? ' <span title="Child datasets are snapshotted too" style="font-family:var(--font, inherit);font-size:10px;font-weight:700;color:var(--accent-2);background:color-mix(in srgb, var(--accent-2) 14%, transparent);border:1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);padding:1px 6px;border-radius:4px;white-space:nowrap;">+ children</span>' : ''}</td>
       <td><span class="badge badge-readonly">${esc(p.label||'auto')}</span></td>
       <td style="font-size:13px;">${freq}</td>
       <td style="font-size:13px;">${p.retention}</td>
@@ -27437,6 +27633,7 @@ async function openCreateSchedule() {
   document.getElementById('sched-weekday').value    = '0';
   document.getElementById('sched-dom').value        = '1';
   document.getElementById('sched-enabled').checked  = true;
+  document.getElementById('sched-recursive').checked = false;
   document.getElementById('sched-alert').classList.add('hidden');
   resetSchedReplSection();
   await loadSchedDatasets('');
@@ -27461,6 +27658,7 @@ async function openEditSchedule(i) {
   document.getElementById('sched-weekday').value    = p.weekday ?? 0;
   document.getElementById('sched-dom').value        = p.day_of_month ?? 1;
   document.getElementById('sched-enabled').checked  = !!p.enabled;
+  document.getElementById('sched-recursive').checked = !!p.recursive;
   document.getElementById('sched-alert').classList.add('hidden');
   initCustomSelect('sched-freq');    csRefresh('sched-freq');
   initCustomSelect('sched-weekday'); csRefresh('sched-weekday');
@@ -27509,6 +27707,46 @@ async function openEditSchedule(i) {
   }
 }
 
+// Shows, under "Include child datasets", which children the policy will
+// snapshot and which it leaves out (Incus storage, backup and replication
+// targets), straight from the server's own rules.
+let _schedZvolNames = new Set();
+let _schedTreeSeq = 0;
+async function _schedRecursivePreview() {
+  const grp = document.getElementById('sched-recursive-group');
+  const box = document.getElementById('sched-recursive-preview');
+  const ds = document.getElementById('sched-dataset').value;
+  if (!ds || _schedZvolNames.has(ds)) { grp.style.display = 'none'; return; }
+  grp.style.display = '';
+  if (!document.getElementById('sched-recursive').checked) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.innerHTML = '<div class="text-3 text-xs">Looking at child datasets…</div>';
+  const seq = ++_schedTreeSeq;
+  let tree = [];
+  try {
+    const r = await fetch('/api/snapshot-schedules/tree?dataset=' + encodeURIComponent(ds));
+    tree = r.ok ? (await r.json() || []) : [];
+  } catch {}
+  if (seq !== _schedTreeSeq) return;
+  const kids = tree.slice(1);
+  const inc = kids.filter(d => !d.skip), out = kids.filter(d => d.skip);
+  const rel = n => n.startsWith(ds + '/') ? n.slice(ds.length + 1) : n;
+  // A skipped subtree shows once, at its top.
+  const outTop = out.filter(d => !d.skip.startsWith('inside '));
+  const row = (d, ok) => `<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;">
+      <span style="color:${ok ? '#30d158' : 'var(--text-3)'};flex-shrink:0;">${ok ? '✓' : '–'}</span>
+      <span style="font-family:monospace;font-size:12px;${ok ? '' : 'color:var(--text-3);'}">${esc(rel(d.name))}${d.type === 'volume' ? ' <span class="text-3">(zvol)</span>' : ''}</span>
+      ${ok ? '' : `<span class="text-3" style="font-size:11px;">${esc(d.skip)}</span>`}
+    </div>`;
+  box.innerHTML = `<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;max-height:240px;overflow:auto;">
+      ${inc.length
+        ? `<div style="font-weight:600;margin-bottom:4px;">${inc.length} child dataset${inc.length !== 1 ? 's' : ''} included</div>${inc.map(d => row(d, true)).join('')}`
+        : '<div class="text-3">No child dataset to include: only this dataset is snapshotted.</div>'}
+      ${outTop.length ? `<div style="font-weight:600;margin:8px 0 4px;">Left out</div>${outTop.map(d => row(d, false)).join('')}` : ''}
+      <div class="text-3" style="margin-top:8px;line-height:1.45;">New child datasets are picked up automatically. Retention keeps the last N on each dataset.</div>
+    </div>`;
+}
+
 async function loadSchedDatasets(selected) {
   const sel = document.getElementById('sched-dataset');
   try {
@@ -27527,6 +27765,9 @@ async function loadSchedDatasets(selected) {
     }
     sel.innerHTML = html || '<option value="">No datasets available</option>';
     initCustomSelect('sched-dataset'); csRefresh('sched-dataset');
+    _schedZvolNames = new Set(zvols.map(z => z.name));
+    if (!sel._recHook) { sel._recHook = true; sel.addEventListener('change', _schedRecursivePreview); }
+    _schedRecursivePreview();
   } catch {
     sel.innerHTML = '<option value="">Failed to load datasets</option>';
     initCustomSelect('sched-dataset'); csRefresh('sched-dataset');
@@ -27566,6 +27807,7 @@ async function submitSchedule(e) {
     day_of_month: parseInt(document.getElementById('sched-dom').value) || 1,
     retention:    parseInt(document.getElementById('sched-retention').value) || 7,
     enabled:      document.getElementById('sched-enabled').checked,
+    recursive:    document.getElementById('sched-recursive-group').style.display !== 'none' && document.getElementById('sched-recursive').checked,
     replication_enabled:    replEnabled,
     replication_host:       replEnabled ? _replGetHostUser('sched-repl').host : '',
     replication_user:       replEnabled ? _replGetHostUser('sched-repl').user : '',
@@ -27774,23 +28016,75 @@ async function submitCreateSnapshot(e) {
 }
 
 async function restoreSnapshot(name, dataset) {
+  // Ask the server what the rollback touches: the newer snapshots it
+  // destroys and the child datasets holding the same snapshot (a recursive
+  // policy's set), so the user can restore them together.
+  let plan = null;
+  try {
+    const r = await fetch('/api/snapshots/restore-plan?children=1&name=' + encodeURIComponent(name));
+    if (r.ok) plan = await r.json();
+  } catch {}
+  const targets = plan ? plan.targets || [] : [];
+  const kids = targets.slice(1);
+  const rel = n => n.startsWith(dataset + '/') ? n.slice(dataset.length + 1) : n;
+  const newerLine = t => t.newer && t.newer.length
+    ? `<span style="color:var(--accent-warn);">${t.newer.length} newer snapshot${t.newer.length !== 1 ? 's' : ''} deleted</span>`
+    : '<span class="text-3">no newer snapshot</span>';
+  const self = targets[0];
+  const kidsBlock = kids.length ? `
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;">
+      <input type="checkbox" id="snap-restore-children" checked onchange="_snapRestoreKidsToggle()" style="margin-top:3px;flex-shrink:0;">
+      <span style="font-size:13px;line-height:1.5;"><strong>Also restore ${kids.length} child dataset${kids.length !== 1 ? 's' : ''}</strong> to the copy taken at the same moment, so they stay consistent with ${esc(dataset)}.
+        <div id="snap-restore-kids" style="margin-top:6px;font-size:12px;">
+          ${kids.map(t => `<div style="display:flex;justify-content:space-between;gap:10px;"><span style="font-family:monospace;">${esc(rel(t.dataset))}</span>${newerLine(t)}</div>`).join('')}
+          ${plan.untouched && plan.untouched.length ? `<div class="text-3" style="margin-top:6px;">Left as they are (no copy at that moment): ${plan.untouched.map(n => '<span style="font-family:monospace;">' + esc(rel(n)) + '</span>').join(', ')}</div>` : ''}
+        </div>
+      </span>
+    </label>` : '';
+  // A clone of a newer snapshot stops `zfs rollback -r`: block only the
+  // datasets actually being restored.
+  const clonesOf = list => list.flatMap(t => t.clones || []);
+  _snapRestoreBlock = {self: self ? clonesOf([self]) : [], kids: clonesOf(kids)};
+  const blocked = plan && plan.blocked;
   showConfirm({
     title: 'Restore Snapshot',
     body: `Restore <strong style="font-family:monospace;">${esc(dataset)}</strong> to snapshot:<br>
            <span style="font-family:monospace;font-size:13px;color:var(--accent-danger);">${esc(name)}</span><br><br>
-           <strong>All changes made since this snapshot was taken will be permanently lost.</strong><br>
-           <span style="font-size:13px;color:var(--text-3);">This action cannot be undone.</span>`,
+           <strong>All changes made since this snapshot was taken will be permanently lost.</strong>
+           ${self ? `<div style="font-size:13px;margin-top:6px;">${newerLine(self)}${self.newer && self.newer.length ? ': ' + self.newer.slice(0, 6).map(esc).join(', ') + (self.newer.length > 6 ? '…' : '') : ''}</div>` : ''}
+           ${kidsBlock}
+           ${blocked ? `<div class="alert alert-error" id="snap-restore-blocked" style="margin-top:12px;"></div>` : ''}
+           <div style="font-size:13px;color:var(--text-3);margin-top:10px;">This action cannot be undone.</div>`,
     confirmText: 'Restore',
     danger: true,
     onConfirm: async () => {
+      const cb = document.getElementById('snap-restore-children');
+      const children = !!(cb && cb.checked);
       const resp = await fetch('/api/snapshots/restore', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({name}),
+        body: JSON.stringify({name, children}),
       });
-      const data = await resp.json();
-      if (resp.ok) loadSnapshots(); else showToast(data.error || 'Restore failed.', 'error');
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        if (children && data.restored) showToast('Restored ' + data.restored.length + ' datasets to ' + name.split('@')[1] + '.', 'success');
+        loadSnapshots();
+      } else showToast(data.error || 'Restore failed.', 'error');
     }
   });
+  _snapRestoreKidsToggle();
+}
+let _snapRestoreBlock = {self: [], kids: []};
+function _snapRestoreKidsToggle() {
+  const cb = document.getElementById('snap-restore-children');
+  const list = document.getElementById('snap-restore-kids');
+  if (cb && list) list.style.opacity = cb.checked ? '1' : '.45';
+  const clones = _snapRestoreBlock.self.concat(cb && cb.checked ? _snapRestoreBlock.kids : []);
+  const box = document.getElementById('snap-restore-blocked');
+  if (box) {
+    box.style.display = clones.length ? '' : 'none';
+    box.textContent = 'A newer snapshot has a clone (' + clones.join(', ') + '). Delete or promote the clone first: nothing is restored until then.';
+  }
+  document.getElementById('gc-confirm-btn').disabled = clones.length > 0;
 }
 
 async function cloneSnapshot(name) {
@@ -28643,10 +28937,9 @@ function toggleShareMenu(evt, idx) {
   dd.addEventListener('click', e => e.stopPropagation());
 
   if (s.path) {
-    const dsName = s.path.replace(/^\//, '');
     const editDsBtn = document.createElement('button');
     editDsBtn.innerHTML = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Edit Related Dataset';
-    editDsBtn.addEventListener('click', () => { closeShareMenus(); openEditDataset(dsName); });
+    editDsBtn.addEventListener('click', () => { closeShareMenus(); openEditDatasetForPath(s.path); });
     dd.appendChild(editDsBtn);
   }
 
@@ -29701,10 +29994,9 @@ function toggleNFSMenu(evt, idx) {
   dd.addEventListener('click', e => e.stopPropagation());
 
   if (s.path) {
-    const dsName = s.path.replace(/^\//, '');
     const editDsBtn = document.createElement('button');
     editDsBtn.innerHTML = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Edit Related Dataset';
-    editDsBtn.addEventListener('click', () => { closeShareMenus(); openEditDataset(dsName); });
+    editDsBtn.addEventListener('click', () => { closeShareMenus(); openEditDatasetForPath(s.path); });
     dd.appendChild(editDsBtn);
 
     const browseNfsBtn = document.createElement('button');
@@ -49625,9 +49917,10 @@ async function _ciMonLoadHistory() {
     // docker0, br-*, veth*, tun*, vnet*, virbr*, vxlan/geneve and the
     // dozens of container-side virtual NICs that otherwise clutter the
     // chart and mask the actual VM uplink traffic.
+    const netDevs = _pickInstanceNics(keys.map(k => (k.match(/^net_(?:rx|tx):(.+)$/) || [])[1]).filter(Boolean));
     const netKeys = keys.filter(k => {
       const m = k.match(/^net_(?:rx|tx):(.+)$/);
-      return m && _isPhysicalIface(m[1]);
+      return m && netDevs.has(m[1]);
     });
     _ciMonRenderHistChart('net',  series, netKeys, 'bit/s', 1);
     // Disks: only the whole block devices the VM / container guest sees
@@ -49666,13 +49959,27 @@ async function _ciMonLoadHistory() {
 // virtual / container / bridge / overlay device. Used to filter the
 // per-instance Monitor network chart down to the uplink the user
 // actually cares about.
+const _IFACE_VIRTUAL_RE = /^(lo|docker|br-|virbr|veth|vnet|tap|tun|cali|flannel|wg|vxlan|geneve|fwbr|fwln|fwpr|bond\d|vlan\d|kube|cni|ovs|gre|lxcbr|lxdbr|incbr|incusbr)/i;
 function _isPhysicalIface(dev) {
   if (!dev) return false;
   const d = String(dev);
   // Hard-exclude common virtual / container / overlay prefixes first.
-  if (/^(lo|docker|br-|virbr|veth|vnet|tap|tun|cali|flannel|wg|vxlan|geneve|fwbr|fwln|fwpr|bond\d|vlan\d|kube|cni|ovs|gre|lxcbr|lxdbr|incbr|incusbr)/i.test(d)) return false;
+  if (_IFACE_VIRTUAL_RE.test(d)) return false;
   // Allow common predictable Ethernet names + Wi-Fi.
   return /^(enp|ens|eno|enx|eth\d|em\d|p\dp\d|wlp|wlan|wls)/i.test(d);
+}
+
+// _pickInstanceNics — the NICs to chart for one instance. Normally the
+// guest's own names (eth0, enp5s0…) that _isPhysicalIface accepts. A VM
+// without the Incus agent (Windows, or any guest without it) is measured
+// from the host side, so Incus labels its NICs with the Incus device names
+// (net0, eth0, lan…): when none of the names looks like a guest NIC, keep
+// every name that isn't obviously virtual plumbing.
+function _pickInstanceNics(devs) {
+  const uniq = [...new Set(devs)];
+  let pick = uniq.filter(_isPhysicalIface);
+  if (!pick.length) pick = uniq.filter(d => d && !_IFACE_VIRTUAL_RE.test(d));
+  return new Set(pick);
 }
 
 // _isPhysicalDisk — true only for whole-disk block devices the VM /
@@ -49686,7 +49993,10 @@ function _isPhysicalDisk(dev) {
   // Whole block devices, no partition suffix:
   //   sda, sdb, ... · vda, vdb, ... (virtio) · xvda (xen)
   //   nvme0n1, nvme1n2, ... (nvme namespace, no "p<part>" suffix)
-  return /^(sd[a-z]+|vd[a-z]+|xvd[a-z]+|nvme\d+n\d+)$/.test(dev);
+  //   dev-incus_root, dev-incus_disk1 — a VM without the Incus agent
+  //   (Windows…) is measured by QEMU, which names each disk after its
+  //   Incus device. Same rule as physicalDiskRe in handlers/lxd_workload.go.
+  return /^(sd[a-z]+|vd[a-z]+|xvd[a-z]+|nvme\d+n\d+|dev-(?:incus|lxd)_[A-Za-z0-9._-]+)$/.test(dev);
 }
 
 // _buildDiskLabelMap — for VMs, maps guest-kernel block device names
@@ -49732,7 +50042,8 @@ function _ciMonRenderHistChart(slot, series, keys, unit, scaleFactor, labelMap) 
     if (!labelMap) return k;
     const m = k.match(/^(disk_(?:r|w)):(.+)$/);
     if (!m) return k;
-    const friendly = labelMap[m[2]];
+    // Agentless VMs: "dev-incus_disk1" is already the Incus device name.
+    const friendly = labelMap[m[2]] || (m[2].match(/^dev-(?:incus|lxd)_(.+)$/) || [])[1];
     return friendly ? (m[1] + ':' + friendly) : k;
   };
   const datasets = keys.map((k, i) => {

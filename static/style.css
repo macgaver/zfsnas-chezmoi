@@ -4204,3 +4204,14 @@ body.net-header .topbar-inner { column-gap: 12px; }
 .il-warnc{color:#d97706}
 .il-badc{color:#ef4444;font-weight:600}
 .il-na{color:var(--text-3)}
+
+/* Add Mirror Disk dialog: disk picker cards */
+.mirror-step-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); margin-bottom: 6px; }
+.mirror-pick { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+.mirror-pick:hover { border-color: var(--accent); }
+.mirror-pick.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.mirror-pick.bad { cursor: not-allowed; opacity: .55; }
+.mirror-pick.bad:hover { border-color: var(--border); }
+.mirror-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text-3); flex-shrink: 0; box-sizing: border-box; }
+.mirror-pick.on .mirror-radio { border-color: var(--accent); border-width: 5px; }
+.mirror-pick.bad .mirror-radio { border-style: dashed; }
