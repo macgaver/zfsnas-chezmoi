@@ -306,8 +306,12 @@ func HandleCreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 	// Make the share path world-accessible so SMB clients can read and write.
 	_ = system.ChmodSharePath(req.Path)
-	// Apply (or skip) Windows ACL ZFS dataset properties.
-	_ = system.SetWindowsACLDatasetProps(req.Path, req.WindowsACL)
+	// Windows ACL writes the NFSv4 preset on the dataset. A share without it
+	// leaves the dataset's ACL settings alone: they may have been chosen in
+	// Edit Dataset or come with an imported pool.
+	if req.WindowsACL {
+		_ = system.SetWindowsACLDatasetProps(req.Path, true)
+	}
 	// Shadow Copy requires snapdir=visible so Samba can enumerate .zfs/snapshot/.
 	applySnaqdirForShare(req)
 
@@ -350,9 +354,11 @@ func HandleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	}
 	found := false
 	availabilityChanged := false
+	var old system.SMBShare
 	for i, s := range shares {
 		if strings.EqualFold(s.Name, name) {
 			availabilityChanged = s.Disabled != req.Disabled
+			old = s
 			shares[i] = req
 			found = true
 			break
@@ -374,8 +380,16 @@ func HandleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = system.ReloadSamba()
 	}
-	// Apply (or revert) Windows ACL ZFS dataset properties.
-	_ = system.SetWindowsACLDatasetProps(req.Path, req.WindowsACL)
+	// Windows ACL: write the NFSv4 preset when on; revert it only where this
+	// share turned it off (or moved away). Saving a share that never had it
+	// must not reset ACL settings chosen in Edit Dataset or kept from an
+	// imported pool.
+	if old.WindowsACL && (!req.WindowsACL || old.Path != req.Path) {
+		_ = system.SetWindowsACLDatasetProps(old.Path, false)
+	}
+	if req.WindowsACL {
+		_ = system.SetWindowsACLDatasetProps(req.Path, true)
+	}
 	// Shadow Copy requires snapdir=visible so Samba can enumerate .zfs/snapshot/.
 	applySnaqdirForShare(req)
 

@@ -51,17 +51,21 @@ func HandleLXDEnableStart(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		system.LXDEnableFeature(ctx, req.StoragePool, job)
 		snap := job.Snapshot()
+		v := system.LXDAvailable()
 		if snap.Status == "done" {
-			v := system.LXDAvailable()
 			SetLXDAvailable(v)
 			audit.Log(audit.Entry{Action: audit.ActionLXDEnable, User: "system", Details: "VMs & Containers feature enabled on pool " + req.StoragePool})
-			// #15: when the non-root service account still can't reach the daemon
-			// directly (its incus-admin group membership won't apply until a fresh
-			// systemd start re-runs initgroups), restart so the "incus CLI not
-			// answering" banner clears without a manual service restart.
-			if !v && system.IncusInstalled() {
-				system.ScheduleServiceRestartForIncus()
-			}
+		}
+		// #15 / #187: the non-root service account was added to incus-admin
+		// during the job, but that only applies after a fresh systemd start
+		// (initgroups). Restart whenever Incus is now installed and still out
+		// of reach — after a FAILED job too: otherwise every Incus page and a
+		// retry of this job keep hitting "You don't have the needed
+		// permissions to talk to the incus daemon" until someone restarts the
+		// service by hand. The modal has stopped polling by then, so the
+		// error it shows stays on screen.
+		if !v && system.IncusInstalled() {
+			system.ScheduleServiceRestartForIncus()
 		}
 	}()
 

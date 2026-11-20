@@ -3419,7 +3419,7 @@
               <!-- Extra devices rendered here (extra disks, extra NICs, USB, PCI) -->
               <div id="lxd-vm-extra-disks"></div>
               <div id="lxd-vm-existing-disks"></div>
-              <div id="lxd-vm-virtiofs"></div>
+              <div id="lxd-vm-virtiofs"></div><div id="lxd-vm-virtiofs-acl"></div>
               <div id="lxd-vm-nics"></div>
               <div id="lxd-vm-usb-list"></div>
               <div id="lxd-vm-pci-list"></div>
@@ -10032,6 +10032,30 @@ Select the Console tab to load.</pre>
 </div>
 
 <!-- Edit Dataset Modal -->
+<!-- ACL review of a pool from another system -->
+<div class="modal-backdrop hidden" id="modal-acl-review">
+  <div class="modal" style="max-width:860px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div><h3>Review permission settings</h3><div class="text-3 text-sm" id="aclr-pool" style="font-family:monospace;"></div></div>
+      <button class="modal-close" onclick="closeAclReview()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      <div class="text-2" style="font-size:13px;line-height:1.55;margin-bottom:12px;">
+        These datasets carry permission (ACL) settings that do not fit how they are used here, often left by the system the pool came from (TrueNAS, for example).
+        Pick a mode for each one to fix. Only the ticked datasets change; their child datasets keep their current settings. Files keep the permissions they already have.
+      </div>
+      <div id="aclr-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div id="aclr-alert" class="alert alert-error hidden" style="margin-top:10px;"></div>
+    </div>
+    <div class="flex gap-2" style="margin-top:14px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-ghost" id="aclr-ignore" onclick="dismissAclReview()" title="Hide the banner on the Pool page until something new turns up">Ignore these findings</button>
+      <span style="flex:1;"></span>
+      <button type="button" class="btn btn-ghost" onclick="closeAclReview()">Close</button>
+      <button type="button" class="btn btn-primary" id="aclr-apply" onclick="applyAclReview()">Apply</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="modal-edit-dataset">
   <div class="modal" style="max-width:780px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
@@ -10150,6 +10174,35 @@ Select the Console tab to load.</pre>
           <div id="eds-key-source-note" style="display:none;border-radius:5px;padding:8px 10px;font-size:12px;margin-bottom:10px;line-height:1.5;"></div>
           <div id="eds-advsec-alert" class="alert alert-error hidden" style="margin-bottom:8px;"></div>
           <button type="button" class="btn btn-primary btn-sm" id="btn-eds-apply-keysource" onclick="saveEDSKeySource()">Apply</button>
+        </div>
+      </div>
+      <!-- Permissions & ACLs (ACL mode of the dataset; own Apply) -->
+      <div id="eds-acl-sec" style="margin-top:12px;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);cursor:pointer;" onclick="_edsAclToggle()">
+          <span><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          <span style="font-weight:600;">Permissions &amp; ACLs</span>
+          <span id="eds-acl-summary" class="text-3" style="font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+          <span id="eds-acl-chevron" style="font-size:0.8em;color:var(--text-3);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m6 9 6 6 6-6"/></svg></span>
+        </div>
+        <div id="eds-acl-body" style="display:none;padding:12px;border-top:1px solid var(--border);">
+          <div id="eds-acl-loading" class="text-3" style="font-size:13px;">Loading…</div>
+          <div id="eds-acl-content" style="display:none;">
+            <div id="eds-acl-current" style="font-size:12px;margin-bottom:10px;"></div>
+            <div id="eds-acl-issues"></div>
+            <div class="mirror-step-label" style="margin-top:4px;">Permission mode</div>
+            <div id="eds-acl-presets" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <div id="eds-acl-kids-wrap" style="margin-top:10px;display:none;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="eds-acl-recursive" onchange="_edsAclRenderPlan()" style="width:15px;height:15px;accent-color:var(--accent-2);">
+                <span id="eds-acl-recursive-label">Also apply to child datasets</span>
+              </label>
+              <div id="eds-acl-plan" class="text-3" style="font-size:12px;margin:6px 0 0 23px;line-height:1.55;max-height:160px;overflow-y:auto;"></div>
+            </div>
+            <div id="eds-acl-conflict" style="display:none;margin-top:10px;border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.5;background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.45);"></div>
+            <div class="text-3" style="font-size:11.5px;margin-top:10px;line-height:1.5;">The new mode applies right away. Permissions already set on files are kept as they are; ACLs from the previous mode stop being applied.</div>
+            <div id="eds-acl-alert" class="alert alert-error hidden" style="margin:8px 0 0;"></div>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-eds-acl-apply" style="margin-top:10px;" onclick="_edsAclApply()" disabled>Apply permission mode</button>
+          </div>
         </div>
       </div>
       <div class="form-group" style="margin-top:12px;">
@@ -10988,8 +11041,9 @@ Select the Console tab to load.</pre>
           <option value="">— Select a ZFS dataset —</option>
         </select>
         <input type="text" id="share-path" placeholder="/tank/media" required style="margin-top:6px;"
-               oninput="document.getElementById('share-path-select').value=''">
+               oninput="document.getElementById('share-path-select').value='';_shareAclCheck()">
         <div class="text-3 text-xs" style="margin-top:4px;">Choose a dataset or type a custom path.</div>
+        <div id="share-acl-check"></div>
       </div>
       <div class="form-group">
         <label>Comment <span class="text-3 text-xs">(optional description)</span></label>
@@ -11089,7 +11143,7 @@ Select the Console tab to load.</pre>
           <span>Apple Encoding <i class="info-tip tip-down" data-tip="Maps special characters used in macOS filenames (colons, backslashes, etc.) to Unicode equivalents via the Samba catia VFS module, allowing Mac clients to read and write those files correctly."></i></span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-          <input type="checkbox" id="share-windows-acl" style="width:15px;height:15px;accent-color:var(--accent-2);">
+          <input type="checkbox" id="share-windows-acl" onchange="_shareAclCheck()" style="width:15px;height:15px;accent-color:var(--accent-2);">
           <span>Windows ACL <i class="info-tip tip-down" data-tip="Enables full Windows ACL (NTFS-style permission) support for this share.&#10;&#10;Required if you need Windows executable files (.exe, .bat, etc.) stored on this share to be recognised as executable by Windows clients — without this, the execute bit is lost and Windows may refuse to run them.&#10;&#10;SMB: activates the acl_xattr VFS module so Windows clients can read and write per-file ACLs. Also enables DOS attribute storage and ACL inheritance.&#10;&#10;ZFS dataset: sets acltype=nfsv4, aclinherit=passthrough, aclmode=passthrough, xattr=sa so the kernel honours NFSv4 ACLs — required for executable file attributes and fine-grained Windows permissions to work correctly for new files written through the share."></i></span>
         </label>
       </div>
@@ -11174,12 +11228,13 @@ Select the Console tab to load.</pre>
     <form onsubmit="submitNFSShare(event)">
       <div class="form-group">
         <label>Dataset Path</label>
-        <select id="nfs-path-select" onchange="if(this.value) document.getElementById('nfs-path').value=this.value">
+        <select id="nfs-path-select" onchange="if(this.value) document.getElementById('nfs-path').value=this.value;_nfsAclCheck()">
           <option value="">— Select a ZFS dataset —</option>
         </select>
         <input type="text" id="nfs-path" placeholder="/tank/data" required style="margin-top:6px;"
-               oninput="document.getElementById('nfs-path-select').value=''">
+               oninput="document.getElementById('nfs-path-select').value='';_nfsAclCheck()">
         <div class="text-3 text-xs" style="margin-top:4px;">Choose a dataset or type a custom path.</div>
+        <div id="nfs-acl-check"></div>
       </div>
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:6px;">Clients
@@ -21176,6 +21231,12 @@ function renderPoolExists(el, pool) {
       </div>
 
     </div>`;
+  // Permission-settings banner (pools from another system). Shown at once
+  // from the last answer for this pool, then refreshed.
+  if (el && el.id === 'pool-content') {
+    el.insertAdjacentHTML('afterbegin', '<div id="pool-acl-banner">' + (_poolAclBannerCache[pool.name] || '') + '</div>');
+    _poolAclReviewRefresh(pool.name);
+  }
 }
 
 function renderPoolCreate(el, options) {
@@ -21547,6 +21608,153 @@ function selectImportPool(el, name) {
   document.getElementById('btn-import-pool-confirm').disabled = false;
 }
 
+// ── ACL review of a pool (after import / banner on the Pool page) ──────────
+let _aclReview = null; // {pool, data, choice: {dataset: preset}, on: {dataset: bool}}
+const _poolAclBannerCache = {}; // pool → last banner HTML
+
+async function _poolAclReviewFetch(pool) {
+  const r = await fetch('/api/pool/acl-review?pool=' + encodeURIComponent(pool));
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'failed');
+  return d;
+}
+
+async function _poolAclReviewRefresh(poolName) {
+  const box = document.getElementById('pool-acl-banner');
+  const pool = poolName || (box && box.dataset.pool) || selectedPoolName;
+  if (!box || !pool || !hasPerm('manage_pool_dataset')) return;
+  box.dataset.pool = pool;
+  let d;
+  try { d = await _poolAclReviewFetch(pool); } catch { return; }
+  const box2 = document.getElementById('pool-acl-banner');
+  if (box2 !== box) return; // page re-rendered meanwhile
+  const n = (d.items || []).filter(i => i.issues.some(x => x.level !== 'info')).length;
+  if (!n || d.dismissed) { box2.innerHTML = ''; _poolAclBannerCache[pool] = ''; return; }
+  box2.innerHTML = _poolAclBannerCache[pool] = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:14px;border-radius:10px;
+      background:rgba(255,159,10,0.10);border:1px solid rgba(255,159,10,0.45);">
+    <svg class="znas-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    <div style="flex:1;min-width:220px;font-size:13px;line-height:1.5;"><b>${n} dataset${n > 1 ? 's have' : ' has'} permission settings that may block access.</b>
+      <span class="text-2">Usually left by the system this pool came from.</span></div>
+    <button class="btn btn-sm btn-primary" onclick="openAclReview('${esc(pool)}')">Review</button></div>`;
+}
+
+async function _poolAclReviewAfterImport(pool) {
+  try {
+    const d = await _poolAclReviewFetch(pool);
+    if ((d.items || []).some(i => i.issues.some(x => x.level !== 'info')) && !d.dismissed) openAclReview(pool, d);
+  } catch {}
+}
+
+async function openAclReview(pool, data) {
+  const m = document.getElementById('modal-acl-review');
+  document.getElementById('aclr-pool').textContent = pool;
+  document.getElementById('aclr-alert').classList.add('hidden');
+  document.getElementById('aclr-list').innerHTML = '<div class="text-3" style="padding:16px;text-align:center;">Checking datasets…</div>';
+  m.classList.remove('hidden');
+  if (!data) {
+    try { data = await _poolAclReviewFetch(pool); }
+    catch (e) { document.getElementById('aclr-list').innerHTML = '<div class="alert alert-error">' + esc(e.message) + '</div>'; return; }
+  }
+  _aclReview = { pool, data, choice: {}, on: {} };
+  for (const it of data.items || []) {
+    const serious = it.issues.some(x => x.level !== 'info');
+    _aclReview.choice[it.name] = it.suggest || 'posix';
+    _aclReview.on[it.name] = serious;
+  }
+  _aclReviewRender();
+}
+
+function closeAclReview() { document.getElementById('modal-acl-review').classList.add('hidden'); }
+
+function _aclReviewRender() {
+  const items = _aclReview.data.items || [];
+  const list = document.getElementById('aclr-list');
+  if (!items.length) {
+    list.innerHTML = '<div style="padding:18px;text-align:center;color:var(--accent-2);font-weight:600;">Nothing left to fix on this pool.</div>';
+  } else {
+    list.innerHTML = items.map((it, i) => {
+      const ch = _aclReview.choice[it.name];
+      const seg = ['posix', 'nfsv4'].map(p => `<button type="button" onclick="_aclReviewPick(${i},'${p}')"
+          style="border:none;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;border-radius:6px;
+                 background:${ch === p ? 'var(--accent-2)' : 'transparent'};color:${ch === p ? '#fff' : 'var(--text-2)'};">${p === 'posix' ? 'POSIX ACLs' : 'Windows / NFSv4'}</button>`).join('');
+      const use = (it.use || []).map(u => u.kind === 'smb' ? 'SMB "' + u.name + '"' + (u.windows_acl ? ' (Windows ACL)' : '') : u.kind === 'nfs' ? 'NFS' : 'VirtIO-FS → ' + u.name);
+      return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <input type="checkbox" ${_aclReview.on[it.name] ? 'checked' : ''} onchange="_aclReview.on['${esc(it.name)}']=this.checked;_aclReviewSync()" style="width:15px;height:15px;accent-color:var(--accent-2);">
+          <span style="font-family:monospace;font-weight:600;font-size:13px;flex:1;min-width:140px;word-break:break-all;">${esc(it.name)}</span>
+          <span class="text-3" style="font-size:12px;">now ${esc(_ACL_MODE_NAME[it.preset] || it.preset)} →</span>
+          <span style="display:inline-flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:2px;">${seg}</span>
+          <button type="button" class="btn btn-ghost btn-sm" title="Open the dataset's Permissions & ACLs settings" onclick="openDatasetACL('${esc(it.name)}', _aclReview.choice['${esc(it.name)}'])">More…</button>
+        </div>
+        <div style="margin:8px 0 0 25px;">
+          ${use.length ? `<div class="text-3" style="font-size:11.5px;margin-bottom:4px;">Used by ${esc(use.join(', '))}</div>` : ''}
+          ${it.issues.map(_aclIssueHTML).join('')}
+          <div class="text-3" style="font-size:11px;display:flex;flex-wrap:wrap;gap:2px 10px;">${_aclPropsLine(it.props)}</div>
+        </div></div>`;
+    }).join('');
+  }
+  _aclReviewSync();
+}
+
+function _aclReviewPick(i, p) {
+  _aclReview.choice[_aclReview.data.items[i].name] = p;
+  _aclReviewRender();
+}
+
+function _aclReviewSync() {
+  const n = (_aclReview.data.items || []).filter(it => _aclReview.on[it.name]).length;
+  const b = document.getElementById('aclr-apply');
+  b.disabled = !n;
+  b.textContent = n ? `Apply to ${n} dataset${n > 1 ? 's' : ''}` : 'Apply';
+  document.getElementById('aclr-ignore').style.display = _aclReview.data.signature ? '' : 'none';
+}
+
+async function applyAclReview() {
+  const btn = document.getElementById('aclr-apply');
+  const alertEl = document.getElementById('aclr-alert');
+  alertEl.classList.add('hidden');
+  // Deepest first: a child fixed before its parent has its own value, so
+  // the parent's change does not have to pin it.
+  const todo = (_aclReview.data.items || []).filter(it => _aclReview.on[it.name])
+    .sort((a, b) => b.name.split('/').length - a.name.split('/').length);
+  btn.disabled = true;
+  const errs = [];
+  let done = 0;
+  for (const it of todo) {
+    btn.innerHTML = `<span class="spinner"></span> ${done + 1} / ${todo.length}…`;
+    try {
+      const r = await fetch('/api/dataset-acl/' + encodeURIComponent(it.name), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: _aclReview.choice[it.name], recursive: false }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'failed');
+      done++;
+    } catch (e) { errs.push(it.name + ': ' + e.message); }
+  }
+  if (errs.length) { alertEl.innerHTML = errs.map(esc).join('<br>'); alertEl.classList.remove('hidden'); }
+  if (done) showToast(`Permission mode changed on ${done} dataset${done > 1 ? 's' : ''}.`, 'success');
+  await openAclReview(_aclReview.pool);
+  if (errs.length) { alertEl.innerHTML = errs.map(esc).join('<br>'); alertEl.classList.remove('hidden'); }
+  _poolAclReviewRefresh();
+}
+
+async function dismissAclReview() {
+  try {
+    const r = await fetch('/api/pool/acl-review/dismiss', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pool: _aclReview.pool, signature: _aclReview.data.signature }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'failed');
+    closeAclReview();
+    showToast('Hidden until new permission issues turn up on ' + _aclReview.pool + '.', 'success');
+    _poolAclReviewRefresh();
+  } catch (e) {
+    const a = document.getElementById('aclr-alert'); a.textContent = e.message; a.classList.remove('hidden');
+  }
+}
+
 function closeImportPoolModal() {
   document.getElementById('modal-import-pool').classList.add('hidden');
 }
@@ -21572,7 +21780,9 @@ async function submitImportPool() {
   if (r.ok) {
     closeImportPoolModal();
     await refreshPoolBar();
-    loadPool();
+    selectedPoolName = poolName;
+    await loadPool();
+    _poolAclReviewAfterImport(poolName);
     return;
   }
 
@@ -25864,6 +26074,8 @@ function openEditDataset(name) {
   document.getElementById('eds-sync').value         = d.sync || 'inherit'; csRefresh('eds-sync');
   document.getElementById('eds-dedup').value        = d.dedup || 'inherit'; csRefresh('eds-dedup');
   document.getElementById('eds-comment').value      = d.comment || '';
+  _edsAclOpen(name, (typeof _edsAclFocus !== 'undefined' && _edsAclFocus) || null);
+  _edsAclFocus = null;
 
   // Show encryption key section only when the dataset itself has a locked key
   // AND the pool is not the one carrying the encryption (pool-level enc is handled in pool settings).
@@ -25889,7 +26101,283 @@ function openEditDataset(name) {
     document.getElementById('eds-enc-key').value = '';
   }
 }
-function closeEditDataset() { document.getElementById('modal-edit-dataset').classList.add('hidden'); }
+function closeEditDataset() { const m = document.getElementById('modal-edit-dataset'); m.classList.add('hidden'); m.style.zIndex = ''; _edsAcl = null; }
+// ── Permissions & ACLs (Edit Dataset) ──────────────────────────────────────
+// One preset per permission mode instead of raw acltype/aclmode/aclinherit/
+// xattr: imported pools (TrueNAS…) often carry a mode that suits the old
+// system and breaks VirtIO-FS or setfacl here. Server: /api/dataset-acl.
+const _ACL_PRESETS = [
+  { id: 'posix',   name: 'Linux / POSIX ACLs', badge: 'Recommended',
+    desc: 'acltype=posixacl, xattr=sa. Works with setfacl, NFS, VirtIO-FS and plain SMB shares.' },
+  { id: 'nfsv4',   name: 'Windows / NFSv4 ACLs',
+    desc: 'acltype=nfsv4, aclmode=passthrough, aclinherit=passthrough, xattr=sa. What an SMB share with Windows ACL sets. VirtIO-FS cannot use it.' },
+  { id: 'off',     name: 'Basic permissions only',
+    desc: 'acltype=off. Owner / group / others only, as new pools here start. setfacl is refused.' },
+  { id: 'inherit', name: 'Same as the parent dataset',
+    desc: 'Drops this dataset\'s own ACL settings so it follows its parent.' },
+];
+const _ACL_MODE_NAME = { posix: 'POSIX ACLs', nfsv4: 'NFSv4 ACLs', off: 'Basic permissions', custom: 'Custom' };
+let _edsAcl = null;        // {name, data, preset, focus}
+let _edsAclFocus = null;   // {preset} set by callers that open Edit Dataset on this section
+
+function _edsAclToggle(force) {
+  const body = document.getElementById('eds-acl-body');
+  const open = force !== undefined ? force : body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  document.getElementById('eds-acl-chevron').style.transform = open ? 'rotate(180deg)' : '';
+}
+
+function _aclIssueHTML(is) {
+  const col = is.level === 'error' ? 'var(--accent-danger,#ff453a)' : is.level === 'warn' ? '#ff9f0a' : 'var(--text-3)';
+  const bg  = is.level === 'error' ? 'rgba(255,69,58,0.10)' : is.level === 'warn' ? 'rgba(255,159,10,0.10)' : 'transparent';
+  return `<div style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.5;padding:6px 8px;border-radius:6px;background:${bg};margin-bottom:6px;">
+    <span style="width:7px;height:7px;border-radius:50%;background:${col};flex-shrink:0;margin-top:6px;"></span><span>${esc(is.text)}</span></div>`;
+}
+
+function _aclPropsLine(props) {
+  return ['acltype','aclmode','aclinherit','xattr'].map(k => {
+    const p = (props || {})[k] || {};
+    const src = p.source === 'inherited' ? 'inherited from ' + p.from : (p.source || '');
+    return `<span title="${esc(src)}" style="font-family:monospace;white-space:nowrap;">${k}=<b>${esc(p.value || '?')}</b>${p.source === 'local' ? '' : '<span class="text-3">*</span>'}</span>`;
+  }).join(' &nbsp;');
+}
+
+async function _edsAclOpen(name, focus) {
+  if (!_edsAcl || _edsAcl.name !== name) document.getElementById('eds-acl-recursive').checked = false;
+  _edsAcl = { name, data: null, preset: null, focus };
+  document.getElementById('eds-acl-summary').textContent = '';
+  document.getElementById('eds-acl-loading').style.display = '';
+  document.getElementById('eds-acl-loading').textContent = 'Loading…';
+  document.getElementById('eds-acl-content').style.display = 'none';
+  document.getElementById('eds-acl-alert').classList.add('hidden');
+  _edsAclToggle(!!focus);
+  let d;
+  try {
+    const r = await fetch('/api/dataset-acl/' + encodeURIComponent(name));
+    d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'failed');
+  } catch (e) {
+    if (!_edsAcl || _edsAcl.name !== name) return;
+    document.getElementById('eds-acl-loading').textContent = 'Could not read the ACL settings: ' + e.message;
+    return;
+  }
+  if (!_edsAcl || _edsAcl.name !== name) return;
+  _edsAcl.data = d;
+  const ds = d.dataset;
+  const serious = (ds.issues || []).filter(i => i.level !== 'info');
+  const sum = document.getElementById('eds-acl-summary');
+  sum.innerHTML = esc(_ACL_MODE_NAME[ds.preset] || ds.preset) +
+    (serious.length ? ` · <span style="color:#ff9f0a;font-weight:600;">${serious.length} issue${serious.length > 1 ? 's' : ''}</span>` : '');
+  if (serious.length) _edsAclToggle(true);
+  _edsAcl.preset = (focus && focus.preset) || ds.suggest || (ds.preset === 'custom' ? null : ds.preset);
+  _edsAclRender();
+  if (focus) setTimeout(() => document.getElementById('eds-acl-sec').scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
+}
+
+function _edsAclRender() {
+  const d = _edsAcl.data, ds = d.dataset;
+  document.getElementById('eds-acl-loading').style.display = 'none';
+  document.getElementById('eds-acl-content').style.display = '';
+  const use = ds.use || [];
+  const useTxt = use.length
+    ? use.map(u => u.kind === 'smb' ? 'SMB "' + u.name + '"' + (u.windows_acl ? ' (Windows ACL)' : '') : u.kind === 'nfs' ? 'NFS ' + u.name : 'VirtIO-FS → ' + u.name).join(', ')
+    : 'no SMB, NFS or VirtIO-FS share';
+  document.getElementById('eds-acl-current').innerHTML =
+    `<div style="margin-bottom:4px;">Now: <b>${esc(_ACL_MODE_NAME[ds.preset] || ds.preset)}</b> <span class="text-3">· used by ${esc(useTxt)}</span></div>
+     <div class="text-2" style="display:flex;flex-wrap:wrap;gap:4px 10px;">${_aclPropsLine(ds.props)}</div>
+     <div class="text-3" style="font-size:11px;margin-top:2px;">* inherited or default — hover a value to see where it comes from</div>`;
+  document.getElementById('eds-acl-issues').innerHTML = (ds.issues || []).map(_aclIssueHTML).join('');
+  document.getElementById('eds-acl-presets').innerHTML = _ACL_PRESETS.map(p => {
+    const cur = p.id === ds.preset || (p.id === 'inherit' && ['acltype','aclmode','aclinherit','xattr'].every(k => (ds.props[k] || {}).source !== 'local'));
+    const sug = p.id === ds.suggest;
+    return `<div class="mirror-pick${_edsAcl.preset === p.id ? ' on' : ''}" onclick="_edsAclPick('${p.id}')" role="radio" aria-checked="${_edsAcl.preset === p.id}" tabindex="0"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_edsAclPick('${p.id}')}">
+      <span class="mirror-radio"></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${esc(p.name)}
+          ${sug ? '<span style="font-size:10.5px;font-weight:700;color:#fff;background:var(--accent-2);border-radius:4px;padding:1px 6px;">Fixes the issues</span>' : (p.badge && !cur ? `<span class="text-3" style="font-size:10.5px;font-weight:600;">${p.badge}</span>` : '')}
+          ${cur ? '<span class="text-3" style="font-size:10.5px;font-weight:600;border:1px solid var(--border);border-radius:4px;padding:0 5px;">current</span>' : ''}</div>
+        <div class="text-3" style="font-size:11.5px;line-height:1.45;margin-top:2px;">${esc(p.desc)}</div>
+      </div></div>`;
+  }).join('');
+  const kids = d.children || [];
+  document.getElementById('eds-acl-kids-wrap').style.display = kids.length ? '' : 'none';
+  document.getElementById('eds-acl-recursive-label').textContent = `Also apply to the ${kids.length} child dataset${kids.length > 1 ? 's' : ''}`;
+  _edsAclRenderPlan();
+}
+
+function _edsAclPick(id) { _edsAcl.preset = id; _edsAclRender(); }
+
+// Mirrors PlanACLChange/aclProtect on the server, for the preview only (the
+// server decides again on Apply).
+function _edsAclProtect(kid, preset) {
+  for (const u of kid.use || []) {
+    if (u.kind === 'smb' && u.windows_acl && preset !== 'nfsv4' && kid.preset === 'nfsv4') return 'SMB share "' + u.name + '" uses Windows ACL';
+    if (u.kind === 'virtiofs' && preset !== 'posix' && kid.preset === 'posix') return 'VM ' + u.name + ' uses it over VirtIO-FS';
+  }
+  return '';
+}
+
+function _edsAclRenderPlan() {
+  const d = _edsAcl.data, preset = _edsAcl.preset, ds = d.dataset;
+  const rec = document.getElementById('eds-acl-recursive').checked;
+  const kids = d.children || [];
+  const plan = document.getElementById('eds-acl-plan');
+  const inheritsFromHere = k => ['acltype','aclmode','aclinherit','xattr'].some(p => {
+    const v = (k.props || {})[p] || {};
+    return v.source === 'default' || (v.source === 'inherited' && (v.from === ds.name || !v.from.startsWith(ds.name + '/')));
+  });
+  if (!rec) {
+    const n = kids.filter(k => !k.skip && inheritsFromHere(k)).length;
+    plan.innerHTML = n ? `Child datasets keep their current mode (${n} of them get it written locally so this change does not reach them).` : 'Child datasets keep their current mode.';
+  } else {
+    const follow = [], kept = [];
+    const keptRoots = [];
+    for (const k of kids) {
+      let why = k.skip || '';
+      const above = keptRoots.find(r => k.name.startsWith(r + '/'));
+      if (!why && above) why = 'inside ' + above;
+      if (!why) why = _edsAclProtect(k, preset);
+      if (why) { kept.push([k.name, why]); keptRoots.push(k.name); } else follow.push(k.name);
+    }
+    const rel = n => n.slice(ds.name.length + 1);
+    plan.innerHTML =
+      (follow.length ? `<div><b style="color:var(--text-2);">Switched too (${follow.length}):</b> ${follow.map(n => esc(rel(n))).join(', ')}</div>` : '') +
+      (kept.length ? `<div style="margin-top:3px;"><b style="color:var(--text-2);">Left as they are (${kept.length}):</b> ${kept.map(([n, w]) => esc(rel(n)) + ' <span style="opacity:.8">(' + esc(w) + ')</span>').join(', ')}</div>` : '');
+  }
+  // Conflicts of the chosen mode with this dataset's own consumers.
+  const warn = [];
+  for (const u of ds.use || []) {
+    if (u.kind === 'smb' && u.windows_acl && preset && preset !== 'nfsv4' && preset !== 'inherit')
+      warn.push(`SMB share "${esc(u.name)}" has Windows ACL on. It expects NFSv4 ACLs, and saving that share again switches the dataset back. Turn Windows ACL off on the share if you want this mode.`);
+    if (u.kind === 'virtiofs' && preset && preset !== 'posix' && preset !== 'inherit')
+      warn.push(`VM ${esc(u.name)} uses this dataset over VirtIO-FS, which needs POSIX ACLs.`);
+  }
+  const cf = document.getElementById('eds-acl-conflict');
+  cf.innerHTML = warn.join('<br>');
+  cf.style.display = warn.length ? '' : 'none';
+  const same = preset === ds.preset && preset !== 'inherit' && !rec &&
+    !(ds.issues || []).some(i => i.fix === preset);
+  const btn = document.getElementById('btn-eds-acl-apply');
+  btn.disabled = !preset || same;
+  btn.textContent = !preset ? 'Pick a mode' : same ? 'Already in this mode' : 'Apply ' + (_ACL_PRESETS.find(p => p.id === preset) || {}).name;
+}
+
+async function _edsAclApply() {
+  const btn = document.getElementById('btn-eds-acl-apply');
+  const alertEl = document.getElementById('eds-acl-alert');
+  alertEl.classList.add('hidden');
+  const name = _edsAcl.name;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Applying…';
+  try {
+    const r = await fetch('/api/dataset-acl/' + encodeURIComponent(name), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preset: _edsAcl.preset, recursive: document.getElementById('eds-acl-recursive').checked }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'failed');
+    showToast('Permission mode of ' + name + ' changed.', 'success');
+    document.getElementById('eds-acl-recursive').checked = false;
+    await _edsAclOpen(name, { preset: null });
+    _poolAclReviewRefresh();
+    _aclRecheckOpen();
+  } catch (e) {
+    alertEl.textContent = e.message; alertEl.classList.remove('hidden');
+    _edsAclRenderPlan();
+  }
+}
+
+// Opens Edit Dataset straight on its Permissions & ACLs section, above
+// whatever dialog asked (share editors, pool review).
+// ── ACL checks in the share editors (SMB / NFS / VirtIO-FS) ────────────────
+// Asks /api/acl-check what the dataset under the path will lack once this
+// share is saved, and offers to open the dataset's permission settings.
+const _aclCheckSeq = {};
+function _aclCheckBox(boxId, results) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const rows = results.filter(r => r && r.issues && r.issues.length);
+  if (!rows.length) { box.innerHTML = ''; return; }
+  box.innerHTML = rows.map(r => `<div style="margin-top:8px;border-radius:8px;padding:8px 10px;
+      background:${r.issues.some(i => i.level === 'error') ? 'rgba(255,69,58,0.10)' : 'rgba(255,159,10,0.10)'};
+      border:1px solid ${r.issues.some(i => i.level === 'error') ? 'rgba(255,69,58,0.45)' : 'rgba(255,159,10,0.45)'};font-size:12px;line-height:1.5;">
+    <div style="font-weight:600;margin-bottom:2px;">Permission settings of <span style="font-family:monospace;">${esc(r.dataset)}</span>${r.path ? ' <span class="text-3" style="font-weight:400;">(' + esc(r.path) + ')</span>' : ''}</div>
+    ${r.issues.map(i => '<div style="display:flex;gap:6px;margin-top:3px;"><span>•</span><span>' + esc(i.text) + '</span></div>').join('')}
+    ${hasPerm('manage_pool_dataset') ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="openDatasetACL('${esc(r.dataset)}','${esc(r.suggest || '')}')">Fix in dataset settings…</button>` : ''}
+  </div>`).join('');
+}
+
+function _aclCheckRun(boxId, queries) {
+  const seq = (_aclCheckSeq[boxId] = (_aclCheckSeq[boxId] || 0) + 1);
+  clearTimeout(_aclCheckSeq[boxId + ':t']);
+  _aclCheckSeq[boxId + ':t'] = setTimeout(async () => {
+    const res = await Promise.all(queries.map(async q => {
+      try {
+        const r = await fetch('/api/acl-check?' + new URLSearchParams(q));
+        if (!r.ok) return null;
+        const d = await r.json();
+        return { ...d, path: queries.length > 1 ? q.path : '' };
+      } catch { return null; }
+    }));
+    if (_aclCheckSeq[boxId] !== seq) return;
+    // One box per dataset.
+    const seen = new Set();
+    _aclCheckBox(boxId, res.filter(r => r && r.dataset && !seen.has(r.dataset) && seen.add(r.dataset)));
+  }, 350);
+}
+
+function _shareAclCheck() {
+  const path = (document.getElementById('share-path').value || '').trim();
+  if (!path.startsWith('/')) { _aclCheckBox('share-acl-check', []); return; }
+  _aclCheckRun('share-acl-check', [{
+    path, use: 'smb', name: (document.getElementById('share-name').value || '').trim(),
+    windows_acl: document.getElementById('share-windows-acl').checked ? '1' : '0',
+    exclude_smb: shareEditName || '',
+  }]);
+}
+
+function _nfsAclCheck() {
+  const path = (document.getElementById('nfs-path').value || '').trim();
+  if (!path.startsWith('/')) { _aclCheckBox('nfs-acl-check', []); return; }
+  _aclCheckRun('nfs-acl-check', [{ path, use: 'nfs', exclude_nfs: nfsEditId || '' }]);
+}
+
+function _vfsAclCheck(boxId, rows, vm) {
+  const paths = [...new Set((rows || []).map(b => (b.source || '').trim()).filter(p => p.startsWith('/') && p !== '/mnt/' && p !== '/mnt'))];
+  if (!paths.length) { _aclCheckBox(boxId, []); return; }
+  _aclCheckRun(boxId, paths.map(path => ({ path, use: 'virtiofs', name: vm || 'this VM', vm: vm || '' })));
+}
+
+function _vfsAclCheckEdit() {
+  let box = document.getElementById('lxd-edit-bind-mounts-acl');
+  const c = document.getElementById('lxd-edit-bind-mounts');
+  if (!box && c) { c.insertAdjacentHTML('afterend', '<div id="lxd-edit-bind-mounts-acl"></div>'); box = document.getElementById('lxd-edit-bind-mounts-acl'); }
+  if (!box) return;
+  if (!_lxdEditIsVM) { box.innerHTML = ''; return; }
+  _vfsAclCheck('lxd-edit-bind-mounts-acl', _lxdEditBindMounts, _lxdEditName);
+}
+
+// After a permission mode changes, refresh whichever editor asked.
+function _aclRecheckOpen() {
+  const open = id => { const m = document.getElementById(id); return m && !m.classList.contains('hidden'); };
+  if (open('modal-share')) _shareAclCheck();
+  if (open('modal-nfs-share')) _nfsAclCheck();
+  if (document.getElementById('lxd-vm-virtiofs-acl')) _vfsAclCheck('lxd-vm-virtiofs-acl', _lxdVMVirtioFS, '');
+  if (document.getElementById('lxd-edit-bind-mounts-acl')) _vfsAclCheckEdit();
+  if (open('modal-acl-review') && _aclReview) openAclReview(_aclReview.pool);
+}
+
+async function openDatasetACL(name, preset) {
+  if (!datasetCache || !datasetCache.length || !datasetCache.find(x => x.name === name)) {
+    try { const r = await fetch('/api/datasets'); if (r.ok) datasetCache = await r.json(); } catch {}
+  }
+  if (!(datasetCache || []).find(x => x.name === name)) { showToast('Dataset ' + name + ' not found'); return; }
+  _edsAclFocus = { preset: preset || null };
+  const m = document.getElementById('modal-edit-dataset');
+  m.style.zIndex = document.querySelector('.modal-backdrop:not(.hidden)') ? '1200' : '';
+  openEditDataset(name);
+}
+
 
 // ── Dataset Lock / Unlock ──────────────────────────────────────────────────
 
@@ -29050,6 +29538,7 @@ async function openCreateShare() {
   document.getElementById('share-enabled-wrap').style.display = 'none';
   await loadShareFormData([]);
   document.getElementById('modal-share').classList.remove('hidden');
+  _shareAclCheck();
   document.getElementById('share-name').focus();
 }
 
@@ -29106,6 +29595,7 @@ async function _openEditShareObj(s) {
   document.getElementById('share-alert').classList.add('hidden');
   await loadShareFormData(s.valid_users || []);
   document.getElementById('modal-share').classList.remove('hidden');
+  _shareAclCheck();
 }
 
 let _shareAllUsers = [];
@@ -29203,6 +29693,7 @@ function removeShareUser(username) {
 
 function sharePathSelect(val) {
   if (val) document.getElementById('share-path').value = val;
+  _shareAclCheck();
 }
 
 function toggleShareTM() {
@@ -29582,6 +30073,7 @@ async function openCreateNFSShare() {
   document.getElementById('nfs-share-alert').classList.add('hidden');
   await loadNFSDatasetDropdown('');
   document.getElementById('modal-nfs-share').classList.remove('hidden');
+  _nfsAclCheck();
   document.getElementById('nfs-path').focus();
 }
 
@@ -29603,6 +30095,7 @@ function openEditNFSShare(i) {
   document.getElementById('nfs-share-alert').classList.add('hidden');
   loadNFSDatasetDropdown(s.path);
   document.getElementById('modal-nfs-share').classList.remove('hidden');
+  _nfsAclCheck();
 }
 
 async function loadNFSDatasetDropdown(selectedPath) {
@@ -38875,6 +39368,7 @@ document.addEventListener('click', function(e) {
     'modal-destroy-pool':     closeDestroyPoolModal,
     'modal-force-import':     closeForceImportModal,
     'modal-import-pool':      closeImportPoolModal,
+    'modal-acl-review':       closeAclReview,
     'modal-delete-snapshot':         closeDeleteSnapshotModal,
     'modal-delete-all-snapshots':    closeDeleteAllSnapshotsModal,
     'modal-delete-dataset':   closeDeleteDatasetModal,
@@ -53744,6 +54238,7 @@ function lxdEditAddBindMount() {
 function lxdEditRenderBindMounts() {
   const c = document.getElementById('lxd-edit-bind-mounts');
   if (!c) return;
+  setTimeout(_vfsAclCheckEdit, 0);
   _editSyncSectionVisibility();
   const sum = document.getElementById('edithw-bindmount-summary');
   if (sum) sum.textContent = _lxdEditBindMounts.length
@@ -53756,7 +54251,7 @@ function lxdEditRenderBindMounts() {
   c.innerHTML = _lxdEditBindMounts.map((b, i) => `
     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
       <input type="text" class="input" placeholder="/mnt/host/path" value="${esc(b.source)}"
-        onchange="_lxdEditBindMounts[${i}].source=this.value"
+        onchange="_lxdEditBindMounts[${i}].source=this.value;_vfsAclCheckEdit()"
         title="Host directory to expose"
         style="flex:1;min-width:160px;font-family:monospace;font-size:12px;">
       <span style="color:var(--text-3);flex-shrink:0;">→</span>
@@ -55426,6 +55921,7 @@ async function openNewVMModal() {
   document.getElementById('lxd-vm-extra-disks').innerHTML    = '';
   document.getElementById('lxd-vm-existing-disks').innerHTML = '';
   document.getElementById('lxd-vm-virtiofs').innerHTML       = '';
+  { const a = document.getElementById('lxd-vm-virtiofs-acl'); if (a) a.innerHTML = ''; }
   document.getElementById('lxd-vm-nics').innerHTML           = '';
   document.getElementById('lxd-vm-usb-list').innerHTML       = '';
   document.getElementById('lxd-vm-pci-list').innerHTML       = '';
@@ -57463,7 +57959,7 @@ function _renderVMVirtioFS() {
     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
       <span style="font-family:monospace;font-size:11px;color:var(--text-3);min-width:44px;flex-shrink:0;background:var(--surface-2,rgba(255,255,255,0.05));border-radius:3px;padding:2px 5px;text-align:center;">fs${i+1}</span>
       <input type="text" class="input" placeholder="/mnt/host/path" value="${esc(b.source)}"
-        onchange="_lxdVMVirtioFS[${i}].source=this.value" title="Host directory to share"
+        onchange="_lxdVMVirtioFS[${i}].source=this.value;_vfsAclCheck('lxd-vm-virtiofs-acl', _lxdVMVirtioFS, '')" title="Host directory to share"
         style="flex:1;min-width:160px;font-family:monospace;font-size:12px;">
       <span style="color:var(--text-3);flex-shrink:0;">→</span>
       <input type="text" class="input" placeholder="/mnt/share in VM" value="${esc(b.path)}"
@@ -57480,6 +57976,7 @@ function _renderVMVirtioFS() {
 function _removeVMVirtioFS(i) {
   _lxdVMVirtioFS.splice(i, 1);
   _renderVMVirtioFS();
+  _vfsAclCheck('lxd-vm-virtiofs-acl', _lxdVMVirtioFS, '');
 }
 
 function addVMNICRow() {
@@ -60172,10 +60669,13 @@ async function lxdEnableOpenStaticIP() {
     if (el) el.value = '';
   });
   m.classList.remove('hidden');
+  m.dataset.origIp = '';
   try {
     const r = await fetch('/api/incus/enable/netconfig', { credentials: 'same-origin' });
     if (r.ok) {
       const c = await r.json();
+      // The server's address now — what "will the IP change?" compares with.
+      m.dataset.origIp = String(c.address || '').split('/')[0].trim();
       const set = (k, v) => { const el = document.getElementById('lxd-static-ip-' + k); if (el && v != null) el.value = v; };
       set('iface', c.iface);
       set('address', c.address);
@@ -60208,7 +60708,11 @@ async function lxdEnableApplyStaticIP() {
   // without depending on its response arriving, then reconnect the browser on
   // the new IP.
   const newIP = (address.split('/')[0] || '').trim();
-  const willChangeIP = newIP && newIP !== location.hostname;
+  // Compare with the server's current address, not the address bar: a user
+  // on a host name, a reverse proxy or a tunnel keeps the same IP, and must
+  // not be sent to a raw IP behind a "reconnecting" screen.
+  const origIP = document.getElementById('modal-lxd-static-ip')?.dataset.origIp || '';
+  const willChangeIP = newIP && newIP !== location.hostname && (!origIP || newIP !== origIP);
 
   if (willChangeIP) {
     const ctrl = new AbortController();

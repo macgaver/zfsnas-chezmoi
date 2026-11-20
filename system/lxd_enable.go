@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"zfsnas/internal/config"
@@ -266,32 +267,8 @@ func LXDEnableCheckPrereqs() LXDEnablePrereqResult {
 	// uninstall + re-enable cycle.
 	_, ifupErr := os.Stat("/etc/network/interfaces")
 	netplanFiles, _ := filepath.Glob("/etc/netplan/*.yaml")
-	hasIfupdown := ifupErr == nil
-	hasNetplan := len(netplanFiles) > 0
-	netplanActive := hasNetplan && systemdNetworkdActive()
-	switch {
-	case hasIfupdown && !hasNetplan:
-		res.NetworkOK = true
-	case hasIfupdown && hasNetplan && !netplanActive:
-		// Dormant netplan YAMLs alongside an authoritative ifupdown setup
-		// — accept and just inform the user.
-		res.NetworkOK = true
-		res.NetworkNote = "Netplan YAML files exist in /etc/netplan/ but systemd-networkd is inactive — ifupdown is authoritative."
-	case hasIfupdown && hasNetplan:
-		// systemd-networkd is actually running — both configs would compete.
-		res.NetworkNote = "Both /etc/network/interfaces and /etc/netplan/*.yaml present and systemd-networkd is active. This feature requires only ifupdown — disable systemd-networkd or remove the netplan files."
-	case !hasIfupdown && hasNetplan:
-		res.NetworkNote = "Netplan configuration detected (/etc/netplan/*.yaml). This feature requires ifupdown — click \"Switch to systemd Networking\" on the right to migrate."
-		res.NetworkCanFix = true
-	case systemdNetworkdActive():
-		// Raw systemd-networkd (no netplan, no ifupdown) — the stock Debian
-		// default. The migration handles this case too, so offer the same
-		// "Switch to systemd Networking" button.
-		res.NetworkNote = "systemd-networkd manages the network directly. This feature requires ifupdown — click \"Switch to systemd Networking\" to migrate."
-		res.NetworkCanFix = true
-	default:
-		res.NetworkNote = "/etc/network/interfaces not found. This feature requires the ifupdown networking system."
-	}
+	res.NetworkOK, res.NetworkNote, res.NetworkCanFix = networkPrereq(
+		ifupErr == nil, ifupdownInstalled(), len(netplanFiles) > 0, netplanIsAuthoritative(), systemdNetworkdActive())
 
 	// 3. OS is a *real* Debian 13+, or Ubuntu ≥ 26.04 (both first-class
 	// supported). Proxmox VE reports ID=debian in /etc/os-release but ships a
@@ -460,6 +437,42 @@ func GetEnableNetConfig() (*EnableNetConfig, error) {
 	}, nil
 }
 
+// networkPrereq decides the Network row of the enable prerequisites:
+// ok, the note to show, and whether "Switch to systemd Networking" can fix it.
+// ifupFile: /etc/network/interfaces exists; ifupInstalled: ifupdown (or a
+// replacement) is installed to apply it; netplanActive: netplan is live
+// (rendered by systemd-networkd or NetworkManager).
+func networkPrereq(ifupFile, ifupInstalled, hasNetplan, netplanActive, networkdActive bool) (ok bool, note string, canFix bool) {
+	// ifupdown counts only when it is installed: the file alone proves
+	// nothing — on an Ubuntu host without the package nothing reads it, and
+	// the bridge step would write a bridge no one brings up, then fail on
+	// "networking.service not found" (issue #187). Such a host goes the
+	// netplan / systemd-networkd way below, whose migration installs ifupdown.
+	ifupFileOnly := ifupFile && !ifupInstalled
+	hasIfupdown := ifupFile && ifupInstalled
+	netplanActive = hasNetplan && netplanActive
+	switch {
+	case hasIfupdown && !hasNetplan:
+		return true, "", false
+	case hasIfupdown && hasNetplan && !netplanActive:
+		// Dormant netplan YAMLs alongside an authoritative ifupdown setup
+		// — accept and just inform the user.
+		return true, "Netplan YAML files exist in /etc/netplan/ but nothing renders them — ifupdown is authoritative.", false
+	case hasIfupdown && hasNetplan:
+		// netplan is live (networkd or NetworkManager) — both configs compete.
+		return false, "Both /etc/network/interfaces and /etc/netplan/*.yaml are in use (netplan is applied by systemd-networkd or NetworkManager). This feature requires only ifupdown — stop the netplan renderer or remove the netplan files.", false
+	case hasNetplan:
+		return false, "Netplan configuration detected (/etc/netplan/*.yaml). This feature requires ifupdown — click \"Switch to systemd Networking\" on the right to migrate.", true
+	case networkdActive:
+		// Raw systemd-networkd (no netplan, no ifupdown) — the stock Debian
+		// default. The migration handles this case too.
+		return false, "systemd-networkd manages the network directly. This feature requires ifupdown — click \"Switch to systemd Networking\" to migrate.", true
+	case ifupFileOnly:
+		return false, "/etc/network/interfaces exists but the ifupdown package is not installed, so nothing applies it, and no netplan or systemd-networkd configuration was found to migrate from. Install ifupdown and move this server's network configuration to /etc/network/interfaces first.", false
+	}
+	return false, "/etc/network/interfaces not found. This feature requires the ifupdown networking system.", false
+}
+
 // netplanIsAuthoritative reports whether netplan is the host's live network
 // configuration — rendered by systemd-networkd (fresh Ubuntu server) or by
 // NetworkManager (Ubuntu with 01-network-manager-all.yaml). When true, the
@@ -521,6 +534,12 @@ func SetEnableStaticIP(iface, addrCIDR, gateway string, dns []string) error {
 	}
 
 	if netplanIsAuthoritative() {
+		// A NIC named in an /etc/network/interfaces that nothing applies is
+		// dropped by NetworkManager at the reload netplan apply triggers —
+		// the host goes offline (#187). Clear such a leftover first.
+		if _, err := RepairOrphanIfupdownFile(iface, nil); err != nil {
+			return err
+		}
 		return writeNetplanStaticAndApply(iface, addrCIDR, gateway, cleanDNS)
 	}
 	// Raw systemd-networkd (no netplan, no /etc/network/interfaces) — the stock
@@ -626,8 +645,17 @@ func writeIfupdownStaticAndApply(iface, addrCIDR, gateway string, dns []string) 
 	return nil
 }
 
-// ifupdownInstalled: a var so tests can force it.
-var ifupdownInstalled = func() bool { return pkgInstalled("ifupdown") }
+// ifupdownInstalled: something applies /etc/network/interfaces — ifupdown or
+// one of its drop-in replacements (all ship networking.service). A var so
+// tests can force it.
+var ifupdownInstalled = func() bool {
+	for _, p := range []string{"ifupdown", "ifupdown2", "ifupdown-ng"} {
+		if pkgInstalled(p) {
+			return true
+		}
+	}
+	return false
+}
 
 // rewriteIfaceStanzaStatic replaces (or appends) the `iface <name> inet ...`
 // stanza in an /etc/network/interfaces file with a static configuration,
@@ -1083,7 +1111,7 @@ func fileExists(path string) bool {
 // lxdIsInitialized returns true when Incus already has at least one storage
 // pool, meaning a previous `incus admin init` (or manual setup) was done.
 func lxdIsInitialized() bool {
-	out, err := exec.Command("incus", "storage", "list", "--format", "csv").Output()
+	out, err := incusCmd("storage", "list", "--format", "csv").Output()
 	return err == nil && len(strings.TrimSpace(string(out))) > 0
 }
 
@@ -1094,7 +1122,7 @@ func lxdIsInitialized() bool {
 func lxdRemoveStaleHostNatBridge(job *LXDEnableJob) {
 	// If host-nat is a MANAGED incus network, it belongs to a working setup —
 	// leave it alone.
-	if out, err := exec.Command("incus", "network", "list", "--format", "json").Output(); err == nil {
+	if out, err := incusCmd("network", "list", "--format", "json").Output(); err == nil {
 		var nets []struct {
 			Name    string `json:"name"`
 			Managed bool   `json:"managed"`
@@ -1118,11 +1146,40 @@ func lxdRemoveStaleHostNatBridge(job *LXDEnableJob) {
 	}
 }
 
-// runLXCLog runs an incus command (no sudo) and streams its output into the
-// job log.
+// incusCmd builds an incus CLI command for the enable job. The job adds the
+// service account to incus-admin (step 2), but a running process keeps the
+// groups it started with until the service restarts, so until then the
+// daemon socket refuses it ("You don't have the needed permissions", issue
+// #187) — and a refused probe reads as "nothing there": host-nat recreated,
+// Incus re-initialised, a live host-nat bridge taken for a stale one. While
+// the socket is out of reach, go through sudo (the bridge step already needs
+// root or unrestricted sudo).
+func incusCmd(args ...string) *exec.Cmd {
+	return incusCmdCtx(context.Background(), args...)
+}
+
+func incusCmdCtx(ctx context.Context, args ...string) *exec.Cmd {
+	if os.Getuid() != 0 && !incusSocketReachable() {
+		return exec.CommandContext(ctx, "sudo", append([]string{"-n", "incus"}, args...)...)
+	}
+	return exec.CommandContext(ctx, "incus", args...)
+}
+
+// incusSocketReachable: this process may write to the Incus daemon socket
+// (access(2) checks the process's own groups, not /etc/group).
+func incusSocketReachable() bool {
+	for _, p := range []string{HVSocketPath, HVRunSocketPath} {
+		if syscall.Access(p, 2 /* W_OK */) == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// runLXCLog runs an incus command and streams its output into the job log.
 func runLXCLog(ctx context.Context, job *LXDEnableJob, args ...string) error {
 	job.log("$ incus " + strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, "incus", args...)
+	cmd := incusCmdCtx(ctx, args...)
 	out, err := cmd.CombinedOutput()
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line != "" {
@@ -1220,11 +1277,11 @@ func cleanupRedundantIncusbr0(ctx context.Context, job *LXDEnableJob) {
 
 	// Quick existence probe via `incus network show`. Non-zero exit → not
 	// known to Incus AT ALL; fall through to the kernel-link probe.
-	knownToIncus := exec.Command("incus", "network", "show", target).Run() == nil
+	knownToIncus := incusCmd("network", "show", target).Run() == nil
 
 	// Pull a JSON view to learn whether anything is using it.
 	if knownToIncus {
-		out, err := exec.Command("incus", "network", "list", "--format", "json").Output()
+		out, err := incusCmd("network", "list", "--format", "json").Output()
 		if err == nil {
 			var raw []struct {
 				Name   string   `json:"name"`
@@ -1272,7 +1329,7 @@ func cleanupRedundantIncusbr0(ctx context.Context, job *LXDEnableJob) {
 // returns non-zero when the remote is absent, which we silently tolerate.
 func cleanupDeadImageRemotes(ctx context.Context, job *LXDEnableJob) {
 	for _, name := range []string{"ubuntu", "ubuntu-daily"} {
-		out, _ := exec.Command("incus", "remote", "list", "--format", "csv").Output()
+		out, _ := incusCmd("remote", "list", "--format", "csv").Output()
 		if !strings.Contains(string(out), name+",") {
 			continue
 		}
@@ -1604,7 +1661,7 @@ func lxdEnsureHostNatNetworks(ctx context.Context, job *LXDEnableJob) {
 	}
 	for i, nic := range nics {
 		name := HostNatNetworkName(i)
-		out, _ := exec.Command("incus", "network", "show", name).Output()
+		out, _ := incusCmd("network", "show", name).Output()
 		if len(strings.TrimSpace(string(out))) > 0 {
 			job.log(name + " already exists.")
 			// Networks created before the pairing was recorded show up with no
@@ -1635,7 +1692,7 @@ func lxdConfigureExisting(ctx context.Context, storagePool, hostname string, job
 	}
 
 	// Ensure host-nat bridge exists
-	out, _ := exec.Command("incus", "network", "show", "host-nat").Output()
+	out, _ := incusCmd("network", "show", "host-nat").Output()
 	if len(strings.TrimSpace(string(out))) == 0 {
 		job.log("Creating host-nat bridge…")
 		if err := runLXCLog(ctx, job, "network", "create", "host-nat",
@@ -1662,7 +1719,7 @@ func lxdConfigureExisting(ctx context.Context, storagePool, hostname string, job
 	}
 
 	// Ensure default storage pool exists pointing at chosen ZFS pool
-	poolOut, _ := exec.Command("incus", "storage", "show", "default").Output()
+	poolOut, _ := incusCmd("storage", "show", "default").Output()
 	if len(strings.TrimSpace(string(poolOut))) == 0 {
 		dataset := storagePool + "/LXD-" + hostname
 		job.log("Creating default storage pool on " + dataset + "…")
@@ -1720,14 +1777,30 @@ func lxdStep3Bridges(ctx context.Context, job *LXDEnableJob) error {
 		return fmt.Errorf("editing /etc/network/interfaces requires running as root or having unrestricted sudo (sudo-all)")
 	}
 
-	// Backup existing interfaces file
-	backupPath := "/etc/network/interfaces.bak"
-	job.log("Backing up /etc/network/interfaces to " + backupPath)
+	// Nothing applies /etc/network/interfaces without ifupdown: writing a
+	// bridge there only sets up a surprise for the next boot (NetworkManager's
+	// ifupdown plugin stops managing a NIC listed in that file). Refuse before
+	// touching it — the prerequisites send such hosts through the migration.
+	if !ifupdownInstalled() {
+		msg := "ifupdown is not installed, so /etc/network/interfaces is not applied on this server; use \"Switch to systemd Networking\" in the prerequisites first (nothing was changed)"
+		job.setStep(3, "error", msg)
+		return fmt.Errorf("%s", msg)
+	}
+
+	// Backup existing interfaces file. interfaces.bak holds the file as it
+	// was before ZNAS first touched it and is never overwritten: a retry after
+	// a failed run used to replace it with the already-bridged version, so
+	// the original was lost (#187). Later runs get a timestamped copy.
 	content, err := os.ReadFile("/etc/network/interfaces")
 	if err != nil {
 		job.setStep(3, "error", "read interfaces: "+err.Error())
 		return fmt.Errorf("read /etc/network/interfaces: %w", err)
 	}
+	backupPath := "/etc/network/interfaces.bak"
+	if _, statErr := os.Stat(backupPath); statErr == nil {
+		backupPath = fmt.Sprintf("/etc/network/interfaces.pre-znas-%d", time.Now().Unix())
+	}
+	job.log("Backing up /etc/network/interfaces to " + backupPath)
 	if err := writeInterfacesFile(backupPath, content); err != nil {
 		job.log("Warning: backup failed: " + err.Error())
 	}
@@ -1755,6 +1828,13 @@ func lxdStep3Bridges(ctx context.Context, job *LXDEnableJob) error {
 	// Restart networking
 	job.log("Restarting networking (your connection may briefly drop)…")
 	if err := runCmdLog(ctx, job, "/usr/bin/systemctl", "restart", "networking"); err != nil {
+		// Put the previous file back so the next boot does not pick up
+		// bridges that never came up now.
+		if werr := writeInterfacesFile("/etc/network/interfaces", content); werr == nil {
+			job.log("Restored the previous /etc/network/interfaces.")
+		} else {
+			job.log("Warning: could not restore /etc/network/interfaces (" + werr.Error() + "); the original is in " + backupPath)
+		}
 		job.setStep(3, "error", "restart networking: "+err.Error())
 		return fmt.Errorf("restart networking: %w", err)
 	}

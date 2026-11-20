@@ -212,6 +212,10 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleDetectPools)))).Methods("GET")
 	r.Handle("/api/pool/import",
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleImportPool)))).Methods("POST")
+	r.Handle("/api/pool/acl-review",
+		RequireAuth(http.HandlerFunc(HandlePoolACLReview))).Methods("GET")
+	r.Handle("/api/pool/acl-review/dismiss",
+		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandlePoolACLReviewDismiss)))).Methods("POST")
 	r.Handle("/api/pool/status",
 		RequireAuth(http.HandlerFunc(HandlePoolStatus))).Methods("GET")
 	r.Handle("/api/pool/zfs-version",
@@ -302,6 +306,13 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(http.HandlerFunc(HandleGetDatasetKeyInfo))).Methods("GET")
 	r.Handle("/api/datasets/{path:.+}/key-source",
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleSetDatasetKeySource)))).Methods("PUT")
+	// ACL settings (own prefix: a dataset may be called "acl").
+	r.Handle("/api/dataset-acl/{path:.+}",
+		RequireAuth(http.HandlerFunc(HandleGetDatasetACL))).Methods("GET")
+	r.Handle("/api/dataset-acl/{path:.+}",
+		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleSetDatasetACL)))).Methods("PUT")
+	r.Handle("/api/acl-check",
+		RequireAuth(http.HandlerFunc(HandleACLCheck))).Methods("GET")
 	r.Handle("/api/datasets/{path:.+}",
 		RequireAuth(RequirePermission("manage_pool_dataset")(http.HandlerFunc(HandleUpdateDataset)))).Methods("PUT")
 	r.Handle("/api/datasets/{path:.+}",

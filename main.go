@@ -295,6 +295,10 @@ func main() {
 	}
 
 	// ===== Disk I/O poller (5-second samples for live charts) =====
+	// #187: clear an /etc/network/interfaces bridge left by a failed enable
+	// on a host without ifupdown, before NetworkManager drops its NICs at
+	// the next reload/boot.
+	go func() { _, _ = system.RepairOrphanIfupdownFile("", nil) }()
 	system.StartDiskIOPoller()
 	system.StartGatewayNetSampler()
 
