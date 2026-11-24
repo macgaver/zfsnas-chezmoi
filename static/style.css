@@ -2959,14 +2959,60 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
   background:transparent;border:none;
   /* JS owns pan + pinch-zoom on touch, so suppress the browser's own gestures
      (page pinch-zoom / two-finger scroll). Wheel + scrollbars still work. */
-  touch-action:none;-webkit-user-select:none;user-select:none;}
+  touch-action:none;-webkit-user-select:none;user-select:none;
+  /* Flex + margin:auto on the map keeps it centred while it is smaller than
+     the viewport (zoomed out) and falls back to 0 margins once it overflows,
+     so the scroll area still reaches every edge. The other children (empty
+     message, fullscreen controls) are absolute/fixed, so flex ignores them. */
+  display:flex;}
+.map-viewport>svg{flex:none;margin:auto;}
+/* Endless graph paper: the grid is the VIEWPORT's background, not part of
+   the SVG, so it covers the whole (almost endless) scroll area around the
+   map. background-attachment:local scrolls it with the content; JS
+   (_mapApplyZoom) feeds the zoom and the map's offset so the squares scale
+   with the zoom and line up with the map's own coordinates. Colours derive
+   from the theme's muted text colour, dimmed further under the HUD glow. */
+.map-viewport{--mg-z:1;--mg-x:0px;--mg-y:0px;
+  --mg-minor:color-mix(in srgb, var(--text-3) 14%, transparent);
+  --mg-major:color-mix(in srgb, var(--text-3) 26%, transparent);
+  background-attachment:local;
+  background-image:
+    linear-gradient(to right, var(--mg-major) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--mg-major) 1px, transparent 1px),
+    linear-gradient(to right, var(--mg-minor) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--mg-minor) 1px, transparent 1px);
+  background-size:
+    calc(80px * var(--mg-z)) calc(80px * var(--mg-z)),
+    calc(80px * var(--mg-z)) calc(80px * var(--mg-z)),
+    calc(16px * var(--mg-z)) calc(16px * var(--mg-z)),
+    calc(16px * var(--mg-z)) calc(16px * var(--mg-z));
+  background-position:var(--mg-x) var(--mg-y);
+  /* Drag the empty background to move around (mouse; touch pans natively in JS) */
+  cursor:grab;}
+/* Frame around the grid panel. border-box so the JS-measured height still
+   fits exactly; no frame in fullscreen, where the panel is the whole screen. */
+.map-viewport{box-sizing:border-box;border:2px solid color-mix(in srgb, var(--accent-2) 65%, transparent);
+  border-radius:12px;}
+.map-viewport:fullscreen, .map-viewport.map-vp-fullwindow{border:none;border-radius:0;}
+.map-viewport:-webkit-full-screen{border:none;border-radius:0;}
+.map-viewport.map-hud{
+  --mg-minor:color-mix(in srgb, var(--text-3) 5%, transparent);
+  --mg-major:color-mix(in srgb, var(--text-3) 9%, transparent);}
+/* below 50% zoom the minor squares collapse into noise — majors only */
+.map-viewport.map-vp-tiny{
+  background-image:
+    linear-gradient(to right, var(--mg-major) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--mg-major) 1px, transparent 1px);}
+.map-viewport.map-panning, .map-viewport.map-panning *{cursor:grabbing !important;}
+/* The SVG's own grid tile is superseded by the viewport grid above. */
+.map-viewport .map-grid{display:none;}
 /* Fullscreen (the button in the zoom group): paint the theme background instead of the
    browser's default black fullscreen backdrop. */
-.map-viewport:fullscreen{background:var(--bg);}
-.map-viewport:-webkit-full-screen{background:var(--bg);} /* prefixed Safari (separate rule: an unknown pseudo would void a shared one) */
+.map-viewport:fullscreen{background-color:var(--bg);}
+.map-viewport:-webkit-full-screen{background-color:var(--bg);} /* prefixed Safari (separate rule: an unknown pseudo would void a shared one) */
 /* Pseudo-fullscreen for platforms without an element-fullscreen API (iOS
    Safari): fill the browser window instead. Below the bg menu (z 99999). */
-.map-viewport.map-vp-fullwindow{position:fixed;inset:0;z-index:9000;background:var(--bg);}
+.map-viewport.map-vp-fullwindow{position:fixed;inset:0;z-index:9000;background-color:var(--bg);}
 /* Floating exit button — the toolbar is not visible while the map is full
    screen, and phones have no Esc key. Hidden otherwise. */
 .map-fs-exit{display:none;position:fixed;top:12px;right:12px;z-index:9500;
