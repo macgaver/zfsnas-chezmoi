@@ -2959,7 +2959,13 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
   background:transparent;border:none;
   /* JS owns pan + pinch-zoom on touch, so suppress the browser's own gestures
      (page pinch-zoom / two-finger scroll). Wheel + scrollbars still work. */
-  touch-action:none;-webkit-user-select:none;user-select:none;}
+  touch-action:none;-webkit-user-select:none;user-select:none;
+  /* Flex + margin:auto on the map keeps it centred while it is smaller than
+     the viewport (zoomed out) and falls back to 0 margins once it overflows,
+     so the scroll area still reaches every edge. The other children (empty
+     message, fullscreen controls) are absolute/fixed, so flex ignores them. */
+  display:flex;}
+.map-viewport>svg{flex:none;margin:auto;}
 /* Fullscreen (the button in the zoom group): paint the theme background instead of the
    browser's default black fullscreen backdrop. */
 .map-viewport:fullscreen{background:var(--bg);}

@@ -41795,6 +41795,10 @@ function runReplicationTask(id, name) {
   }
   // Zoom to a target scale, anchoring on a viewport-relative focal point. focalX/Y
   // are clientX/clientY (page coords); omitted ⇒ viewport centre.
+  // The SVG is centred in the viewport once it is smaller than it (CSS
+  // margin:auto), so the focal point is measured against the SVG's own box,
+  // not the scroll origin: the map then shrinks/grows in place instead of
+  // sliding into the top-left corner when zoomed out.
   function _mapZoomTo(svgId, newZ, focalX, focalY){
     const svg = document.getElementById(svgId); if (!svg) return;
     const vp  = svg.closest('.map-viewport') || svg.parentElement; if (!vp) return;
@@ -41802,14 +41806,16 @@ function runReplicationTask(id, name) {
     const old = _mapGetZoom(svgId);
     if (Math.abs(newZ-old) < 0.001) return;
     const rect = vp.getBoundingClientRect();
-    const fx = (focalX==null) ? rect.width/2  : (focalX - rect.left);
-    const fy = (focalY==null) ? rect.height/2 : (focalY - rect.top);
-    const cx = (vp.scrollLeft + fx) / old;
-    const cy = (vp.scrollTop  + fy) / old;
+    const fx = (focalX==null) ? rect.left + rect.width/2  : focalX;
+    const fy = (focalY==null) ? rect.top  + rect.height/2 : focalY;
+    const s0 = svg.getBoundingClientRect();
+    const cx = (fx - s0.left) / old;   // focal point in natural (unzoomed) units
+    const cy = (fy - s0.top)  / old;
     _mapZoomState[svgId] = newZ;
     _mapApplyZoom(svg);
-    vp.scrollLeft = cx*newZ - fx;
-    vp.scrollTop  = cy*newZ - fy;
+    const s1 = svg.getBoundingClientRect();
+    vp.scrollLeft += (s1.left + cx*newZ) - fx;
+    vp.scrollTop  += (s1.top  + cy*newZ) - fy;
   }
   // Toolbar buttons: dir −1 out, +1 in, 0 reset to 100%.
   window.mapZoom = function(svgId, dir){
