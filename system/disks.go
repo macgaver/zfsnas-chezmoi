@@ -272,14 +272,22 @@ func diskAwakeForQuery(state string) bool {
 }
 
 // querySMARTATA populates wearout/health for SATA/SAS/USB drives via smartctl.
+// "-l devstat" adds the ATA Device Statistics log, whose standard "Percentage
+// Used Endurance Indicator" gives the wear of SSDs whose vendor attribute
+// smartctl doesn't know (e.g. SanDisk reports it as an unnamed ID 173).
+// Drives without that log just leave the section out of the JSON.
 func querySMARTATA(info *DiskInfo) {
-	out, err := exec.Command("sudo", "smartctl", "-j", "-a", info.Device).Output()
+	out, err := exec.Command("sudo", "smartctl", "-j", "-a", "-l", "devstat", info.Device).Output()
 	if err != nil && len(out) == 0 {
 		info.SmartOK = false
 		info.SmartMsg = "smartctl unavailable"
 		return
 	}
+	parseSMARTATA(info, out)
+}
 
+// parseSMARTATA fills info from `smartctl -j -a -l devstat` output.
+func parseSMARTATA(info *DiskInfo, out []byte) {
 	var s smartctlOutput
 	if err := json.Unmarshal(out, &s); err != nil {
 		info.SmartOK = false
@@ -362,6 +370,29 @@ func querySMARTATA(info *DiskInfo) {
 		}
 		info.WearoutPct = &worn
 		break
+	}
+
+	// No vendor wear attribute recognised: use the standard ATA Device
+	// Statistics value (Solid State Device Statistics page, "Percentage Used
+	// Endurance Indicator"). It counts up from 0 and may pass 100 once the
+	// rated endurance is exceeded, so it is clamped like the attributes above.
+	if info.WearoutPct == nil {
+		for _, p := range s.AtaDeviceStatistics.Pages {
+			for _, e := range p.Table {
+				if !e.Flags.Valid || !strings.EqualFold(e.Name, "Percentage Used Endurance Indicator") {
+					continue
+				}
+				worn := e.Value
+				if worn < 0 {
+					worn = 0
+				}
+				if worn > 100 {
+					worn = 100
+				}
+				info.WearoutPct = &worn
+				return
+			}
+		}
 	}
 }
 
@@ -474,6 +505,19 @@ type smartctlOutput struct {
 			} `json:"raw"`
 		} `json:"table"`
 	} `json:"ata_smart_attributes"`
+	// Present only with `-l devstat` on drives that keep the Device Statistics log.
+	AtaDeviceStatistics struct {
+		Pages []struct {
+			Number int `json:"number"`
+			Table  []struct {
+				Name  string `json:"name"`
+				Value int    `json:"value"`
+				Flags struct {
+					Valid bool `json:"valid"`
+				} `json:"flags"`
+			} `json:"table"`
+		} `json:"pages"`
+	} `json:"ata_device_statistics"`
 }
 
 type nvmeSmartLog struct {
