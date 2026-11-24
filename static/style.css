@@ -2989,6 +2989,12 @@ body.light, body.dawn{       /* every light-background theme uses the dark-hue s
   background-position:var(--mg-x) var(--mg-y);
   /* Drag the empty background to move around (mouse; touch pans natively in JS) */
   cursor:grab;}
+/* Frame around the grid panel. border-box so the JS-measured height still
+   fits exactly; no frame in fullscreen, where the panel is the whole screen. */
+.map-viewport{box-sizing:border-box;border:2px solid color-mix(in srgb, var(--accent-2) 65%, transparent);
+  border-radius:12px;}
+.map-viewport:fullscreen, .map-viewport.map-vp-fullwindow{border:none;border-radius:0;}
+.map-viewport:-webkit-full-screen{border:none;border-radius:0;}
 .map-viewport.map-hud{
   --mg-minor:color-mix(in srgb, var(--text-3) 5%, transparent);
   --mg-major:color-mix(in srgb, var(--text-3) 9%, transparent);}
