@@ -41791,7 +41791,42 @@ function runReplicationTask(id, name) {
     // Far zoomed out the 16px graph-paper squares collapse into noise — keep
     // only the major lines there.
     svg.classList.toggle('map-zoom-tiny', z < 0.5);
+    _mapApplyRoom(svg, z);
     _mapUpdateZoomLabel(svg.id);
+  }
+  // Endless canvas: a wide empty margin (several viewports on every side) around
+  // the map, so it can be dragged/scrolled freely in any direction at any zoom
+  // instead of being stuck once it is smaller than the panel. The graph paper
+  // is the viewport's background (see .map-viewport in style.css); this feeds
+  // it the zoom and the map's offset so its squares stay locked to the map.
+  // The margins only depend on the viewport size, so zooming (which anchors on
+  // the SVG's box) and re-renders never jump; a resize re-fits and re-centres.
+  const MAP_ROOM = 4; // empty viewports of room on each side
+  function _mapApplyRoom(svg, z){
+    const vp = svg.closest('.map-viewport'); if (!vp) return;
+    const px = Math.max(1600, Math.round(vp.clientWidth  * MAP_ROOM));
+    const py = Math.max(1000, Math.round(vp.clientHeight * MAP_ROOM));
+    if (svg.__padX !== px || svg.__padY !== py){
+      // Keep the view on the same spot of the map if the room changes size
+      // (margin first, so the larger scroll range exists before scrolling).
+      const dx = px - (svg.__padX || 0), dy = py - (svg.__padY || 0);
+      const sl = vp.scrollLeft, st = vp.scrollTop;
+      svg.__padX = px; svg.__padY = py;
+      svg.style.margin = py + 'px ' + px + 'px';
+      vp.scrollLeft = sl + dx; vp.scrollTop = st + dy;
+    }
+    vp.style.setProperty('--mg-z', z);
+    vp.style.setProperty('--mg-x', px + 'px');
+    vp.style.setProperty('--mg-y', py + 'px');
+    vp.classList.toggle('map-vp-tiny', z < 0.5);
+  }
+  // Centre the view on the map (natural-unit rect b, or the whole map).
+  function _mapCentreOn(svg, b){
+    const vp = svg.closest('.map-viewport'); if (!vp) return;
+    const z = _mapGetZoom(svg.id);
+    if (!b) b = { x:0, y:0, w:parseFloat(svg.dataset.natW||'0'), h:parseFloat(svg.dataset.natH||'0') };
+    vp.scrollLeft = (svg.__padX||0) + b.x*z - (vp.clientWidth  - b.w*z)/2;
+    vp.scrollTop  = (svg.__padY||0) + b.y*z - (vp.clientHeight - b.h*z)/2;
   }
   // Zoom to a target scale, anchoring on a viewport-relative focal point. focalX/Y
   // are clientX/clientY (page coords); omitted ⇒ viewport centre.
@@ -41928,6 +41963,31 @@ function runReplicationTask(id, name) {
     const endTouch = (e)=>{ if (e.touches.length < 2) pinch=null; if (e.touches.length === 0) pan=null; };
     vp.addEventListener('touchend', endTouch);
     vp.addEventListener('touchcancel', endTouch);
+    // Mouse: press on the empty background and drag to move around the canvas.
+    // Nodes keep their own click / drag; the scrollbars keep working.
+    vp.addEventListener('pointerdown', (e)=>{
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      if (e.target.closest && e.target.closest('.map-node, .net-node, button, a, input, .map-empty')) return;
+      const r = vp.getBoundingClientRect();
+      if (e.clientX - r.left - vp.clientLeft >= vp.clientWidth ||
+          e.clientY - r.top  - vp.clientTop  >= vp.clientHeight) return; // on a scrollbar
+      const sx = e.clientX, sy = e.clientY, sl = vp.scrollLeft, st = vp.scrollTop;
+      let dragging = false;
+      const mv = (ev)=>{
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (!dragging){ if (Math.hypot(dx, dy) < 3) return; dragging = true; vp.classList.add('map-panning'); }
+        vp.scrollLeft = sl - dx; vp.scrollTop = st - dy;
+      };
+      const up = ()=>{
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        vp.classList.remove('map-panning');
+      };
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
   }
 
   async function pollMap(){
@@ -42580,14 +42640,12 @@ function runReplicationTask(id, name) {
     const P=18;
     return {x:x1-P, y:y1-P, w:(x2-x1)+2*P, h:(y2-y1)+2*P};
   }
-  // Scroll the viewport so a freshly-fitted content rect sits centred.
+  // Scroll the viewport so a freshly-fitted content rect sits centred (every
+  // layout sets __fitScroll when it auto-fits; the canvas margin is added in).
   function _forceFitScroll(svg){
     const b=svg.__fitScroll; if (!b) return;
     svg.__fitScroll=null;
-    const vp=svg.closest('.map-viewport'); if (!vp) return;
-    const z=_mapGetZoom(svg.id);
-    vp.scrollLeft = Math.max(0, b.x*z - (vp.clientWidth  - b.w*z)/2);
-    vp.scrollTop  = Math.max(0, b.y*z - (vp.clientHeight - b.h*z)/2);
+    _mapCentreOn(svg, b);
   }
 
   // Collect the DOM elements the tick updater drives. Called after the SVG
