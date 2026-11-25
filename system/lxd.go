@@ -1773,6 +1773,9 @@ func LXDStart(name string) error {
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
+	// A new VM's first boot happens here (VMs aren't started at create time
+	// unless auto-start is on): re-announce its real hostname once it's up.
+	go LXDSyncVMHostnameAfterBoot(name)
 	return nil
 }
 
@@ -5587,6 +5590,7 @@ func LXDCreateVM(req LXDCreateVMRequest, logCh chan<- string) error {
 		if out, err := exec.Command("incus", "start", req.Name).CombinedOutput(); err != nil {
 			return fmt.Errorf("lxc start: %s: %w", strings.TrimSpace(string(out)), err)
 		}
+		go LXDSyncVMHostnameAfterBoot(req.Name)
 	}
 
 	log("Done.")
@@ -6061,6 +6065,136 @@ func lxdWriteFileInside(instance, path, content string) error {
 	return nil
 }
 
+// guestHostnameSyncScript runs inside a VM guest ($1 = the instance name).
+// When the guest still carries an image placeholder hostname it renames it to
+// the instance (fixing the 127.0.1.1 /etc/hosts entry); a hostname someone
+// chose inside the guest is never touched. It then renews the DHCP lease on
+// the default-route interface, so the DHCP server learns the current name.
+//
+// Why the renew matters: images boot with a placeholder hostname
+// ("distrobuilder-<uuid>") and request their first lease with it; Incus
+// applies the hostname template a moment later, but nothing re-sends it.
+// Only systemd-networkd is renewed (what the images:debian / images:ubuntu
+// VM images use); other stacks are left alone rather than risking an
+// outage with a release/re-acquire.
+const guestHostnameSyncScript = `want="$1"
+hosts="${ZNAS_HOSTS_FILE:-/etc/hosts}"
+cur=$(hostname)
+case "$cur" in distrobuilder-*|localhost|localhost.*|"") placeholder=1 ;; *) placeholder=0 ;; esac
+if [ "$cur" != "$want" ] && [ "$placeholder" = 1 ]; then
+  hostnamectl set-hostname "$want" 2>/dev/null || { echo "$want" > /etc/hostname; hostname "$want"; }
+  tab=$(printf '\t')
+  if grep -q '^127\.0\.1\.1[[:space:]]' "$hosts"; then
+    sed "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1${tab}${want}/" "$hosts" > "$hosts.znas" && cat "$hosts.znas" > "$hosts"
+    rm -f "$hosts.znas"
+  else
+    printf '127.0.1.1\t%s\n' "$want" >> "$hosts"
+  fi
+fi
+dev=$(ip route show default 2>/dev/null | awk '{for(i=1;i<NF;i++) if($i=="dev"){print $(i+1); exit}}')
+[ -n "$dev" ] || { echo "no default route, lease not renewed"; exit 0; }
+if systemctl is-active -q systemd-networkd 2>/dev/null && command -v networkctl >/dev/null 2>&1; then
+  networkctl renew "$dev" && echo "DHCP lease on $dev renewed as $want"
+else
+  echo "not using systemd-networkd, lease not renewed"
+fi`
+
+// guestHostnameSyncArgs builds the incus argv for lxdSyncGuestHostname. The
+// name travels as a separate argument ($1), never inside the script text.
+func guestHostnameSyncArgs(name string) ([]string, error) {
+	if err := ValidateHostname(name); err != nil {
+		return nil, err
+	}
+	return []string{"exec", name, "--", "sh", "-c", guestHostnameSyncScript, "sh", name}, nil
+}
+
+// lxdSyncGuestHostname aligns a running VM's hostname with its instance name
+// and re-announces it over DHCP. Best effort: callers log the error and go on.
+func lxdSyncGuestHostname(name string) (string, error) {
+	args, err := guestHostnameSyncArgs(name)
+	if err != nil {
+		return "", err
+	}
+	out, err := exec.Command("incus", args...).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// lxdHostnameSyncedKey marks a VM whose hostname has been re-announced over
+// DHCP, so later boots don't repeat the work.
+const lxdHostnameSyncedKey = "user.zfsnas.hostname_synced"
+
+// lxdHostnameSyncMu serialises the check-run-mark sequence below: the compose
+// flow and the post-start watcher can both reach it for the same new VM.
+var lxdHostnameSyncMu sync.Mutex
+
+// lxdSyncGuestHostnameOnce runs lxdSyncGuestHostname unless it already
+// succeeded for this instance, and records success. skipped reports that an
+// earlier run had already done it.
+func lxdSyncGuestHostnameOnce(name string) (out string, skipped bool, err error) {
+	lxdHostnameSyncMu.Lock()
+	defer lxdHostnameSyncMu.Unlock()
+	if v, _ := exec.Command("incus", "config", "get", name, lxdHostnameSyncedKey).Output(); strings.TrimSpace(string(v)) == "true" {
+		return "", true, nil
+	}
+	out, err = lxdSyncGuestHostname(name)
+	if err != nil {
+		return "", false, err
+	}
+	exec.Command("incus", "config", "set", name, lxdHostnameSyncedKey, "true").Run() //nolint:errcheck
+	return out, false, nil
+}
+
+// lxdWaitGuestReady waits for a VM's incus-agent to answer exec, then for a
+// default route inside the guest. false = gave up (no agent — e.g. an ISO
+// install or Windows guest — or no network).
+func lxdWaitGuestReady(name string, agentWait, netWait time.Duration) bool {
+	for deadline := time.Now().Add(agentWait); ; time.Sleep(3 * time.Second) {
+		if exec.Command("incus", "exec", name, "--", "true").Run() == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+	}
+	for deadline := time.Now().Add(netWait); ; time.Sleep(2 * time.Second) {
+		if exec.Command("incus", "exec", name, "--", "sh", "-c", "ip route 2>/dev/null | grep -q default").Run() == nil {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+	}
+}
+
+// LXDSyncVMHostnameAfterBoot is started (as a goroutine) after a VM boots:
+// once the guest is up it aligns the hostname with the instance name and
+// renews its DHCP lease, exactly once per VM. A VM's first lease is taken
+// under the image's placeholder name ("distrobuilder-<uuid>") before Incus
+// applies the hostname template, and nothing else re-sends it — so without
+// this the DHCP server and its DNS names keep the placeholder. Containers,
+// already-synced VMs and names that aren't valid hostnames return at once.
+func LXDSyncVMHostnameAfterBoot(name string) {
+	if ValidateHostname(name) != nil || !lxdInstanceIsVM(name) {
+		return
+	}
+	if v, _ := exec.Command("incus", "config", "get", name, lxdHostnameSyncedKey).Output(); strings.TrimSpace(string(v)) == "true" {
+		return
+	}
+	if !lxdWaitGuestReady(name, 4*time.Minute, time.Minute) {
+		return
+	}
+	out, skipped, err := lxdSyncGuestHostnameOnce(name)
+	switch {
+	case err != nil:
+		log.Printf("lxd: hostname sync for %s skipped: %v", name, err)
+	case !skipped:
+		log.Printf("lxd: hostname sync for %s: %s", name, out)
+	}
+}
+
 // LXDCreateComposeStack creates a Compose stack — an Incus LXC system
 // container running Podman, with the user's docker-compose file deployed and
 // brought up. distro ("alpine"|"debian"|"ubuntu") selects the package
@@ -6226,6 +6360,16 @@ func LXDCreateComposeStackVM(req LXDCreateVMRequest, runtime, composeYAML, compo
 			break
 		}
 		time.Sleep(2 * time.Second)
+	}
+
+	// The guest took its first DHCP lease before Incus applied the hostname
+	// template, so the DHCP server (and the DNS names it registers) still
+	// knows it by the image's placeholder name. Re-announce the real one.
+	log("Registering hostname " + req.Name + " with DHCP…")
+	if out, _, err := lxdSyncGuestHostnameOnce(req.Name); err != nil {
+		log("  (hostname sync skipped: " + err.Error() + ")")
+	} else if out != "" {
+		log("  " + out)
 	}
 
 	switch runtime {
