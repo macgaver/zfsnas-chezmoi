@@ -180,20 +180,21 @@ func parsePolicySnaps(out string) []policySnap {
 //     this policy or untagged (taken before tagging existed), keeping the
 //     newest keep;
 //   - on every other dataset below it: only the snapshots tagged with this
-//     policy, keeping the newest keep on each.
+//     policy, keeping the newest keep on each;
+//   - anywhere: the snapshots listed in adopt (left behind by a deleted
+//     policy, see orphanCandidates), counted with the policy's own.
 //
-// A snapshot tagged by another policy is never touched, even with the same label.
-func policyPrunePlan(snaps []policySnap, dataset, label, policyID string, keep int) []string {
+// A snapshot tagged by another live policy is never touched, even with the same label.
+func policyPrunePlan(snaps []policySnap, dataset, label, policyID string, keep int, adopt map[string]bool) []string {
 	if keep < 1 {
 		return nil
 	}
 	byDS := map[string][]policySnap{}
 	for _, s := range snaps {
-		ours := false
-		if s.Dataset == dataset {
-			labelled := s.SnapName == label || strings.HasPrefix(s.SnapName, label+"-")
-			ours = labelled && (s.Policy == "" || s.Policy == policyID)
-		} else {
+		ours := adopt[s.Name]
+		if !ours && s.Dataset == dataset {
+			ours = snapLabelled(s, label) && (s.Policy == "" || s.Policy == policyID)
+		} else if !ours {
 			ours = policyID != "" && s.Policy == policyID
 		}
 		if ours {
@@ -219,17 +220,146 @@ func policyPrunePlan(snaps []policySnap, dataset, label, policyID string, keep i
 	return drop
 }
 
+func snapLabelled(s policySnap, label string) bool {
+	return s.SnapName == label || strings.HasPrefix(s.SnapName, label+"-")
+}
+
+// orphanCandidates lists the snapshots a policy may take over: tagged with a
+// policy that no longer exists (deleted, or deleted and re-created with a new
+// id — issue #189), carrying this policy's label, on a dataset the policy
+// snapshots (its own, or an included child when recursive). Without a live
+// list nothing is adopted. The caller still checks that the tag was set on
+// this host (see localTagged): a received snapshot keeps the sender's tag.
+func orphanCandidates(snaps []policySnap, dataset, label, policyID string, live, included map[string]bool) []string {
+	if live == nil {
+		return nil
+	}
+	var out []string
+	for _, s := range snaps {
+		if s.Policy == "" || s.Policy == policyID || live[s.Policy] || !snapLabelled(s, label) {
+			continue
+		}
+		if s.Dataset == dataset || included[s.Dataset] {
+			out = append(out, s.Name)
+		}
+	}
+	return out
+}
+
+// localTagged returns the snapshots under dataset whose policy tag was set
+// here (source "local"), not received from another host by zfs send -R/-w:
+// those belong to the sender's policies, and pruning them on a replication
+// target breaks the next incremental receive.
+func localTagged(dataset string) (map[string]bool, error) {
+	out, err := exec.Command("sudo", "zfs", "get", "-H", "-r", "-t", "snapshot",
+		"-o", "name,source", PolicyProp, dataset).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return parseLocalTagged(string(out)), nil
+}
+
+func parseLocalTagged(out string) map[string]bool {
+	m := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) >= 2 && f[1] == "local" {
+			m[f[0]] = true
+		}
+	}
+	return m
+}
+
+// PruneOptions tells retention which leftovers of deleted policies it may take over.
+type PruneOptions struct {
+	Recursive bool
+	Live      map[string]bool // ids of the policies that exist; nil = adopt nothing
+	SkipDest  map[string]bool // replication destinations (see PolicyTree)
+}
+
 // PrunePolicySnapshots applies a policy's retention to its dataset and to
 // every dataset below it (see policyPrunePlan). Errors on single snapshots
 // (a hold, a clone) are collected and the rest still go.
-func PrunePolicySnapshots(dataset, label, policyID string, keep int) (int, []error) {
+func PrunePolicySnapshots(dataset, label, policyID string, keep int, opt PruneOptions) (int, []error) {
 	snaps, err := listPolicySnaps(dataset, true)
+	if err != nil {
+		return 0, []error{err}
+	}
+	included := map[string]bool{}
+	if opt.Recursive {
+		if tree, err := PolicyTree(dataset, opt.SkipDest); err == nil {
+			for _, d := range tree {
+				if d.Skip == "" {
+					included[d.Name] = true
+				}
+			}
+		}
+	}
+	var adopt map[string]bool
+	if cand := orphanCandidates(snaps, dataset, label, policyID, opt.Live, included); len(cand) > 0 {
+		if local, err := localTagged(dataset); err == nil {
+			adopt = map[string]bool{}
+			for _, n := range cand {
+				if local[n] {
+					adopt[n] = true
+				}
+			}
+		}
+	}
+	var errs []error
+	n := 0
+	for _, name := range policyPrunePlan(snaps, dataset, label, policyID, keep, adopt) {
+		if err := DestroySnapshot(name); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+			continue
+		}
+		n++
+	}
+	return n, errs
+}
+
+// PolicySnapshots lists the snapshots under dataset that policyID took here
+// (tag set locally, so copies received on a replication target are left out).
+func PolicySnapshots(dataset, policyID string) ([]string, error) {
+	if policyID == "" {
+		return nil, nil
+	}
+	snaps, err := listPolicySnaps(dataset, true)
+	if err != nil {
+		return nil, err
+	}
+	var mine []string
+	for _, s := range snaps {
+		if s.Policy == policyID {
+			mine = append(mine, s.Name)
+		}
+	}
+	if len(mine) == 0 {
+		return nil, nil
+	}
+	local, err := localTagged(dataset)
+	if err != nil {
+		return nil, err
+	}
+	out := mine[:0]
+	for _, n := range mine {
+		if local[n] {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+
+// DestroyPolicySnapshots removes every snapshot policyID took under dataset
+// (used when the policy is deleted together with its snapshots).
+func DestroyPolicySnapshots(dataset, policyID string) (int, []error) {
+	names, err := PolicySnapshots(dataset, policyID)
 	if err != nil {
 		return 0, []error{err}
 	}
 	var errs []error
 	n := 0
-	for _, name := range policyPrunePlan(snaps, dataset, label, policyID, keep) {
+	for _, name := range names {
 		if err := DestroySnapshot(name); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue

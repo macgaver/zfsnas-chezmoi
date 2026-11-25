@@ -25,7 +25,9 @@ _znas_portal=""
     _znas_portal=$("/proc/$_znas_pid/exe" --version 2>/dev/null | head -n1)
 [ -n "$_znas_portal" ] || _znas_portal=$(sed -n 's/^version=//p' /etc/zfsnas-release 2>/dev/null)
 _znas_port=$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' /opt/zfsnas/config/config.json 2>/dev/null | head -n1)
-_znas_ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -m1 -E '^[0-9]+\.')
+# IPv4 only (an IPv6 URL is not something a user can type into a browser).
+_znas_ip=$(hostname -I 2>/dev/null | tr ' ' '\n' \
+    | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n1)
 
 printf '\n  \033[1;36mZNAS Appliance %s\033[0m  ·  Ubuntu %s  ·  kernel %s\n' \
     "${_znas_appl:-unknown}" "${_znas_ubuntu:-?}" "$_znas_kernel"

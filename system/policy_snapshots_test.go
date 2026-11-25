@@ -76,7 +76,7 @@ func TestPolicyPrunePlan(t *testing.T) {
 		// child that only has 2 of ours: nothing to drop
 		"tank/a/d@auto-4\t4\tP1\n" +
 		"tank/a/d@auto-5\t5\tP1\n"
-	got := policyPrunePlan(parsePolicySnaps(out), "tank/a", "auto", "P1", 3)
+	got := policyPrunePlan(parsePolicySnaps(out), "tank/a", "auto", "P1", 3, nil)
 	sort.Strings(got)
 	want := []string{"tank/a/b@auto-2", "tank/a@auto-1", "tank/a@auto-2"}
 	sort.Strings(want)
@@ -88,7 +88,7 @@ func TestPolicyPrunePlan(t *testing.T) {
 func TestPolicyPrunePlanLabelPrefixIsExact(t *testing.T) {
 	// label "auto" must not claim "autumn-…" snapshots
 	out := "tank/a@autumn-1\t1\t-\ntank/a@auto-1\t2\t-\ntank/a@auto-2\t3\t-\n"
-	got := policyPrunePlan(parsePolicySnaps(out), "tank/a", "auto", "P1", 1)
+	got := policyPrunePlan(parsePolicySnaps(out), "tank/a", "auto", "P1", 1, nil)
 	if !reflect.DeepEqual(got, []string{"tank/a@auto-1"}) {
 		t.Fatalf("got %v", got)
 	}
@@ -121,5 +121,62 @@ func TestBuildRestorePlan(t *testing.T) {
 	p = buildRestorePlan(out, "tank/a", "s3", []string{"tank/a"})
 	if p.Blocked || len(p.Targets) != 1 || len(p.Targets[0].Newer) != 0 {
 		t.Fatalf("latest: %+v", p)
+	}
+}
+
+// Issue #189: policies deleted and re-created leave snapshots tagged with the
+// old id. The new policy with the same label takes them over on its dataset
+// and included children; live policies, other labels, children outside the
+// policy and a missing live list are left alone.
+func TestOrphanCandidates(t *testing.T) {
+	out := "" +
+		"tank/a@auto-1\t1\tOLD\n" + // deleted policy, our label → adopt
+		"tank/a@auto-2\t2\tP2\n" + // live policy → never
+		"tank/a@daily-1\t3\tOLD\n" + // other label → never
+		"tank/a@auto-3\t4\tP1\n" + // ours already
+		"tank/a/b@auto-1\t1\tOLD\n" + // included child → adopt
+		"tank/a/replica@auto-1\t1\tREMOTE\n" // not included → never
+	snaps := parsePolicySnaps(out)
+	live := map[string]bool{"P1": true, "P2": true}
+	got := orphanCandidates(snaps, "tank/a", "auto", "P1", live, map[string]bool{"tank/a": true, "tank/a/b": true})
+	if !reflect.DeepEqual(got, []string{"tank/a@auto-1", "tank/a/b@auto-1"}) {
+		t.Fatalf("got %v", got)
+	}
+	if got := orphanCandidates(snaps, "tank/a", "auto", "P1", nil, nil); got != nil {
+		t.Fatalf("no live list must adopt nothing, got %v", got)
+	}
+	// Non-recursive: children are not included.
+	if got := orphanCandidates(snaps, "tank/a", "auto", "P1", live, nil); !reflect.DeepEqual(got, []string{"tank/a@auto-1"}) {
+		t.Fatalf("non-recursive got %v", got)
+	}
+}
+
+func TestPolicyPrunePlanAdoptsOrphans(t *testing.T) {
+	out := "" +
+		"tank/a@auto-1\t1\tOLD\n" +
+		"tank/a@auto-2\t2\tOLD\n" +
+		"tank/a@auto-3\t3\tP1\n" +
+		"tank/a@auto-4\t4\tP1\n" +
+		"tank/a/b@auto-1\t1\tOLD\n" +
+		"tank/a/b@auto-4\t4\tP1\n"
+	adopt := map[string]bool{"tank/a@auto-1": true, "tank/a@auto-2": true, "tank/a/b@auto-1": true}
+	got := policyPrunePlan(parsePolicySnaps(out), "tank/a", "auto", "P1", 1, adopt)
+	sort.Strings(got)
+	want := []string{"tank/a/b@auto-1", "tank/a@auto-1", "tank/a@auto-2", "tank/a@auto-3"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("prune %v, want %v", got, want)
+	}
+	// Without adoption the old-id snapshots stay (the #189 symptom).
+	got = policyPrunePlan(parsePolicySnaps(out), "tank/a", "auto", "P1", 1, nil)
+	if !reflect.DeepEqual(got, []string{"tank/a@auto-3"}) {
+		t.Fatalf("no-adopt prune %v", got)
+	}
+}
+
+func TestParseLocalTagged(t *testing.T) {
+	out := "tank/a@auto-1\tlocal\ntank/a/rep@auto-1\treceived\ntank/a@manual\t-\n"
+	got := parseLocalTagged(out)
+	if !got["tank/a@auto-1"] || got["tank/a/rep@auto-1"] || got["tank/a@manual"] {
+		t.Fatalf("got %v", got)
 	}
 }

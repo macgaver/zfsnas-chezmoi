@@ -1,0 +1,6 @@
+[Unit]
+Description=ZFS NAS appliance console banner refresh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/zfsnas/firstboot-banner.sh

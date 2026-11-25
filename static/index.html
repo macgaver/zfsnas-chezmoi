@@ -27842,7 +27842,9 @@ function renderSchedules(el, policies) {
     const next = p.next_run ? formatDate(p.next_run) : '—';
     const last = p.last_run && p.last_run !== '0001-01-01T00:00:00Z' ? formatDate(p.last_run) : '—';
     const statusTip = esc(p.last_details || p.last_error || '');
-    const status = p.last_status === 'error'
+    const status = p.last_status === 'warning'
+      ? `<span style="color:var(--accent-warn);cursor:default;" title="${statusTip}"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg> Warning</span>`
+      : p.last_status === 'error'
       ? `<span style="color:var(--accent-danger);cursor:default;" title="${statusTip}"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Error</span>`
       : p.last_status === 'ok'
         ? `<span style="color:var(--accent-3);cursor:default;" title="${statusTip}"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> OK</span>`
@@ -28346,15 +28348,35 @@ async function runScheduleNow(id) {
 }
 
 async function deleteSchedule(id) {
+  // How many snapshots this policy took, so the dialog can offer to remove them.
+  let count = 0;
+  try {
+    const r = await fetch(`/api/snapshot-schedules/${id}/snapshots`);
+    if (r.ok) count = (await r.json()).count || 0;
+  } catch (e) { /* offer nothing to delete */ }
+  const keepNote = 'Kept snapshots are taken over by the next policy with the same label on this dataset, which then applies its own retention to them.';
+  const body = count
+    ? `This snapshot policy will be <strong>permanently deleted</strong>.
+       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;cursor:pointer;">
+         <input type="checkbox" id="sched-del-snaps" style="margin-top:3px;">
+         <span>Also delete the <strong>${count}</strong> snapshot${count === 1 ? '' : 's'} it took</span>
+       </label>
+       <div class="text-3" style="font-size:12px;margin-top:8px;">${keepNote}</div>`
+    : 'This snapshot policy will be <strong>permanently deleted</strong>. It has no snapshots left.';
   showConfirm({
     title: 'Delete Snapshot Policy',
-    body: 'This snapshot policy will be <strong>permanently deleted</strong>. Existing snapshots created by it will not be affected.',
+    body,
     confirmText: 'Delete Policy',
     danger: true,
     onConfirm: async () => {
-      const resp = await fetch(`/api/snapshot-schedules/${id}`, { method: 'DELETE' });
-      if (!resp.ok) { const d = await resp.json(); showToast(d.error || 'Delete failed.', 'error'); return; }
+      const withSnaps = !!document.getElementById('sched-del-snaps')?.checked;
+      const resp = await fetch(`/api/snapshot-schedules/${id}` + (withSnaps ? '?snapshots=delete' : ''), { method: 'DELETE' });
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok) { showToast(d.error || 'Delete failed.', 'error'); return; }
+      if (d.failed) showToast(`Policy deleted. ${d.failed} snapshot${d.failed === 1 ? '' : 's'} could not be removed: ${d.error}`, 'error');
+      else if (withSnaps) showToast(`Policy deleted with ${d.removed} snapshot${d.removed === 1 ? '' : 's'}.`, 'success');
       loadSchedules();
+      if (withSnaps) loadSnapshots();
     }
   });
 }

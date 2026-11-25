@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/zfsnas/firstboot-banner.sh
+ExecStart=/usr/lib/zfsnas/firstboot-banner.sh --boot
 
 [Install]
 WantedBy=multi-user.target

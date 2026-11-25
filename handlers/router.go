@@ -520,6 +520,8 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleUpdateSchedule)))).Methods("PUT")
 	r.Handle("/api/snapshot-schedules/{id}",
 		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleDeleteSchedule)))).Methods("DELETE")
+	r.Handle("/api/snapshot-schedules/{id}/snapshots",
+		RequireAuth(RequirePermission("manage_protection")(http.HandlerFunc(HandleScheduleSnapshots)))).Methods("GET")
 	r.Handle("/api/snapshot-schedules/{id}/run-now",
 		RequireAuth(RequirePermission("manage_protection")(HandleRunScheduleNow(appCfg)))).Methods("POST")
 

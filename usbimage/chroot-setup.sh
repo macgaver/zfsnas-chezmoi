@@ -471,7 +471,7 @@ for s in 15autologin 18hostname 19keyboard 20xconfig 22desktop_settings 22sslcer
     rm -f "$CB/$s"
 done
 
-systemctl enable ssh zfsnas zfsnas-firstboot
+systemctl enable ssh zfsnas zfsnas-firstboot zfsnas-banner-refresh.timer
 
 # ---- NFS-exportable root overlay ------------------------------------------
 # casper mounts the RAM root overlay without nfs_export, so the kernel NFS

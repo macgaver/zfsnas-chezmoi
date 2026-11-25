@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep the console banner URL in step with the IPv4 address
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

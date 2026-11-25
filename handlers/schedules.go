@@ -144,9 +144,62 @@ func HandleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, p)
 }
 
-// HandleDeleteSchedule removes a snapshot policy by ID.
+// livePolicyIDs is the set of existing policy ids, or nil when it cannot be
+// read (retention then adopts nothing).
+func livePolicyIDs() map[string]bool {
+	policies, err := scheduler.LoadPolicies()
+	if err != nil {
+		return nil
+	}
+	m := make(map[string]bool, len(policies))
+	for _, p := range policies {
+		m[p.ID] = true
+	}
+	return m
+}
+
+// retentionSummary is the " · Retention …" suffix of a run's details.
+func retentionSummary(removed int, errs []error) string {
+	s := ""
+	if removed > 0 {
+		s = fmt.Sprintf(" · Retention removed %d", removed)
+	}
+	if len(errs) > 0 {
+		s += fmt.Sprintf(" · Retention could not remove %d: %s", len(errs), errs[0].Error())
+	}
+	return s
+}
+
+// HandleScheduleSnapshots returns how many snapshots a policy took (for the
+// delete dialog).
+func HandleScheduleSnapshots(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	policies, err := scheduler.LoadPolicies()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for _, p := range policies {
+		if p.ID == id {
+			names, err := system.PolicySnapshots(p.Dataset, p.ID)
+			if err != nil {
+				jsonErr(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			jsonOK(w, map[string]any{"count": len(names)})
+			return
+		}
+	}
+	jsonErr(w, http.StatusNotFound, "schedule not found")
+}
+
+// HandleDeleteSchedule removes a snapshot policy by ID. With
+// ?snapshots=delete it also destroys the snapshots the policy took; kept
+// ones are taken over by the next policy with the same label on that
+// dataset (see system.PrunePolicySnapshots).
 func HandleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+	deleteSnaps := r.URL.Query().Get("snapshots") == "delete"
 	policies, err := scheduler.LoadPolicies()
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
@@ -170,15 +223,39 @@ func HandleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	removed := 0
+	var errs []error
+	if deleteSnaps {
+		removed, errs = system.DestroyPolicySnapshots(target, id)
+		for _, e := range errs {
+			log.Printf("[scheduler] delete policy %s snapshots: %v", id, e)
+		}
+	}
+
 	sess := MustSession(r)
+	details := ""
+	result := audit.ResultOK
+	if deleteSnaps {
+		details = fmt.Sprintf("with its snapshots: %d removed", removed)
+		if len(errs) > 0 {
+			details += fmt.Sprintf(", %d failed: %s", len(errs), errs[0].Error())
+			result = audit.ResultError
+		}
+	}
 	audit.Log(audit.Entry{
-		User:   sess.Username,
-		Role:   sess.Role,
-		Action: audit.ActionDeleteSchedule,
-		Target: target,
-		Result: audit.ResultOK,
+		User:    sess.Username,
+		Role:    sess.Role,
+		Action:  audit.ActionDeleteSchedule,
+		Target:  target,
+		Result:  result,
+		Details: details,
 	})
-	jsonOK(w, map[string]string{"message": "schedule deleted"})
+	resp := map[string]any{"message": "schedule deleted", "removed": removed}
+	if len(errs) > 0 {
+		resp["failed"] = len(errs)
+		resp["error"] = errs[0].Error()
+	}
+	jsonOK(w, resp)
 }
 
 // HandleRunScheduleNow manually triggers a snapshot policy immediately.
@@ -285,10 +362,19 @@ func execScheduledSnapshot(p *scheduler.Policy, appCfg *config.AppConfig) error 
 		Details: details,
 	})
 	if p.Retention > 0 {
-		if _, errs := system.PrunePolicySnapshots(p.Dataset, label, p.ID, p.Retention); len(errs) > 0 {
-			for _, e := range errs {
-				log.Printf("[scheduler] prune policy %s: %v", p.ID, e)
-			}
+		removed, errs := system.PrunePolicySnapshots(p.Dataset, label, p.ID, p.Retention, system.PruneOptions{
+			Recursive: p.Recursive,
+			Live:      livePolicyIDs(),
+			SkipDest:  replicationDestinations(),
+		})
+		for _, e := range errs {
+			log.Printf("[scheduler] prune policy %s: %v", p.ID, e)
+		}
+		p.LastDetails += retentionSummary(removed, errs)
+		if len(errs) > 0 {
+			// The snapshot itself worked: flag the run, don't fail it.
+			p.LastStatus = "warning"
+			p.LastError = "Retention: " + errs[0].Error()
 		}
 	}
 
