@@ -15,7 +15,7 @@ func TestLoginRedirectsToSetupWithoutUsers(t *testing.T) {
 	if err := config.Init(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	page := func(string) ([]byte, error) { return []byte("<title>ZFS NAS — Sign In</title>"), nil }
+	page := func(string) ([]byte, error) { return []byte("<title>ZNAS — Sign In</title>"), nil }
 	h := HandleLoginPage(page, &config.AppConfig{})
 
 	rec := httptest.NewRecorder()

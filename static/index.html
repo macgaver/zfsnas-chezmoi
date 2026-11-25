@@ -7,13 +7,13 @@
        iPhone notch/safe-area support added with the mobile shell; the zoom
        lock was accidentally dropped in that same change (v6.7.0). -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>ZFS NAS Portal</title>
+  <title>ZNAS Portal</title>
   <link rel="icon" href="/static/favicon.jpg?v=2" type="image/jpeg">
   <link rel="apple-touch-icon" href="/static/favicon.jpg?v=2">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon.jpg?v=2">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="ZFS NAS">
+  <meta name="apple-mobile-web-app-title" content="ZNAS">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap">
   <link rel="stylesheet" href="/static/sdn.css">
@@ -699,7 +699,7 @@
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:0;line-height:1;">
         <div style="position:relative;display:inline-block;line-height:0;">
           <a href="https://github.com/macgaver/zfsnas-chezmoi" target="_blank" rel="noopener" style="display:inline-block;line-height:0;">
-            <img src="/static/logo.svg" alt="ZFS NAS" style="height:64px;width:204px;object-fit:contain;">
+            <img src="/static/logo.svg" alt="ZNAS" style="height:64px;width:204px;object-fit:contain;">
           </a>
           <span id="logo-lxd-badge" title="Compute (LXD) available" onclick="switchSidebarMode('compute')" style="display:none;position:absolute;top:11px;left:142px;font-size:24px;font-weight:900;color:#fbbf24;line-height:1;cursor:pointer;text-shadow:0 0 8px #fbbf24,0 0 16px #f59e0b,0 0 2px #fff;">+</span>
         </div>
@@ -1608,7 +1608,7 @@
         <div id="ptab-panel-security" class="appliance-hide" style="display:none;">
           <div class="card" style="max-width:960px;">
             <div style="background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.25);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--text-2);line-height:1.6;">
-              <strong style="color:var(--text-1);">Hardening is optional.</strong> ZFS NAS is fully functional without it — the service account already uses passwordless <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px;">sudo</code> for the commands it needs. This tab lets you <em>restrict</em> that sudo access to a reviewed allow-list of exact commands instead of broad access, and review any drift.
+              <strong style="color:var(--text-1);">Hardening is optional.</strong> ZNAS is fully functional without it — the service account already uses passwordless <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px;">sudo</code> for the commands it needs. This tab lets you <em>restrict</em> that sudo access to a reviewed allow-list of exact commands instead of broad access, and review any drift.
               <br><br>
               Apply it only for <strong>high-security deployments</strong> where you want to minimise the portal's host privileges. For most home / single-admin setups it can be safely skipped.
             </div>
@@ -1619,7 +1619,7 @@
         <!-- Tab: Optional Features -->
         <div id="ptab-panel-optfeat">
           <div class="card" style="max-width:960px;">
-            <p style="font-size:13px;color:var(--text-3);margin-bottom:14px;">These packages are not required for core ZFS NAS functionality but enable additional features.</p>
+            <p style="font-size:13px;color:var(--text-3);margin-bottom:14px;">These packages are not required for core ZNAS functionality but enable additional features.</p>
             <p class="appliance-only" style="font-size:13px;color:var(--text-2);margin:-6px 0 14px;">On the USB appliance every feature is built into the read-only OS image, so features cannot be added or removed here. They are updated together with the image from <strong>Platform → USB Appliance Upgrades</strong>.</p>
             <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
               <div style="flex:1;">
@@ -1725,7 +1725,7 @@
         <div id="ptab-panel-ospkgs" style="display:none;">
           <div class="card" style="max-width:960px;">
             <p class="text-2" style="font-size:14px;margin-bottom:20px;">
-              The following packages are required for ZFS NAS to operate. All commands run with <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:12px;">sudo</code>.
+              The following packages are required for ZNAS to operate. All commands run with <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:12px;">sudo</code>.
             </p>
             <div id="prereq-list">
               <div style="color:var(--text-3);text-align:center;padding:24px;">Checking…</div>
@@ -2209,7 +2209,7 @@
         <!-- Binary / Portal Update card -->
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <h3 style="margin:0;">ZFSNAS Instant Update</h3>
+            <h3 style="margin:0;">ZNAS Instant Update</h3>
             <span onclick="openBinaryUpdateSettings()" title="Instant Update settings" style="cursor:pointer;color:var(--text-3);font-size:22px;line-height:1;padding:2px 4px;border-radius:4px;transition:color .15s;" onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-3)'"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
           </div>
           <p style="color:var(--text-3);font-size:13px;margin-bottom:20px;">Keep the portal binary up to date from GitHub Releases.</p>
@@ -2255,12 +2255,12 @@
             <div style="display:flex;align-items:center;gap:12px;">
               <button id="btn-apply-binary-active" class="btn btn-sm" onclick="applyBinaryUpdate()"
                 style="background:var(--accent-warn);color:#000;font-weight:700;border:none;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg> Instant Update Now</button>
-              <span style="font-size:12px;color:var(--text-3);">Only works when ZFSNAS is running as a systemd service.</span>
+              <span style="font-size:12px;color:var(--text-3);">Only works when ZNAS is running as a systemd service.</span>
             </div>
             <div id="btn-apply-binary-nosvc" style="display:none;">
               <button class="btn btn-sm" disabled
                 style="opacity:0.45;cursor:not-allowed;background:var(--accent-warn);color:#000;font-weight:700;border:none;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg> Instant Update Now</button>
-              <div style="margin-top:8px;font-size:12px;color:var(--text-3);">Live update is only available when ZFS NAS is running as a systemd service. <button class="btn btn-ghost btn-sm" style="font-size:12px;padding:2px 8px;" onclick="showPage('prereqs')">Go to Prerequisites →</button></div>
+              <div style="margin-top:8px;font-size:12px;color:var(--text-3);">Live update is only available when ZNAS is running as a systemd service. <button class="btn btn-ghost btn-sm" style="font-size:12px;padding:2px 8px;" onclick="showPage('prereqs')">Go to Prerequisites →</button></div>
             </div>
           </div>
 
@@ -9634,9 +9634,9 @@ Select the Console tab to load.</pre>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
           <input type="checkbox" id="smb-cfg-clean-defaults" style="width:15px;height:15px;accent-color:var(--accent-2);flex-shrink:0;">
           Remove distro default sections from smb.conf
-          <i class="info-tip tip-down" data-tip="When enabled, the [printers], [print$], and [homes] sections written by the Samba package installer are commented out in smb.conf.&#10;&#10;This prevents those sections from conflicting with your settings. The [homes] section is replaced by the one ZFS NAS manages when a Home Folder Dataset is configured.&#10;&#10;Recommended for most NAS setups where printing is not needed."></i>
+          <i class="info-tip tip-down" data-tip="When enabled, the [printers], [print$], and [homes] sections written by the Samba package installer are commented out in smb.conf.&#10;&#10;This prevents those sections from conflicting with your settings. The [homes] section is replaced by the one ZNAS manages when a Home Folder Dataset is configured.&#10;&#10;Recommended for most NAS setups where printing is not needed."></i>
         </label>
-        <div class="text-3 text-sm" style="margin-top:4px;">Removes [printers], [print$], and any distro-default [homes] outside the ZFS NAS managed block. This action is permanent and cannot be undone.</div>
+        <div class="text-3 text-sm" style="margin-top:4px;">Removes [printers], [print$], and any distro-default [homes] outside the ZNAS-managed block. This action is permanent and cannot be undone.</div>
       </div>
       <!-- Advanced settings collapsible -->
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
@@ -9647,7 +9647,7 @@ Select the Console tab to load.</pre>
         <div id="smb-advanced-body" style="display:none;margin-top:12px;">
           <div class="form-group" style="margin-bottom:0;">
             <label>Custom global settings
-              <i class="info-tip tip-right" data-tip="Lines entered here are appended verbatim to the [global] section inside the ZFS NAS managed block in smb.conf.&#10;&#10;One Samba parameter per line, e.g.:&#10;  server string = My NAS&#10;  interfaces = lo eth0&#10;  bind interfaces only = yes&#10;&#10;Section headers (lines starting with [) are ignored. Changes take effect after saving and reloading Samba.&#10;&#10;Warning: for expert users only — incorrect values can prevent Samba from starting."></i>
+              <i class="info-tip tip-right" data-tip="Lines entered here are appended verbatim to the [global] section inside the ZNAS-managed block in smb.conf.&#10;&#10;One Samba parameter per line, e.g.:&#10;  server string = My NAS&#10;  interfaces = lo eth0&#10;  bind interfaces only = yes&#10;&#10;Section headers (lines starting with [) are ignored. Changes take effect after saving and reloading Samba.&#10;&#10;Warning: for expert users only — incorrect values can prevent Samba from starting."></i>
             </label>
             <textarea id="smb-cfg-custom-global" rows="5" spellcheck="false"
               style="width:100%;font-family:monospace;font-size:12px;resize:vertical;background:var(--surface2);color:var(--text-1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;box-sizing:border-box;"
@@ -10695,7 +10695,7 @@ Select the Console tab to load.</pre>
 
       <div style="background:var(--surface-2);border-radius:8px;padding:16px;border-left:3px solid rgba(48,209,88,0.5);">
         <div style="font-weight:600;color:var(--accent-3);margin-bottom:10px;">Step 1 — Generate an SSH key on this server</div>
-        <p style="margin:0 0 8px;color:var(--text-2);font-size:13px;">Run this on the ZFS NAS server (as the user shown in Remote User):</p>
+        <p style="margin:0 0 8px;color:var(--text-2);font-size:13px;">Run this on the ZNAS server (as the user shown in Remote User):</p>
         <pre style="margin:0;background:#1e2632;border-radius:6px;padding:10px;font-size:12px;color:#c9d1d9;overflow-x:auto;white-space:pre;">ssh-keygen -t ed25519 -C "zfsnas-replication" -f ~/.ssh/id_ed25519_zfsnas</pre>
       </div>
 
@@ -11310,11 +11310,11 @@ Select the Console tab to load.</pre>
     <div id="iscsi-config-alert" class="alert alert-error hidden"></div>
     <form onsubmit="submitISCSIConfig(event)">
       <div class="form-group">
-        <label>Base Name <i class="info-tip" data-tip="Used as prefix for all target IQNs generated by ZFSNAS.&#10;Format: iqn.yyyy-mm.reverse.domain:label"></i></label>
+        <label>Base Name <i class="info-tip" data-tip="Used as prefix for all target IQNs generated by ZNAS.&#10;Format: iqn.yyyy-mm.reverse.domain:label"></i></label>
         <input id="iscsi-config-basename" type="text" placeholder="iqn.2003-06.ca.chezmoi.zfsnas" />
       </div>
       <div class="form-group">
-        <label>Listen Port <i class="info-tip" data-tip="ZFSNAS will configure iSCSI portals on all network interfaces of this server listening on this port. Default: 3260."></i></label>
+        <label>Listen Port <i class="info-tip" data-tip="ZNAS will configure iSCSI portals on all network interfaces of this server listening on this port. Default: 3260."></i></label>
         <input id="iscsi-config-port" type="number" min="1" max="65535" placeholder="3260" />
       </div>
       <div class="modal-footer">
@@ -11569,7 +11569,7 @@ Select the Console tab to load.</pre>
           <input type="number" id="s3cfg-console-port" value="9001" min="1" max="65535">
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label>SSL/TLS <i class="info-tip" data-tip="Enable TLS on both the API and console ports. Select an existing certificate from your Certificate Management store, or choose &quot;Generate new&quot; to have ZFSNAS create a self-signed cert covering all local IPs automatically."></i></label>
+          <label>SSL/TLS <i class="info-tip" data-tip="Enable TLS on both the API and console ports. Select an existing certificate from your Certificate Management store, or choose &quot;Generate new&quot; to have ZNAS create a self-signed cert covering all local IPs automatically."></i></label>
           <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:14px;font-weight:normal;cursor:pointer;">
             <input type="checkbox" id="s3cfg-tls" onchange="s3cfgToggleTLS()"> Enable SSL/TLS
           </label>
@@ -11688,7 +11688,7 @@ Select the Console tab to load.</pre>
         <input type="text" id="s3bkt-name" placeholder="my-bucket-name" autocomplete="off">
       </div>
       <div class="form-group">
-        <label>Comment <i class="info-tip" data-tip="Optional label stored in the ZFSNAS configuration. Not visible to S3 clients."></i></label>
+        <label>Comment <i class="info-tip" data-tip="Optional label stored in the ZNAS configuration. Not visible to S3 clients."></i></label>
         <input type="text" id="s3bkt-comment" placeholder="Optional description">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -12049,7 +12049,7 @@ Select the Console tab to load.</pre>
         <div class="divider"></div>
         <h3 style="margin-bottom:8px;">Install as Systemd Service?</h3>
         <p class="text-2" style="font-size:13px;margin-bottom:12px;">
-          This will register ZFS NAS to start automatically on boot, running as the current user from the current directory.
+          This will register ZNAS to start automatically on boot, running as the current user from the current directory.
         </p>
         <div class="flex gap-2">
           <button class="btn btn-ghost btn-sm" onclick="skipService()">Skip</button>
@@ -12125,7 +12125,7 @@ Select the Console tab to load.</pre>
     </div>
     <div class="modal-body">
       <p style="font-size:14px;color:var(--text-2);margin-bottom:16px;">
-        To let ZFS NAS manage its own sudoers file automatically, add the following alias to
+        To let ZNAS manage its own sudoers file automatically, add the following alias to
         <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:12px;">/etc/sudoers.d/zfsnas</code>
         and include it in the grant line.
       </p>
@@ -12333,12 +12333,12 @@ Select the Console tab to load.</pre>
 
     <!-- Logo -->
     <div style="margin-bottom:18px;margin-top:4px;">
-      <img src="/static/logo.svg" alt="ZFS NAS" style="height:58px;object-fit:contain;opacity:.95;">
+      <img src="/static/logo.svg" alt="ZNAS" style="height:58px;object-fit:contain;opacity:.95;">
     </div>
 
     <!-- Tagline -->
     <p style="font-size:13px;color:var(--text-2);margin-bottom:20px;line-height:1.65;max-width:380px;margin-left:auto;margin-right:auto;">
-      <strong style="color:var(--text-1);">ZFS NAS Chezmoi</strong> is a free, 100% open-source NAS management portal —
+      <strong style="color:var(--text-1);">ZNAS by chezmoi</strong> is a free, 100% open-source NAS management portal —
       now and forever.<br>No subscriptions, no licensing, no hidden costs.
     </p>
 
@@ -15830,7 +15830,7 @@ async function loadPrereqs() {
   // Service status
   const svcEl = document.getElementById('service-status');
   if (prereqData.service_installed) {
-    svcEl.innerHTML = '<span style="color:var(--accent-3);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> systemd service installed — ZFS NAS will start on boot</span>';
+    svcEl.innerHTML = '<span style="color:var(--accent-3);"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> systemd service installed — ZNAS will start on boot</span>';
   } else {
     svcEl.innerHTML = '<span style="color:var(--text-2);">Not installed as a systemd service.</span>';
     if (currentUser.role === 'admin') {
@@ -24218,7 +24218,7 @@ function openPowerModal(action) {
   btn.disabled = false;
   if (action === 'restart-portal') {
     document.getElementById('power-modal-title').innerHTML = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Restart Portal';
-    document.getElementById('power-modal-body').textContent = 'The ZFS NAS portal service will restart. Active sessions will be briefly disconnected. The page will reconnect automatically.';
+    document.getElementById('power-modal-body').textContent = 'The ZNAS portal service will restart. Active sessions will be briefly disconnected. The page will reconnect automatically.';
     btn.textContent = 'Restart Portal';
   } else if (action === 'reboot') {
     document.getElementById('power-modal-title').innerHTML = '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Reboot Server';
@@ -33422,7 +33422,7 @@ function _certMenu(e, name, canActivate, canDelete) {
   };
   const sep = () => { const d = document.createElement('div'); d.style.borderTop = '1px solid var(--border)'; return d; };
 
-  dd.appendChild(mkBtn('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> Use for ZFSNAS', 'var(--text-1)', !canActivate, () => activateCert(name)));
+  dd.appendChild(mkBtn('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M20 6 9 17l-5-5"/></svg> Use for ZNAS', 'var(--text-1)', !canActivate, () => activateCert(name)));
   dd.appendChild(sep());
   dd.appendChild(mkBtn('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> Export', 'var(--text-1)', false, () => exportCert(name)));
   dd.appendChild(sep());
@@ -34374,7 +34374,7 @@ const _GUIDE_TOPICS = [
       ${_gIdeas([
         ['Roles', '<em>admin</em> (everything), <em>standard</em> (pick from 11 permissions), <em>read-only</em>, and <em>smb-only</em> (file sharing only).'],
         ['Two-factor login', 'Turn on TOTP for any account from its user settings; use an authenticator app.'],
-        ['Updates', window._appliance ? 'Platform → USB Appliance Upgrades installs new signed images; the portal updates separately.' : 'Platform → ZFSNAS Instant Update installs new signed releases in seconds.'],
+        ['Updates', window._appliance ? 'Platform → USB Appliance Upgrades installs new signed images; the portal updates separately.' : 'Platform → ZNAS Instant Update installs new signed releases in seconds.'],
         ['Many servers', 'Link several ZNAS with InterLink and switch between them from the server name menu.'],
       ])}
       <div class="guide-actions">${_gBtn('Manage users', 'users', true)}${_gBtn('Security settings', 'security')}${_gBtn('Open Platform', 'platform', false, false)}</div>
@@ -39515,7 +39515,7 @@ function applyTheme(theme) {
 
   // Push the matching CodeMirror theme to any live editors (compose
   // create modal, docker-edit modal, …) so colours stay in step with
-  // the ZFSNAS theme the user just picked. No-op when no editor is
+  // the ZNAS theme the user just picked. No-op when no editor is
   // currently mounted. v6.5.26.
   if (typeof _cmRefreshThemeForAllInstances === 'function') _cmRefreshThemeForAllInstances();
 
@@ -58412,7 +58412,7 @@ function _ctEnvAutoGrow(ta) {
 // Mount a CodeMirror editor on the textarea with the given id. Idempotent
 // — a second call refreshes layout (after a hidden→visible transition)
 // instead of mounting twice.
-// v6.5.26 — pick the CodeMirror theme name that matches the ZFSNAS
+// v6.5.26 — pick the CodeMirror theme name that matches the ZNAS
 // theme currently applied to <body>. Only the light-family themes
 // (`light` and `dawn`) switch to CM's built-in `default` (light); every
 // dark/coloured theme keeps Dracula, which contrasts well on all of
@@ -58425,7 +58425,7 @@ function _cmThemeForBody() {
 
 // _cmInstances tracks every live editor so `applyTheme` can push the
 // new theme across them in-place when the user picks a different
-// ZFSNAS theme while a modal is open. It's stored on `window` rather
+// ZNAS theme while a modal is open. It's stored on `window` rather
 // than as a lexical `const` because the file's boot-time applyTheme()
 // call (near the top of the script) is reached *before* this line in
 // source order — and a lexical `const` would throw a Temporal Dead
@@ -62073,7 +62073,7 @@ function showToast(msg, type = 'error') {
     </div>
     <div class="modal-body">
       <p style="font-size:14px;color:var(--text-2);margin-bottom:8px;">
-        You are about to downgrade ZFSNAS to <strong id="rn-downgrade-ver" style="font-family:'SF Mono',monospace;"></strong>.
+        You are about to downgrade ZNAS to <strong id="rn-downgrade-ver" style="font-family:'SF Mono',monospace;"></strong>.
       </p>
       <p style="font-size:13px;color:var(--text-3);">
         This will replace the running binary and restart the portal. Ensure the older version is compatible with your current configuration.

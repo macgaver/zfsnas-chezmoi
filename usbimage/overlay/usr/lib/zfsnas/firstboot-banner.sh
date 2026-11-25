@@ -21,7 +21,7 @@ IPS=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^$' \
 mkdir -p /etc/issue.d
 {
     echo ""
-    echo "  ZNAS Appliance ${VER} — ZFS NAS Portal"
+    echo "  ZNAS Appliance ${VER}"
     if [ "$FIRSTRUN" = "1" ]; then
         echo "  First run — create your admin account at:"
     else

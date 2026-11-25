@@ -46,7 +46,7 @@ sleep 2   # let the remaining ports settle so a second NIC is not missed
 
 {
     echo "# /etc/network/interfaces — generated on first boot by zfsnas-netgen."
-    echo "# Managed by the ZFS NAS Portal: change network settings from the"
+    echo "# Managed by the ZNAS Portal: change network settings from the"
     echo "# portal, not by hand. Delete $(basename "$MARKER") and reboot to"
     echo "# regenerate this file from the hardware."
     echo ""

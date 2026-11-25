@@ -83,7 +83,7 @@ func HandleLoginPage(staticContent func(name string) ([]byte, error), appCfg *co
 			hostname = "localhost"
 		}
 		title := "ZNAS - " + strings.ToUpper(hostname)
-		data = bytes.Replace(data, []byte("<title>ZFS NAS — Sign In</title>"), []byte("<title>"+title+"</title>"), 1)
+		data = bytes.Replace(data, []byte("<title>ZNAS — Sign In</title>"), []byte("<title>"+title+"</title>"), 1)
 		theme := appCfg.LoginTheme
 		if theme == "" {
 			theme = "dark"
@@ -391,7 +391,7 @@ func HandleTOTPSetup(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusInternalServerError, "failed to generate TOTP secret")
 		return
 	}
-	uri := totp.OTPAuthURI(secret, sess.Username, "ZFS NAS")
+	uri := totp.OTPAuthURI(secret, sess.Username, "ZNAS")
 	jsonOK(w, map[string]string{
 		"secret": secret,
 		"uri":    uri,

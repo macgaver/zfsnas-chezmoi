@@ -30,7 +30,7 @@ func Generate(certFile, keyFile string) error {
 	template := &x509.Certificate{
 		SerialNumber: func() *big.Int { n, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128)); return n }(),
 		Subject: pkix.Name{
-			Organization: []string{"ZFS NAS Portal"},
+			Organization: []string{"ZNAS Portal"},
 			CommonName:   "zfsnas",
 		},
 		NotBefore:             time.Now().Add(-time.Minute),

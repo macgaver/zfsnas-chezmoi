@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  ZFS NAS Portal — Quick Installer for Debian / Ubuntu
+#  ZNAS Portal — Quick Installer for Debian / Ubuntu
 #  Script version 1.5
 #  https://github.com/macgaver/zfsnas-chezmoi
 #
@@ -36,7 +36,7 @@ GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 ZFS_NEEDS_MOK=false          # set when Secure Boot refuses the freshly built ZFS module
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
-header "ZFS NAS Portal — Quick Installer"
+header "ZNAS Portal — Quick Installer"
 
 if [[ $EUID -ne 0 ]]; then
   # $0 is unhelpful here when invoked via "bash -c <script>" (it's "bash") or
@@ -64,7 +64,7 @@ if zpool status &>/dev/null; then
 else
   warn "ZFS does not appear to be available on this system (zpool status failed)."
   echo
-  echo -e "  ZFS NAS Portal requires ZFS to manage pools and datasets."
+  echo -e "  ZNAS Portal requires ZFS to manage pools and datasets."
   echo -e "  The installer can set it up for you now:"
   echo
   if [[ "${DISTRO}" == "debian" ]]; then
@@ -331,7 +331,7 @@ chown "${ZFSNAS_USER}:${ZFSNAS_USER}" "${ZFSNAS_HOME}/.profile"
 header "Configuring sudo access"
 
 cat > "${SUDOERS_FILE}" << SUDOERS
-# ZFS NAS Portal — passwordless sudo required for ZFS, Samba, NFS, SMART, and power commands
+# ZNAS Portal — passwordless sudo required for ZFS, Samba, NFS, SMART, and power commands
 ${ZFSNAS_USER} ALL=(ALL) NOPASSWD: ALL
 SUDOERS
 chmod 0440 "${SUDOERS_FILE}"
@@ -344,7 +344,7 @@ fi
 success "Sudoers configured at ${SUDOERS_FILE}"
 
 # ── Download binary ───────────────────────────────────────────────────────────
-header "Downloading ZFS NAS binary"
+header "Downloading ZNAS binary"
 
 info "Fetching latest release from GitHub…"
 RELEASE_JSON=$(curl -fsSL "${GITHUB_API}" 2>/dev/null) || fatal "Could not reach GitHub API. Check your internet connection."
@@ -396,7 +396,7 @@ header "Installing systemd service"
 
 cat > "${UNIT_FILE}" << UNIT
 [Unit]
-Description=ZFS NAS Management Portal
+Description=ZNAS Management Portal
 Documentation=https://github.com/${GITHUB_REPO}
 After=network.target
 
@@ -436,7 +436,7 @@ SETUP_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo
 echo -e "${GREEN}$(printf '═%.0s' {1..60})${RESET}"
-echo -e "${BOLD}${GREEN}  ZFS NAS Portal installed successfully!${RESET}"
+echo -e "${BOLD}${GREEN}  ZNAS Portal installed successfully!${RESET}"
 echo -e "${GREEN}$(printf '═%.0s' {1..60})${RESET}"
 echo
 if [[ "${ZFS_NEEDS_MOK}" == "true" ]]; then

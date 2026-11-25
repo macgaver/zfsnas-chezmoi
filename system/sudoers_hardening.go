@@ -624,7 +624,7 @@ func ApplySudoers(required string, silencedMissing, silencedExtra []string) erro
 // SudoAllContent returns the minimal single-line sudoers file that grants
 // the zfsnas service account unrestricted passwordless sudo access.
 func SudoAllContent() string {
-	return "# ZFS NAS Portal — unrestricted sudo access\n" +
+	return "# ZNAS Portal — unrestricted sudo access\n" +
 		"# Applied via the \"Convert to sudo all\" option in the Sudoers Hardening UI.\n" +
 		"# This is the most frictionless configuration: the zfsnas service account can\n" +
 		"# run any command as root without a password prompt.\n" +

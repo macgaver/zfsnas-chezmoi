@@ -221,7 +221,7 @@ func HandleInstallService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	unit := fmt.Sprintf(`[Unit]
-Description=ZFS NAS Management Portal
+Description=ZNAS Management Portal
 After=network.target
 
 [Service]
@@ -267,7 +267,7 @@ WantedBy=multi-user.target
 	})
 
 	jsonOK(w, map[string]string{
-		"message": fmt.Sprintf("Service installed and enabled. ZFS NAS will start on boot as user %s.", currentUser.Username),
+		"message": fmt.Sprintf("Service installed and enabled. ZNAS will start on boot as user %s.", currentUser.Username),
 	})
 }
 
