@@ -205,6 +205,7 @@
     greynoise: ['GreyNoise', 'Is it an Internet-wide scanner, and is it known as harmful?'],
     shodan: ['Shodan', 'Its open ports, names, tags and known vulnerabilities (Shodan InternetDB)'],
     abuseipdb: ['AbuseIPDB', 'Abuse reports from other networks and a confidence score'],
+    vpndetection: ['VPNDetection', 'Is it a VPN, Tor or relay exit?'],
   };
   function verdictOf(d) {
     if (d.lists.length) return ['off', 'On a blocklist'];
@@ -225,6 +226,10 @@
       if (!v.found) return '<div class="fw-hc-none">Shodan knows nothing about this address.</div>';
       const vulns = v.vulns || [];
       return `<div class="fw-hc-kv">${row('Open ports', (v.ports || []).length ? E(v.ports.join(', ')) : 'None seen', 'fw-mono')}${row('Names', E((v.hostnames || []).slice(0, 4).join(', ')))}${row('Software', E((v.cpes || []).slice(0, 3).map(c => c.replace(/^cpe:\/[aho]:/, '').replace(/:/g, ' ')).join(', ')))}${row('Known CVEs', vulns.length ? `<b class="blk">${vulns.length}</b> ${E(vulns.slice(0, 4).join(', '))}${vulns.length > 4 ? '…' : ''}` : '')}</div>${(v.tags || []).length ? `<div class="fw-hc-tags" style="margin-top:6px">${v.tags.map(t => `<span>${E(t)}</span>`).join('')}</div>` : ''}${link('https://www.shodan.io/host/' + ip, 'Open in Shodan')}`;
+    }
+    if (svc === 'vpndetection') {
+      const relay = v.is_relay ? (v.relay && v.relay.provider_name) || 'Yes' : '';
+      return `<div class="fw-hc-kv">${row('VPN', v.is_vpn ? 'Yes' : 'No')}${row('Tor', v.is_tor ? 'Yes' : 'No')}${row('Relay', E(relay))}${row('Network', E((v.asn && v.asn.type) || ''))}</div>${link('https://vpndetection.io/' + ip, 'Open in VPNDetection')}`;
     }
     const sc = +v.abuseConfidenceScore || 0, col = sc >= 50 ? 'var(--fw-blk)' : sc >= 15 ? '#ff9f0a' : '#30d158';
     return `<div class="fw-hc-score"><div><i style="width:${Math.max(2, sc)}%;background:${col}"></i></div><b style="color:${col}">${sc}%</b><small>abuse confidence</small></div>
