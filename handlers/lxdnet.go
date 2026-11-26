@@ -259,6 +259,19 @@ func HandleListStoragePoolInfos(w http.ResponseWriter, r *http.Request) {
 	if pools == nil {
 		pools = []system.LXDStoragePool{}
 	}
+	// What still uses each datastore — the Delete item's reasons. Best
+	// effort: the list still renders without it.
+	names := make([]string, len(pools))
+	for i, p := range pools {
+		names[i] = p.Name
+	}
+	if len(names) > 0 {
+		if usages, err := system.LXDPoolUsages(names); err == nil {
+			for i := range pools {
+				pools[i].Usage = usages[pools[i].Name]
+			}
+		}
+	}
 	jsonOK(w, pools)
 }
 

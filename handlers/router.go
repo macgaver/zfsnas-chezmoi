@@ -1200,6 +1200,19 @@ func NewRouter(staticFS fs.FS, readFile func(string) ([]byte, error), appCfg *co
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleEditStoragePool)))).Methods("PUT")
 	r.Handle("/api/lxd/storage-pools/{name}",
 		RequireAuth(RequireAdmin(http.HandlerFunc(HandleDeleteStoragePool)))).Methods("DELETE")
+	// 6.11.26 — default datastore + "Move contents" (handlers/ds_evacuate.go).
+	r.Handle("/api/lxd/storage-pools/{name}/usage",
+		RequireAuth(http.HandlerFunc(HandleStoragePoolUsage))).Methods("GET")
+	r.Handle("/api/lxd/storage-pools/{name}/set-default",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleSetDefaultStoragePool)))).Methods("POST")
+	r.Handle("/api/lxd/storage-pools/{name}/evacuate-plan",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleEvacuatePlan)))).Methods("GET")
+	r.Handle("/api/lxd/storage-pools/{name}/evacuate",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleEvacuateStart)))).Methods("POST")
+	r.Handle("/api/lxd/storage-evacuate/{id}/progress",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleEvacuateProgress)))).Methods("GET")
+	r.Handle("/api/lxd/storage-evacuate/{id}/cancel",
+		RequireAuth(RequireAdmin(http.HandlerFunc(HandleEvacuateCancel)))).Methods("POST")
 	r.Handle("/api/lxd/storage-pools/{name}/members",
 		RequireAuth(http.HandlerFunc(HandleGetStoragePoolMembers))).Methods("GET")
 	r.Handle("/api/lxd/storage-pools/{name}/vdisks",

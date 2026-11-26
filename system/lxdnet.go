@@ -1227,6 +1227,10 @@ type LXDStoragePool struct {
 	Config        map[string]string `json:"config"`
 	Source        string            `json:"source"`
 	InstanceCount int               `json:"instance_count"`
+	// IsDefault: the `default` profile's root disk names this pool, so new
+	// VMs/containers created without a datastore get their disk here.
+	IsDefault bool       `json:"is_default"`
+	Usage     *PoolUsage `json:"usage,omitempty"` // filled by the detail list handler
 }
 
 // LXDListStoragePoolInfos returns all LXD storage pools with full detail.
@@ -1247,6 +1251,10 @@ func LXDListStoragePoolInfos() ([]LXDStoragePool, error) {
 		return nil, err
 	}
 	pools := make([]LXDStoragePool, 0, len(raw))
+	def := ""
+	if len(raw) > 0 {
+		def = LXDDefaultProfileRootPool()
+	}
 	for _, r := range raw {
 		count := 0
 		for _, u := range r.UsedBy {
@@ -1266,6 +1274,7 @@ func LXDListStoragePoolInfos() ([]LXDStoragePool, error) {
 			Config:        r.Config,
 			Source:        source,
 			InstanceCount: count,
+			IsDefault:     r.Name == def,
 		})
 	}
 	return pools, nil

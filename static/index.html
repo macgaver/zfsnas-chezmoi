@@ -2388,6 +2388,7 @@
       <div class="page hidden" id="page-lxd">
         <div class="page-header" style="display:flex;align-items:center;gap:12px;">
           <h2 style="margin:0;">VMs &amp; Containers</h2>
+          <span id="lxd-tag-filter-chip" class="lxd-tag-filter-chip hidden"></span>
           <span onclick="loadLXDInstances()" title="Refresh" style="cursor:pointer;color:var(--text-2);padding:4px 6px;line-height:1;user-select:none;display:inline-flex;align-items:center;flex-shrink:0;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-2)'">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
           </span>
@@ -4907,6 +4908,10 @@
           <button class="btn btn-primary btn-sm" onclick="openAddDatastoreModal()">+ Add Datastore</button>
         </div>
         <div id="lxd-datastores-alert" class="alert alert-error hidden" style="margin-bottom:12px;"></div>
+        <div class="ds-default-note" id="lxd-ds-default-note">
+          <span class="ds-default-pill"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M11.48 3.5a.56.56 0 0 1 1.04 0l2.13 5.11a.56.56 0 0 0 .48.35l5.52.44a.56.56 0 0 1 .32.99l-4.2 3.6a.56.56 0 0 0-.18.56l1.28 5.39a.56.56 0 0 1-.84.61l-4.73-2.89a.56.56 0 0 0-.58 0l-4.73 2.89a.56.56 0 0 1-.84-.61l1.28-5.39a.56.56 0 0 0-.18-.56l-4.2-3.6a.56.56 0 0 1 .32-.99l5.52-.44a.56.56 0 0 0 .48-.35z"/></svg> Default</span>
+          <span>New VMs and containers get their disk on the <b>default datastore</b> unless you pick another one when you create them. It holds no VM settings: each VM's configuration stays with its own disk, wherever that disk is. Changing the default moves nothing.</span>
+        </div>
         <div class="card" style="padding:0;overflow:hidden;">
           <table class="data-table" id="lxd-datastores-table">
             <thead>
@@ -4915,7 +4920,7 @@
                 <th>Description</th>
                 <th style="width:70px;">Driver</th>
                 <th>ZFS Source</th>
-                <th style="width:60px;">VMs</th>
+                <th>Contents</th>
                 <th style="width:80px;">State</th>
                 <th style="width:40px;"></th>
               </tr>
@@ -5114,6 +5119,35 @@
           <div class="modal-footer">
             <button class="btn btn-ghost" onclick="document.getElementById('modal-delete-datastore').classList.add('hidden')">Cancel</button>
             <button class="btn btn-danger" id="del-ds-submit" onclick="submitDeleteDatastore()">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Move contents of a datastore (6.11.26) -->
+      <div class="modal-backdrop hidden" id="modal-ds-evacuate">
+        <div class="modal" style="max-width:620px;">
+          <div class="modal-header">
+            <h3 id="dse-title">Move contents</h3>
+            <button class="modal-close" onclick="_dseClose()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div style="padding:0 24px 8px;">
+            <p style="margin:0 0 12px;color:var(--text-2);font-size:13px;">Moves everything on this datastore to another one, one item at a time. Running VMs and containers are shut down only for their own move. If an item fails, its VMs and containers are started again and the move stops there; running it again picks up what is left.</p>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+              <label for="dse-target" style="font-size:13px;color:var(--text-2);">Move to</label>
+              <div style="min-width:220px;"><select id="dse-target" class="input" onchange="_dseLoadPlan()"></select></div>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-2);margin-bottom:10px;">
+              <input type="checkbox" id="dse-restart" checked onchange="if(_dsePlan)_dseRenderSteps(_dsePlan.steps||[],document.getElementById('dse-target').value,this.checked)"> Start running VMs and containers again after they are moved
+            </label>
+            <div id="dse-alert" class="alert alert-error hidden" style="margin-bottom:10px;"></div>
+            <div class="dse-steps-wrap"><table class="data-table"><tbody id="dse-steps"></tbody></table></div>
+            <div id="dse-space" style="font-size:12px;color:var(--text-2);margin:10px 0 4px;"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" id="dse-close" onclick="_dseClose()">Cancel</button>
+            <button class="btn btn-secondary hidden" id="dse-cancel-job" onclick="_dseCancelJob()">Stop after this item</button>
+            <button class="btn btn-danger hidden" id="dse-delete" onclick="_dseDeleteNow()">Delete datastore now…</button>
+            <button class="btn btn-primary" id="dse-start" onclick="_dseStart()">Start move</button>
           </div>
         </div>
       </div>
@@ -46009,14 +46043,17 @@ function renderComputeNav(instances) {
   const sorted = instances.slice().sort(_byInstName);
 
   // Render one collapsible group. swatch = optional color (By-Tag).
-  const groupHTML = (id, label, items, swatch) => {
+  const groupHTML = (id, label, items, swatch, tagKey) => {
     if (!items.length) return '';
+    // By-Tag rows: right-click → Start all / Stop all / Show all for the group.
+    const ctx = tagKey != null
+      ? ` oncontextmenu='_lxdTagGroupMenu(event,${JSON.stringify(tagKey)})' title="Right-click for group actions"` : '';
     const isCol = collapsed.has(id);
     // Every group row uses the same triangle. By-Tag rows tint it with the
     // tag color (caret + dot merged); Untagged and By-Type rows leave it the
     // theme text color (currentColor).
     const head = `<span class="nav-group-tri${isCol ? '' : ' open'}"${swatch ? ` style="border-left-color:${swatch};"` : ''}></span>`;
-    return `<div class="nav-group-header" onclick='_lxdToggleGroup(${JSON.stringify(id)})'>
+    return `<div class="nav-group-header" onclick='_lxdToggleGroup(${JSON.stringify(id)})'${ctx}>
         ${head}
         <span class="nav-group-label">${esc(label)}</span>
         <span class="nav-group-count">${items.length}</span>
@@ -46038,10 +46075,10 @@ function renderComputeNav(instances) {
     sorted.forEach(i => (i.tags || []).forEach(t => tagNames.add(t)));
     let html = '';
     Array.from(tagNames).sort().forEach(t => {
-      html += groupHTML('tag:' + t, t, sorted.filter(i => (i.tags || []).includes(t)), _tagColor(t));
+      html += groupHTML('tag:' + t, t, sorted.filter(i => (i.tags || []).includes(t)), _tagColor(t), t);
     });
     const untagged = sorted.filter(i => !(i.tags && i.tags.length));
-    html += groupHTML('tag:__untagged', 'Untagged', untagged);
+    html += groupHTML('tag:__untagged', 'Untagged', untagged, null, '__untagged');
     el.innerHTML = html;
   } else {
     el.innerHTML = sorted.map(instBtn).join('');
@@ -46110,7 +46147,83 @@ function _lxdComputeRootMenu(ev) {
   ], 'compute-root-group');
 }
 
-function switchToLXDTable() {
+// ---- By-Tag group actions (sidebar right-click on a tag group header) ----
+// tagKey is the tag name, or '__untagged' for the Untagged group.
+let _lxdTagFilter = null;   // VMs & Containers table limited to one tag group
+function _lxdTagMatches(inst, tagKey) {
+  const tags = inst.tags || [];
+  return tagKey === '__untagged' ? tags.length === 0 : tags.includes(tagKey);
+}
+function _lxdTagLabel(tagKey) { return tagKey === '__untagged' ? 'Untagged' : tagKey; }
+function _lxdTagMembers(tagKey) {
+  return (_lxdInstancesCache || [])
+    .filter(i => !((i.name || '').startsWith('bkup--')) && _lxdTagMatches(i, tagKey));
+}
+function _lxdTagGroupMenu(ev, tagKey) {
+  ev.preventDefault(); ev.stopPropagation();
+  const members = _lxdTagMembers(tagKey);
+  const toStart = members.filter(i => i.status === 'Stopped');
+  const toStop  = members.filter(i => i.status === 'Running');
+  const canCtl  = hasPerm('control_instances');
+  const ico = (path) => `<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em">${path}</svg>`;
+  const items = [{kind:'header', label: _lxdTagLabel(tagKey) + ' · ' + members.length}];
+  if (canCtl) {
+    items.push({kind:'item', label: ico('<polygon points="6 3 20 12 6 21 6 3"/>') + ' Start all' + (toStart.length ? ` (${toStart.length})` : ''),
+      enabled: toStart.length > 0, dis_tip: 'All are already running',
+      onclick: () => _lxdTagStartAll(tagKey)});
+    items.push({kind:'item', label: ico('<rect width="18" height="18" x="3" y="3" rx="2"/>') + ' Stop all' + (toStop.length ? ` (${toStop.length})` : ''),
+      enabled: toStop.length > 0, dis_tip: 'None are running',
+      onclick: () => _lxdTagStopAll(tagKey)});
+    items.push({kind:'divider'});
+  }
+  items.push({kind:'item', label: ico('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>') + ' Show all',
+    onclick: () => _lxdShowTagTable(tagKey)});
+  _ciCtxBuild(ev.clientX, ev.clientY, items, 'tag-group:' + tagKey);
+}
+// Start the stopped members; running ones are left alone.
+function _lxdTagStartAll(tagKey) {
+  const list = _lxdTagMembers(tagKey).filter(i => i.status === 'Stopped');
+  if (!list.length) { showToast('Nothing to start in ' + _lxdTagLabel(tagKey), 'info'); return; }
+  list.forEach(i => lxdPowerAction(i.name, 'start'));
+  showToast('Starting ' + list.length + ' in ' + _lxdTagLabel(tagKey), 'success');
+}
+// Graceful shutdown of the running members, after a confirmation.
+function _lxdTagStopAll(tagKey) {
+  const list = _lxdTagMembers(tagKey).filter(i => i.status === 'Running');
+  if (!list.length) { showToast('Nothing running in ' + _lxdTagLabel(tagKey), 'info'); return; }
+  const names = list.map(i => `<li>${esc(i.description || i.name)}${i.description ? ` <span style="color:var(--text-3);font-family:monospace;font-size:11px;">${esc(i.name)}</span>` : ''}</li>`).join('');
+  showConfirm({
+    title: 'Stop all in ' + _lxdTagLabel(tagKey) + '?',
+    body: `<p style="margin:0 0 8px;">These ${list.length} running VM/LXC will be shut down gracefully:</p>
+           <ul style="margin:0 0 0 18px;padding:0;max-height:240px;overflow:auto;">${names}</ul>`,
+    confirmText: 'Stop ' + list.length,
+    danger: true,
+    onConfirm: () => { list.forEach(i => lxdPowerAction(i.name, 'shutdown')); },
+  });
+}
+// VMs & Containers table limited to one tag group.
+function _lxdShowTagTable(tagKey) {
+  switchToLXDTable(tagKey);
+}
+function _lxdClearTagFilter() {
+  _lxdTagFilter = null;
+  if (_lxdInstancesCache) _lxdRenderSorted();
+}
+function _lxdRenderTagFilterChip() {
+  const chip = document.getElementById('lxd-tag-filter-chip');
+  if (!chip) return;
+  if (!_lxdTagFilter) { chip.classList.add('hidden'); chip.innerHTML = ''; return; }
+  const sw = _lxdTagFilter === '__untagged' ? 'var(--text-3)' : _tagColor(_lxdTagFilter);
+  chip.innerHTML = `<span class="lxd-tag-filter-dot" style="background:${sw};"></span>Tag: <b>${esc(_lxdTagLabel(_lxdTagFilter))}</b>
+    <span class="lxd-tag-filter-x" title="Show all VMs & Containers" onclick="_lxdClearTagFilter()"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>`;
+  chip.classList.remove('hidden');
+}
+
+// tagKey (optional): limit the table to that tag group; without it the
+// table shows everything (clicking the Compute row clears a tag filter).
+function switchToLXDTable(tagKey) {
+  _lxdTagFilter = (typeof tagKey === 'string' && tagKey) ? tagKey : null;
+  if (_lxdInstancesCache) _lxdRenderSorted();
   _stopCIStatsPolling();
   showPage('lxd');
   if (_sidebarMode === 'compute') {
@@ -49631,6 +49744,11 @@ function _bgPollRestoreJob(jobId, label, onDone) {
 // What to refresh when a discovered job of each kind finishes. Optional: a kind
 // with no entry simply updates the activity bar and nothing else.
 const _JOB_ONDONE = {
+  'ds-evacuate': () => {
+    _lxdStorageCacheDS = [];
+    if (typeof loadLXDDatastores === 'function' && !document.getElementById('page-lxd-datastores').classList.contains('hidden')) loadLXDDatastores();
+    if (typeof loadLXDInstances === 'function') loadLXDInstances();
+  },
   backup:  () => _bgJobBoardRefresh(),
   restore: () => _bgJobBoardRefresh(),
   rsync:   () => { if (typeof loadExtStorages === 'function') loadExtStorages(); },
@@ -53481,6 +53599,8 @@ function _lxdRenderRows(instances) {
   // v6.5.19: defensive filter — backups (bkup--*) never appear in the main
   // VMs & Containers table.
   instances = (instances || []).filter(i => !((i.name || '').startsWith('bkup--')));
+  _lxdRenderTagFilterChip();
+  if (_lxdTagFilter) instances = instances.filter(i => _lxdTagMatches(i, _lxdTagFilter));
   // Defence-in-depth dedup by name. The backend already filters duplicates
   // out of `incus list --format json` (see listLXDInstancesImpl) and logs
   // them. The frontend guard is here so a future code path that merges
@@ -53499,7 +53619,7 @@ function _lxdRenderRows(instances) {
   if (imgTh) imgTh.style.display = hasImg ? '' : 'none';
   const colCount = (hasImg ? 11 : 10) + 4;
   if (!instances || instances.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:var(--text-3);padding:32px;">No VMs or containers found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:var(--text-3);padding:32px;">${_lxdTagFilter ? 'No VMs or containers in ' + esc(_lxdTagLabel(_lxdTagFilter)) + '.' : 'No VMs or containers found.'}</td></tr>`;
     return;
   }
   tbody.innerHTML = instances.map(inst => {
@@ -66043,9 +66163,240 @@ function renderDatastoresNav(pools) {
         oncontextmenu='event.preventDefault();_navContextMenuFor(event,"datastores",${JSON.stringify(p.name)})'>
       <span style="flex-shrink:0;font-size:15px;line-height:1;width:15px;text-align:center;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${esc(label)}</span>
+      ${p.is_default ? '<span class="ds-nav-default" title="Default datastore"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M11.48 3.5a.56.56 0 0 1 1.04 0l2.13 5.11a.56.56 0 0 0 .48.35l5.52.44a.56.56 0 0 1 .32.99l-4.2 3.6a.56.56 0 0 0-.18.56l1.28 5.39a.56.56 0 0 1-.84.61l-4.73-2.89a.56.56 0 0 0-.58 0l-4.73 2.89a.56.56 0 0 1-.84-.61l1.28-5.39a.56.56 0 0 0-.18-.56l-4.2-3.6a.56.56 0 0 1 .32-.99l5.52-.44a.56.56 0 0 0 .48-.35z"/></svg></span>' : ''}
       ${dot}
     </button>`;
   }).join('');
+}
+
+// ---- Default datastore + Move contents (6.11.26) ----
+function _dsPlural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+// What still uses a datastore, as short phrases (Delete reasons / Contents).
+function _dsDeleteBlockers(p) {
+  const u = p && p.usage;
+  if (!u) return (p && p.instance_count > 0) ? [_dsPlural(p.instance_count, 'VM/LXC', 'VM/LXC')] : [];
+  const out = [];
+  (u.profiles || []).forEach(n => out.push('the ' + n + ' profile'));
+  if ((u.instances || []).length) out.push(_dsPlural(u.instances.length, 'VM/LXC', 'VM/LXC'));
+  if ((u.custom_volumes || []).length) out.push(_dsPlural(u.custom_volumes.length, 'extra disk'));
+  if ((u.iso_volumes || []).length) out.push(_dsPlural(u.iso_volumes.length, 'ISO'));
+  if (u.images) out.push(_dsPlural(u.images, 'cached image'));
+  return out;
+}
+function _dsContentsHTML(p) {
+  const u = p.usage;
+  if (!u) return p.instance_count ? esc(_dsPlural(p.instance_count, 'VM/LXC', 'VM/LXC')) : '<span style="color:var(--text-3);">—</span>';
+  const parts = [];
+  if ((u.instances || []).length) parts.push(_dsPlural(u.instances.length, 'VM/LXC', 'VM/LXC'));
+  if ((u.custom_volumes || []).length) parts.push(_dsPlural(u.custom_volumes.length, 'extra disk'));
+  if ((u.iso_volumes || []).length) parts.push(_dsPlural(u.iso_volumes.length, 'ISO'));
+  if (u.images) parts.push(_dsPlural(u.images, 'cached image'));
+  if (!parts.length) return '<span style="color:var(--text-3);">Empty</span>';
+  return esc(parts.join(' · '));
+}
+
+function _dsSetDefault(name) {
+  const cur = (_lxdStorageCacheDS || []).find(p => p.is_default);
+  showConfirm({
+    title: 'Make ' + name + ' the default datastore?',
+    body: `<p style="margin:0 0 8px;">New VMs and containers will get their disk on <b>${esc(name)}</b> unless you pick another datastore when you create them.</p>
+           <p style="margin:0;color:var(--text-2);font-size:13px;">Nothing is moved and nothing has to stop: existing VMs and containers keep their disks${cur ? ' on <b>' + esc(cur.name) + '</b> and the other datastores' : ''}. To empty a datastore, use <b>Move contents…</b>.</p>`,
+    confirmText: 'Make default',
+    onConfirm: async () => {
+      try {
+        const r = await fetch('/api/incus/storage-pools/' + encodeURIComponent(name) + '/set-default', {method: 'POST'});
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        showToast(name + ' is now the default datastore', 'success');
+      } catch (e) {
+        showToast('Could not change the default: ' + e.message, 'error');
+      }
+      _lxdStorageCacheDS = [];
+      loadLXDDatastores();
+    },
+  });
+}
+
+let _dseSource = '', _dseJobId = '', _dsePollTimer = null, _dsePlan = null;
+const _DSE_ICON = {
+  profile:  '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M11.48 3.5a.56.56 0 0 1 1.04 0l2.13 5.11a.56.56 0 0 0 .48.35l5.52.44a.56.56 0 0 1 .32.99l-4.2 3.6a.56.56 0 0 0-.18.56l1.28 5.39a.56.56 0 0 1-.84.61l-4.73-2.89a.56.56 0 0 0-.58 0l-4.73 2.89a.56.56 0 0 1-.84-.61l1.28-5.39a.56.56 0 0 0-.18-.56l-4.2-3.6a.56.56 0 0 1 .32-.99l5.52-.44a.56.56 0 0 0 .48-.35z"/></svg>',
+  vm:       '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>',
+  ct:       '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+  volume:   '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>',
+  iso:      '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>',
+  image:    '<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+};
+function _dseStepText(s, target, restart) {
+  const tgt = target ? esc(target) : 'the target';
+  const stopTxt = (s.stop || []).length
+    ? ' Shuts down ' + s.stop.map(esc).join(', ') + ' first' + (restart ? ', then starts ' + (s.stop.length > 1 ? 'them' : 'it') + ' again.' : ' (left stopped).')
+    : '';
+  switch (s.kind) {
+    case 'profile':  return {icon: _DSE_ICON.profile, title: 'Profile ' + esc(s.name),
+      what: s.name === 'default' ? 'Becomes the default on ' + tgt + ': new VM/LXC go there.' : 'Root disk repointed to ' + tgt + '.'};
+    case 'instance': return {icon: s.type === 'virtual-machine' ? _DSE_ICON.vm : _DSE_ICON.ct, title: esc(s.name),
+      what: (s.type === 'virtual-machine' ? 'VM' : 'LXC') + ' moved with its snapshots' + ((s.vols || []).length ? ' and ' + s.vols.map(esc).join(', ') : '') + '.' + stopTxt};
+    case 'volume':   return {icon: s.type === 'iso' ? _DSE_ICON.iso : _DSE_ICON.volume, title: esc(s.name),
+      what: (s.type === 'iso' ? 'ISO' : 'Extra disk') + ' moved; the VMs using it follow automatically.' + stopTxt};
+    case 'image':    return {icon: _DSE_ICON.image, title: 'Cached image ' + esc(String(s.name).slice(0, 12)),
+      what: 'Deleted from this datastore (downloaded again when needed).'};
+  }
+  return {icon: '', title: esc(s.name), what: esc(s.kind)};
+}
+function _dseStatusHTML(s) {
+  switch (s.status) {
+    case 'running': return '<span class="dse-st dse-st-run">Working…</span>';
+    case 'done':    return '<span class="dse-st dse-st-ok">Done</span>';
+    case 'error':   return `<span class="dse-st dse-st-err" title="${esc(s.error || '')}">Failed</span>`;
+    case 'skipped': return '<span class="dse-st">Not done</span>';
+    default:        return '<span class="dse-st">Waiting</span>';
+  }
+}
+function _dseRenderSteps(steps, target, restart) {
+  const tb = document.getElementById('dse-steps');
+  if (!tb) return;
+  if (!steps.length) {
+    tb.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:18px;">Nothing to move.</td></tr>';
+    return;
+  }
+  tb.innerHTML = steps.map(s => {
+    const t = _dseStepText(s, target, restart);
+    const err = s.status === 'error' && s.error ? `<div class="dse-err">${esc(s.error)}</div>` : '';
+    return `<tr><td style="width:22px;color:var(--text-2);">${t.icon}</td>
+      <td><div style="font-weight:600;">${t.title}</div><div style="color:var(--text-2);font-size:12px;">${t.what}</div>${err}</td>
+      <td style="width:80px;text-align:right;">${_dseStatusHTML(s)}</td></tr>`;
+  }).join('');
+}
+async function openDsEvacuateModal(name) {
+  _dseSource = name; _dseJobId = ''; _dsePlan = null;
+  document.getElementById('dse-title').textContent = 'Move contents of ' + name;
+  document.getElementById('dse-alert').classList.add('hidden');
+  document.getElementById('dse-space').textContent = '';
+  document.getElementById('dse-restart').checked = true;
+  document.getElementById('dse-restart').disabled = false;
+  if (typeof initCustomSelect === 'function') initCustomSelect('dse-target');
+  const sel = document.getElementById('dse-target');
+  const others = (_lxdStorageCacheDS || []).filter(p => p.name !== name);
+  const def = others.find(p => p.is_default);
+  sel.innerHTML = others.map(p => `<option value="${esc(p.name)}">${esc(p.name)}${p.is_default ? ' (default)' : ''}</option>`).join('');
+  if (def) sel.value = def.name;
+  sel.disabled = false;
+  if (typeof csRefresh === 'function') csRefresh('dse-target');
+  _dseSetButtons('plan');
+  document.getElementById('dse-steps').innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:18px;">Loading…</td></tr>';
+  document.getElementById('modal-ds-evacuate').classList.remove('hidden');
+  await _dseLoadPlan();
+}
+async function _dseLoadPlan() {
+  const target = document.getElementById('dse-target').value;
+  const al = document.getElementById('dse-alert');
+  try {
+    const r = await fetch('/api/incus/storage-pools/' + encodeURIComponent(_dseSource) + '/evacuate-plan?target=' + encodeURIComponent(target));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    if (d.running_job) { _dseAttach(d.running_job); return; }
+    _dsePlan = d.plan;
+    _dseRenderSteps(d.plan.steps || [], target, document.getElementById('dse-restart').checked);
+    const sp = document.getElementById('dse-space');
+    let ok = true;
+    if (typeof d.target_free === 'number') {
+      ok = d.space_ok !== false;
+      sp.innerHTML = `Data to move: <b>${fmtBytes(d.plan.used_bytes || 0)}</b> · free on ${esc(target)}: <b>${fmtBytes(d.target_free)}</b>` +
+        (ok ? '' : ' — <span style="color:var(--danger);">not enough room</span>');
+    }
+    if (d.plan.blocked) { al.textContent = d.plan.blocked; al.classList.remove('hidden'); ok = false; }
+    else al.classList.add('hidden');
+    document.getElementById('dse-start').disabled = !ok || !(d.plan.steps || []).length;
+  } catch (e) {
+    al.textContent = e.message; al.classList.remove('hidden');
+    document.getElementById('dse-start').disabled = true;
+  }
+}
+function _dseSetButtons(mode) {
+  // mode: plan | running | done | error
+  const start = document.getElementById('dse-start'), del = document.getElementById('dse-delete'),
+        cancel = document.getElementById('dse-cancel-job'), close = document.getElementById('dse-close');
+  start.classList.toggle('hidden', mode !== 'plan');
+  cancel.classList.toggle('hidden', mode !== 'running');
+  del.classList.toggle('hidden', mode !== 'done');
+  close.textContent = mode === 'plan' ? 'Cancel' : 'Close';
+  const lock = mode !== 'plan';
+  document.getElementById('dse-target').disabled = lock;
+  document.getElementById('dse-restart').disabled = lock;
+  if (typeof csRefresh === 'function') csRefresh('dse-target');
+  if (typeof csSetDisabled === 'function') csSetDisabled('dse-target', lock);
+}
+async function _dseStart() {
+  const target = document.getElementById('dse-target').value;
+  const restart = document.getElementById('dse-restart').checked;
+  const btn = document.getElementById('dse-start');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/incus/storage-pools/' + encodeURIComponent(_dseSource) + '/evacuate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({target, restart})});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    _dseAttach(d.job_id);
+  } catch (e) {
+    const al = document.getElementById('dse-alert');
+    al.textContent = e.message; al.classList.remove('hidden');
+    btn.disabled = false;
+  }
+}
+function _dseAttach(jobId) {
+  _dseJobId = jobId;
+  _dseSetButtons('running');
+  const url = '/api/incus/storage-evacuate/' + jobId + '/progress';
+  if (typeof _bgPollJob === 'function') {
+    _bgPollJob('dse-' + jobId, 'Moving contents of ' + _dseSource, url, _JOB_ONDONE['ds-evacuate'],
+      {kind: 'ds-evacuate', cancelURL: '/api/incus/storage-evacuate/' + jobId + '/cancel'});
+  }
+  _dsePoll();
+}
+async function _dsePoll() {
+  clearTimeout(_dsePollTimer);
+  const m = document.getElementById('modal-ds-evacuate');
+  if (!_dseJobId || !m || m.classList.contains('hidden')) return;
+  try {
+    const r = await fetch('/api/incus/storage-evacuate/' + _dseJobId + '/progress');
+    if (r.ok) {
+      const d = await r.json();
+      _dseSource = d.pool || _dseSource;
+      const sel = document.getElementById('dse-target');
+      if (d.target && sel.value !== d.target) { sel.value = d.target; if (typeof csRefresh === 'function') csRefresh('dse-target'); }
+      _dseRenderSteps(d.steps || [], d.target, true);
+      const al = document.getElementById('dse-alert');
+      if (d.status === 'running') { _dsePollTimer = setTimeout(_dsePoll, 2000); return; }
+      if (d.status === 'done') {
+        _dseSetButtons('done');
+        al.classList.add('hidden');
+        document.getElementById('dse-space').innerHTML = `<span style="color:#3fb950;">Everything was moved to <b>${esc(d.target)}</b>. ${esc(d.pool)} is empty and can be deleted.</span>`;
+      } else {
+        _dseSetButtons('error');
+        al.textContent = d.status === 'canceled'
+          ? 'Canceled. What was already moved stays on ' + d.target + '; the rest is still on ' + d.pool + '.'
+          : 'Stopped at a failed step: ' + (d.error || 'unknown error') + '. Everything before it was moved to ' + d.target + ' and the rest is still on ' + d.pool + '. The VMs and containers of the failed step were started again. Fix the cause, then run Move contents again: it picks up what is left.';
+        al.classList.remove('hidden');
+      }
+      return;
+    }
+  } catch (_) {}
+  _dsePollTimer = setTimeout(_dsePoll, 4000);
+}
+async function _dseCancelJob() {
+  if (!_dseJobId) return;
+  try { await fetch('/api/incus/storage-evacuate/' + _dseJobId + '/cancel', {method: 'POST'}); } catch (_) {}
+}
+function _dseClose() {
+  clearTimeout(_dsePollTimer);
+  document.getElementById('modal-ds-evacuate').classList.add('hidden');
+  _lxdStorageCacheDS = [];
+  if (typeof loadLXDDatastores === 'function') loadLXDDatastores();
+}
+function _dseDeleteNow() {
+  const name = _dseSource;
+  _dseClose();
+  openDeleteDatastoreModal(name);
 }
 
 async function openDatastoreDetail(name) {
@@ -66406,12 +66757,14 @@ async function loadLXDDatastores() {
         : `<span style="color:#f0b429;font-size:12px;"><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="12" r="8" fill="currentColor" stroke="none"/></svg> ${esc(p.status)}</span>`;
       const burgerBtn = `<span style="cursor:pointer;padding:4px 8px;color:var(--text-2);font-size:18px;line-height:1;" title="Actions"
         onclick='toggleDatastoreBurger(event,${JSON.stringify(p.name)},${p.instance_count})'><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/></svg></span>`;
-      return `<tr style="cursor:pointer;" onclick='openDatastoreDetail(${JSON.stringify(p.name)})'>
-        <td style="font-weight:600;">${esc(p.name)}</td>
+      const defPill = p.is_default
+        ? ` <span class="ds-default-pill" title="Default datastore: new VMs and containers get their disk here unless another one is picked. Holds no VM settings."><svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M11.48 3.5a.56.56 0 0 1 1.04 0l2.13 5.11a.56.56 0 0 0 .48.35l5.52.44a.56.56 0 0 1 .32.99l-4.2 3.6a.56.56 0 0 0-.18.56l1.28 5.39a.56.56 0 0 1-.84.61l-4.73-2.89a.56.56 0 0 0-.58 0l-4.73 2.89a.56.56 0 0 1-.84-.61l1.28-5.39a.56.56 0 0 0-.18-.56l-4.2-3.6a.56.56 0 0 1 .32-.99l5.52-.44a.56.56 0 0 0 .48-.35z"/></svg> Default</span>` : '';
+      return `<tr style="cursor:pointer;" onclick='openDatastoreDetail(${JSON.stringify(p.name)})'${p.is_default ? ' class="ds-row-default"' : ''}>
+        <td style="font-weight:600;white-space:nowrap;">${esc(p.name)}${defPill}</td>
         <td style="color:var(--text-2);">${esc(p.description || '—')}</td>
         <td>${driverBadge}</td>
         <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${esc(p.source || '—')}</td>
-        <td style="text-align:center;color:var(--text-2);">${p.instance_count}</td>
+        <td style="color:var(--text-2);font-size:12px;">${_dsContentsHTML(p)}</td>
         <td>${statusBadge}</td>
         <td onclick='event.stopPropagation()'>${burgerBtn}</td>
       </tr>`;
@@ -66439,8 +66792,22 @@ function toggleDatastoreBurger(e, name, instanceCount) {
     dd.appendChild(b);
   };
   mkItem('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Edit', () => openEditDatastoreModal(name), false, false, '');
+  const pool = (_lxdStorageCacheDS || []).find(x => x.name === name) || {name, instance_count: instanceCount};
+  const isAdmin = !currentUser || currentUser.role === 'admin';
+  if (isAdmin) {
+    mkItem('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M11.48 3.5a.56.56 0 0 1 1.04 0l2.13 5.11a.56.56 0 0 0 .48.35l5.52.44a.56.56 0 0 1 .32.99l-4.2 3.6a.56.56 0 0 0-.18.56l1.28 5.39a.56.56 0 0 1-.84.61l-4.73-2.89a.56.56 0 0 0-.58 0l-4.73 2.89a.56.56 0 0 1-.84-.61l1.28-5.39a.56.56 0 0 0-.18-.56l-4.2-3.6a.56.56 0 0 1 .32-.99l5.52-.44a.56.56 0 0 0 .48-.35z"/></svg> Set as default',
+      () => _dsSetDefault(name), false, !!pool.is_default, 'Already the default datastore');
+    const blockers = _dsDeleteBlockers(pool);
+    mkItem('<svg class="znas-icon" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.14em"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> Move contents…',
+      () => openDsEvacuateModal(name), false, blockers.length === 0 || (_lxdStorageCacheDS || []).length < 2,
+      blockers.length === 0 ? 'Nothing on this datastore' : 'No other datastore to move to');
+  }
   const sep = document.createElement('hr'); sep.className = 'menu-sep'; dd.appendChild(sep);
-  mkItem('Delete', () => openDeleteDatastoreModal(name), true, instanceCount > 0, instanceCount > 0 ? `In use by ${instanceCount} instance(s)` : '');
+  {
+    const blockers = _dsDeleteBlockers(pool);
+    mkItem('Delete', () => openDeleteDatastoreModal(name), true, blockers.length > 0,
+      blockers.length ? 'Still used by ' + blockers.join(', ') + ' — use Move contents… first' : '');
+  }
   const rect = e.currentTarget.getBoundingClientRect();
   dd.style.cssText = `position:fixed;top:${rect.bottom+2}px;right:${window.innerWidth-rect.right}px;`;
   document.body.appendChild(dd);

@@ -182,12 +182,14 @@ const (
 	ActionIncusStorageCreate    = "incus_storage_create"
 	ActionIncusStorageEdit      = "incus_storage_edit"
 	ActionIncusStorageDelete    = "incus_storage_delete"
-	ActionIncusMetricsToggle    = "incus_metrics_toggle"     // v6.4.28 — enable/disable Incus prometheus endpoint + portal scraper
-	ActionIncusGlobalConfigEdit = "incus_global_config_edit" // v6.4.28 — admin edited Incus global config keys
-	ActionIncusStateChange      = "incus_state_change"       // v6.5.3 — VM/container changed runtime state (logged by the state watcher, including out-of-band changes)
-	ActionISOUpload             = "iso_upload"               // v6.5.8 — ISO uploaded into <pool>/.isos/ via the ISO Management modal
-	ActionISOFetch              = "iso_fetch"                // v6.5.8 — ISO downloaded from URL into <pool>/.isos/ via the server-side fetch job
-	ActionISODelete             = "iso_delete"               // v6.5.8 — ISO removed from <pool>/.isos/
+	ActionIncusStorageDefault   = "incus_storage_set_default" // 6.11.26 — default profile root pool
+	ActionIncusStorageEvacuate  = "incus_storage_evacuate"    // 6.11.26 — move everything off a datastore
+	ActionIncusMetricsToggle    = "incus_metrics_toggle"      // v6.4.28 — enable/disable Incus prometheus endpoint + portal scraper
+	ActionIncusGlobalConfigEdit = "incus_global_config_edit"  // v6.4.28 — admin edited Incus global config keys
+	ActionIncusStateChange      = "incus_state_change"        // v6.5.3 — VM/container changed runtime state (logged by the state watcher, including out-of-band changes)
+	ActionISOUpload             = "iso_upload"                // v6.5.8 — ISO uploaded into <pool>/.isos/ via the ISO Management modal
+	ActionISOFetch              = "iso_fetch"                 // v6.5.8 — ISO downloaded from URL into <pool>/.isos/ via the server-side fetch job
+	ActionISODelete             = "iso_delete"                // v6.5.8 — ISO removed from <pool>/.isos/
 
 	// v6.5.19 — VM/Container backup feature.
 	ActionLXDScheduledSnapshot  = "lxd_scheduled_snapshot"   // scheduler fired a per-instance snapshot
