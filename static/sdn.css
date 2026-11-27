@@ -216,6 +216,13 @@ button.fw-incus-link:hover, button.fw-incus-link:focus-visible { color: var(--te
 .fw-mapcard { background: radial-gradient(ellipse at 50% 40%, #151a24 0%, #0f1015 70%); border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; }
 body.light .fw-mapcard, body.dawn .fw-mapcard { background: radial-gradient(ellipse at 50% 40%, #eef3fb 0%, #e3e9f3 70%); }
 .fw-mapcard #fwt-map { display: block; width: 100%; height: auto; max-height: 68vh; } /* leaves the tables below in view */
+/* Full screen: the map card is the whole screen (browser full screen, or
+   filling the window where Safari on iPhone/iPad has no full screen). */
+.fw-mapcard:fullscreen, .fw-mapcard.fw-map-fullwin { border: 0; border-radius: 0; width: 100%; height: 100%; }
+.fw-mapcard:-webkit-full-screen { border: 0; border-radius: 0; width: 100%; height: 100%; }
+.fw-mapcard.fw-map-fullwin { position: fixed; inset: 0; z-index: 9000; height: 100dvh; }
+.fw-mapcard:fullscreen #fwt-map, .fw-mapcard.fw-map-fullwin #fwt-map { width: 100%; height: 100%; max-height: none; }
+.fw-mapcard:-webkit-full-screen #fwt-map { width: 100%; height: 100%; max-height: none; }
 .fw-zoombar svg { display: block; }
 .fw-land { fill: #1d2230; stroke: #2a3142; stroke-width: .5; }
 body.light .fw-land, body.dawn .fw-land { fill: #c9d3e2; stroke: #b3bfd1; }

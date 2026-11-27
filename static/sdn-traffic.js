@@ -99,7 +99,59 @@
     const u = me();
     if (u) u.preferences = Object.assign({}, u.preferences || {}, { fw_map_style: v });
     fetch('/api/prefs', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fw_map_style: v }) }).catch(() => {});
-    if (rerender) rerender();
+    if (mapFull()) rebuildMap(); else if (rerender) rerender();
+  }
+
+  // ── full screen (the map card only) ──────────────────────────────────────
+  // The browser's element full screen where there is one; iPhone/iPad Safari
+  // has none, so there the card fills the window instead (Esc or the button
+  // leaves). While the map is full screen the page is never rebuilt — that
+  // would replace the card and drop out of full screen — the minute poll and
+  // a map-mode change update it in place instead.
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  function mapFull() {
+    const c = document.getElementById('fwt-mapcard');
+    return !!c && (fsEl() === c || !!T.fullwin);
+  }
+  function toggleMapFull() {
+    const c = document.getElementById('fwt-mapcard');
+    if (!c) return;
+    if (mapFull()) {
+      if (T.fullwin) { T.fullwin = false; c.classList.remove('fw-map-fullwin'); onFullChange(); }
+      else if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      return;
+    }
+    if (c.requestFullscreen) c.requestFullscreen().catch(() => { T.fullwin = true; c.classList.add('fw-map-fullwin'); onFullChange(); });
+    else if (c.webkitRequestFullscreen) c.webkitRequestFullscreen();
+    else { T.fullwin = true; c.classList.add('fw-map-fullwin'); onFullChange(); }
+  }
+  let fullWas = false;
+  function onFullChange() {
+    const c = document.getElementById('fwt-mapcard');
+    if (!c) return;
+    const full = mapFull();
+    const b = c.querySelector('[data-mapfull]');
+    if (b) { b.title = full ? 'Exit full screen' : 'Full screen'; b.innerHTML = icon(full ? 'minimize' : 'maximize', 15); }
+    fitMapHeight(); drawTiles(); drawArcs(); if (T.sel) select(T.sel);
+    // back on the page: catch up on anything held back while full screen (theme)
+    if (fullWas && !full && rerender) setTimeout(() => { if (!mapFull()) rerender(); }, 0);
+    fullWas = full;
+  }
+  document.addEventListener('fullscreenchange', onFullChange);
+  document.addEventListener('webkitfullscreenchange', onFullChange);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && T.fullwin && document.getElementById('fwt-mapcard')) toggleMapFull(); });
+  // Redraw only the map, inside the card that is full screen.
+  function rebuildMap() {
+    const c = document.getElementById('fwt-mapcard');
+    if (!c) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = mapHTML();
+    const n = tmp.firstElementChild;
+    c.className = n.className;
+    c.replaceChildren(...n.childNodes);
+    wireZoom(c.parentElement);
+    drawTiles(); drawArcs(); if (T.sel) select(T.sel);
   }
   const COL = { in: 'var(--fw-in)', out: 'var(--fw-out)', blk: 'var(--fw-blk)' };
   // Line colours by theme: the dark ones fade on a light map (the cyan was
@@ -151,7 +203,7 @@
   function mapHTML() {
     const lp = landPaths || [], osm = mapStyle() === 'osm';
     if (!T.homed && T.status) { T.zoom = homeView(); T.homed = true; }
-    return `<div class="fw-mapcard${osm ? ' fw-osm' : ''}" id="fwt-mapcard">
+    return `<div class="fw-mapcard${osm ? ' fw-osm' : ''}${T.fullwin ? ' fw-map-fullwin' : ''}" id="fwt-mapcard">
       <svg id="fwt-map" viewBox="${viewBox()}" preserveAspectRatio="xMidYMid meet" style="touch-action:${T.zoom.k > 1 ? 'none' : 'pan-y'}">
         ${osm ? '<g id="fwt-tiles"></g>' : `<path class="fw-grat" d="${graticule()}"/>
         <g>${lp.map(c => `<path class="fw-land" d="${c.d}"><title>${E(c.name)}</title></path>`).join('')}</g>`}
@@ -168,6 +220,7 @@
         <button type="button" data-zoom="out" title="Zoom out">${icon('line-h', 15)}</button>
         <button type="button" data-zoom="reset" title="Whole world"${T.zoom.k > 1 ? '' : ' disabled'}>${icon('globe', 15)}</button>
         <button type="button" data-mapstyle title="Map mode">${icon('layers', 15)}</button>
+        <button type="button" data-mapfull title="${mapFull() ? 'Exit full screen' : 'Full screen'}">${icon(mapFull() ? 'minimize' : 'maximize', 15)}</button>
       </div>
       ${osm ? '<div class="fw-osm-attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</div>' : ''}
       <div class="fw-tip" id="fwt-tip"></div>
@@ -231,6 +284,7 @@
   function fitMapHeight() {
     const svg = document.getElementById('fwt-map');
     if (!svg) return;
+    if (mapFull()) { svg.style.maxHeight = ''; return; } // the card is the screen
     let pane = svg.parentElement;
     while (pane && pane !== document.body) {
       const oy = getComputedStyle(pane).overflowY;
@@ -274,6 +328,8 @@
       m.querySelectorAll('button').forEach(b => b.onclick = e => { e.stopPropagation(); m.remove(); if (b.dataset.v !== mapStyle()) setMapStyle(b.dataset.v); });
       setTimeout(() => document.addEventListener('click', function off() { m.remove(); document.removeEventListener('click', off); }), 0);
     };
+    const fb = root.querySelector('[data-mapfull]');
+    if (fb) fb.onclick = ev => { ev.stopPropagation(); toggleMapFull(); };
     root.querySelectorAll('[data-zoom]').forEach(b => b.onclick = () => {
       const [cx, cy] = centre();
       if (b.dataset.zoom === 'reset') { T.zoom = { k: 1, x: 0, y: 0 }; applyView(); }
@@ -685,13 +741,19 @@
     const run = ++filterRun;
     T.q = q; T.page = { in: 0, out: 0, blk: 0 };
     await loadTraffic();
+    if (run !== filterRun) return; // typed on: a newer answer is coming
+    redrawData();
+  }
+  // New numbers into the page that is already there: counters, tables, lines.
+  function redrawData() {
     const tables = document.getElementById('fwt-tables'), kpis = document.getElementById('fwt-kpi');
-    if (run !== filterRun || !tables) return; // typed on: a newer answer is coming
+    if (!tables) return;
     kpis.innerHTML = kpi();
     tables.innerHTML = tablesHTML();
     wireTables(tables);
     window.sdnFW.sortTables(tables);
     drawArcs();
+    if (T.sel) { const k = T.sel; T.sel = null; select(k); }
   }
 
   function wireTraffic(root) {
@@ -959,7 +1021,8 @@
     if (typeof window.sdnRegisterPage !== 'function') { setTimeout(register, 200); return; }
     window.sdnRegisterPage('fw-traffic', {
       load: async rr => { rerender = rr; await loadTraffic(); },
-      render: trafficHTML, wire: wireTraffic, busy: () => filterFocused() || geoMenuOpen(), pollMs: 60000, poll: async () => { if (filterFocused()) return false; await loadTraffic(); },
+      render: trafficHTML, wire: wireTraffic, busy: () => filterFocused() || geoMenuOpen() || mapFull(), pollMs: 60000,
+      poll: async () => { if (filterFocused()) return false; await loadTraffic(); if (mapFull()) { redrawData(); return false; } },
     });
     window.sdnRegisterPage('fw-live', {
       load: async rr => { rerenderLive = rr; await loadLive(); },
