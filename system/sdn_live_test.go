@@ -179,3 +179,20 @@ func TestSDNLive_Bond(t *testing.T) {
 		t.Fatalf("eno1 = %+v", m)
 	}
 }
+
+func TestParseNftCountersDefaultDeny(t *testing.T) {
+	b := []byte(`{"nftables":[
+	 {"rule":{"family":"ip","table":"znas_sdn","chain":"input","comment":"default-deny","expr":[{"counter":{"packets":5,"bytes":300}},{"drop":null}]}},
+	 {"rule":{"family":"ip","table":"znas_sdn","chain":"forward","comment":"default-deny","expr":[{"counter":{"packets":2,"bytes":100}},{"drop":null}]}},
+	 {"rule":{"family":"ip","table":"znas_sdn","chain":"in_x","comment":"r:r0000001","expr":[{"counter":{"packets":1,"bytes":60}},{"accept":null}]}}]}`)
+	got, err := parseNftCounters(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := got[SDNDefaultDenyCounter]; d.Packets != 7 || d.Bytes != 400 {
+		t.Fatalf("default deny must sum input+forward: %+v", d)
+	}
+	if got["r0000001"].Packets != 1 {
+		t.Fatalf("rule counter lost: %+v", got)
+	}
+}

@@ -185,7 +185,7 @@ type Group struct {
 
 // Endpoint is a rule's source or destination.
 type Endpoint struct {
-	Type  string `json:"type"` // "any" | "cidr" | "group" | "iface_net" | "iface_addr" | "internal" (every non-WAN static network) | "this_znas"
+	Type  string `json:"type"` // "any" | "cidr" | "group" | "countries" | "auto" (auto group id, autogroups.go) | "iface_net" | "iface_addr" | "internal" (every non-WAN static network) | "this_znas"
 	Value string `json:"value,omitempty"`
 	Not   bool   `json:"not,omitempty"`
 }

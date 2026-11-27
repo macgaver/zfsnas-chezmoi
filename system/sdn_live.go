@@ -201,6 +201,9 @@ type RuleCounter struct {
 // SDNRuleCounters reads the live counters of every rule (`nft -j list
 // table`), summing the lines of rules compiled into several chains/lines,
 // and adds the sampled history.
+// SDNDefaultDenyCounter is the counters key of the default deny.
+const SDNDefaultDenyCounter = "_default"
+
 func SDNRuleCounters() (map[string]RuleCounter, error) {
 	out, err := sdnRun.Run(nil, "nft", "-j", "list", "table", "ip", sdn.TableName)
 	if err != nil {
@@ -236,6 +239,11 @@ func parseNftCounters(b []byte) (map[string]RuleCounter, error) {
 			continue
 		}
 		id, ok := strings.CutPrefix(it.Rule.Comment, "r:")
+		if it.Rule.Comment == "default-deny" {
+			// The final drop of the input and forward chains, summed: the
+			// Rules page shows it under the list (rule ids are hex, no clash).
+			id, ok = SDNDefaultDenyCounter, true
+		}
 		if !ok {
 			continue
 		}

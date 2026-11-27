@@ -231,6 +231,7 @@ func StartSDNTraffic(configDir string) {
 					if e := SDNUpdateRepLists(SDNRepDir(gdir), time.Now()); e != nil {
 						fmt.Printf("[sdn] reputation lists: %v\n", e)
 					}
+					SDNRefreshAutoSets(configDir) // rules using these lists follow them
 					c.mu.Lock()
 					c.status.GeoError = ""
 					if err != nil {

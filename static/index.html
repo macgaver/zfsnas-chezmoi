@@ -807,6 +807,7 @@
       <button class="nav-item" id="nav-fw-traffic" onclick="showPage('fw-traffic')"><span class="nav-icon" data-icon="globe"></span><span class="nav-label">Traffic &amp; GeoMap</span></button>
       <button class="nav-item" id="nav-fw-live" onclick="showPage('fw-live')"><span class="nav-icon" data-icon="list"></span><span class="nav-label">Live connections</span></button>
       <button class="nav-item" id="nav-fw-ids" onclick="showPage('fw-ids')"><span class="nav-icon" data-icon="bell"></span><span class="nav-label">IDS alerts</span></button>
+      <button class="nav-item" id="nav-fw-log" onclick="showPage('fw-log')"><span class="nav-icon" data-icon="file-text"></span><span class="nav-label">Firewall log</span></button>
       <button class="nav-item" id="nav-fw-dns" onclick="showPage('fw-dns')"><span class="nav-icon" data-icon="search"></span><span class="nav-label">DNS queries</span></button>
       <div class="sidebar-section">Configure</div>
       <button class="nav-item" id="nav-fw-interfaces" onclick="showPage('fw-interfaces')"><span class="nav-icon" data-icon="plug"></span><span class="nav-label">Interfaces</span></button>
@@ -4820,6 +4821,7 @@
                   <option value="fw-traffic">Traffic &amp; GeoMap</option>
                   <option value="fw-live">Live connections</option>
                   <option value="fw-ids">IDS alerts</option>
+                  <option value="fw-log">Firewall log</option>
                   <option value="fw-dns">DNS queries</option>
                   <option value="fw-interfaces">Interfaces</option>
                   <option value="fw-rules">Rules</option>
@@ -67055,6 +67057,7 @@ async function submitDeleteDatastore() {
 <script src="/static/net-header.js"></script>
 <script src="/static/sdn-dns-report.js"></script>
 <script src="/static/sdn-ids.js"></script>
+<script src="/static/sdn-log.js"></script>
 <script src="/static/sdn-topo.js"></script>
 </body>
 </html>

@@ -54,14 +54,16 @@ table ip znas_sdn {
 		counter drop comment "default-deny"
 	}
 	chain any_in {
+		ip saddr 203.0.113.0/24 limit rate 10/second burst 20 packets log prefix "znas r:r0000004 "
 		meta l4proto { tcp, udp } ip saddr 203.0.113.0/24 update @blk { ip saddr . meta l4proto . th dport . iifname . 0x2 }
 		meta l4proto != { tcp, udp } ip saddr 203.0.113.0/24 update @blk { ip saddr . meta l4proto . 0 . iifname . 0x2 }
-		ip saddr 203.0.113.0/24 log prefix "znas r:r0000004 " counter drop comment "r:r0000004"
+		ip saddr 203.0.113.0/24 counter drop comment "r:r0000004"
 	}
 	chain any_fw {
+		ip saddr 203.0.113.0/24 limit rate 10/second burst 20 packets log prefix "znas r:r0000004 "
 		meta l4proto { tcp, udp } ip saddr 203.0.113.0/24 update @blk { ip saddr . meta l4proto . th dport . iifname . 0x2 }
 		meta l4proto != { tcp, udp } ip saddr 203.0.113.0/24 update @blk { ip saddr . meta l4proto . 0 . iifname . 0x2 }
-		ip saddr 203.0.113.0/24 log prefix "znas r:r0000004 " counter drop comment "r:r0000004"
+		ip saddr 203.0.113.0/24 counter drop comment "r:r0000004"
 	}
 	chain in_if000001 {
 		ip saddr 192.168.2.0/24 ip daddr != @g_g0000001 counter accept comment "r:r0000003"

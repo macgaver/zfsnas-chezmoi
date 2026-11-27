@@ -330,6 +330,7 @@ func sdnApplyConfig(appCfg *config.AppConfig, cur *sdn.Config, user, role string
 	}
 	st.ClearApplying()
 	system.SDNRefreshCountryCache(appCfg.ConfigDir, next, env)
+	system.SDNRefreshAutoGroupCache(appCfg.ConfigDir, next, env)
 	if system.SDNIDSNeedsUpdate(next) {
 		go system.SDNIDSUpdate(next) //nolint:errcheck — first rules, or new sources/categories
 	}

@@ -494,6 +494,13 @@ func (c *Config) checkEndpoint(e Endpoint, isDst bool) string {
 				return fmt.Sprintf("%q is not a country code", cc)
 			}
 		}
+	case "auto":
+		if AutoGroupByID(e.Value) == nil {
+			return "this auto group does not exist"
+		}
+		if e.Not {
+			return "an auto group cannot be inverted: its list changes every day and can be empty — use a Block rule above an Allow rule instead"
+		}
 	case "iface_net", "iface_addr":
 		in := c.InterfaceByID(e.Value)
 		if in == nil {

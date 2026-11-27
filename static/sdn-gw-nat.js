@@ -76,12 +76,16 @@
       if (type === 'cidr') out.value = inp.value.trim();
       else if (type === 'countries') out.value = codes.join(',');
       else if (value) out.value = value;
+      // An auto group cannot be inverted (its list changes daily, can be empty).
+      if (type === 'auto') not.checked = false;
       if (type !== 'any' && not.checked) out.not = true;
       inp.style.display = type === 'cidr' ? '' : 'none';
       // always shown (as in the rule editor); meaningless — so greyed — for Any
-      not.disabled = type === 'any';
-      not.parentElement.style.opacity = type === 'any' ? '.45' : '';
-      not.parentElement.title = type === 'any' ? 'Choose something other than Any to invert it' : '';
+      const noInv = type === 'any' || type === 'auto';
+      not.disabled = noInv;
+      not.parentElement.style.opacity = noInv ? '.45' : '';
+      not.parentElement.title = type === 'any' ? 'Choose something other than Any to invert it'
+        : (type === 'auto' ? 'An auto group cannot be inverted: its list changes every day and can be empty' : '');
       onChange(out);
     };
     const drawCC = () => {

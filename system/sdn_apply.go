@@ -222,6 +222,7 @@ func SDNApply(prev, next *sdn.Config, env sdn.Env) (SDNApplyResult, error) {
 	if _, err := sdnRun.Run([]byte(script), "nft", "-f", "-"); err != nil {
 		return res, err
 	}
+	sdnAutoSetsLoaded(next, env)
 	broughtUp := map[string]bool{}
 	for _, in := range up {
 		broughtUp[in.Device] = true
@@ -313,7 +314,7 @@ func sdnApplySysctl(c *sdn.Config) string {
 // SDNEnvFor builds the compiler environment from the portal settings: the
 // anti-lockout rule must cover every port the portal listens on, plus SSH.
 func SDNEnvFor(port int, bindPort443 bool, configDir string) sdn.Env {
-	env := sdn.Env{SSHPort: 22, CountryCIDRs: SDNCountryCIDRsFunc(configDir)}
+	env := sdn.Env{SSHPort: 22, CountryCIDRs: SDNCountryCIDRsFunc(configDir), AutoGroupCIDRs: SDNAutoGroupCIDRsFunc(configDir)}
 	if port > 0 {
 		env.PortalPorts = append(env.PortalPorts, port)
 	} else {

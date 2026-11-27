@@ -21,6 +21,7 @@
     'fw-traffic':   { title: 'Traffic & GeoMap' },
     'fw-live':      { title: 'Live connections' },
     'fw-ids':       { title: 'IDS alerts' },
+    'fw-log':       { title: 'Firewall log' },
     'fw-dns':       { title: 'DNS queries' },
     'fw-interfaces':{ title: 'Interfaces' },
     'fw-rules':     { title: 'Rules' },
@@ -49,6 +50,8 @@
     if (page === name && el && !el.classList.contains('hidden')) onShowPage(name);
   };
   let rulesTab = 'all';
+  let autoGroups = null;   // GET /api/sdn/autogroups (catalog + availability)
+  let flashRule = '';      // id of a rule just moved (row highlight)
   let pollTimer = null;
   let countdownTimer = null;
 
@@ -392,7 +395,7 @@
       page = name;
       clearInterval(pollTimer); pollTimer = null;
       renderPage();
-      Promise.all([loadDraft(), loadStatus(), reg.load(() => { if (page === name) renderPage(); })]).then(renderPage);
+      Promise.all([loadDraft(), loadStatus(), loadAutoGroups(true), reg.load(() => { if (page === name) renderPage(); })]).then(renderPage);
       // a poll returning false skips the redraw (e.g. a drop-down is open)
       if (reg.pollMs) pollTimer = setInterval(async () => { if (page === name && !document.hidden && (await reg.poll()) !== false) renderPage(); }, reg.pollMs);
       return;
@@ -406,7 +409,7 @@
     page = name;
     clearInterval(pollTimer); pollTimer = null;
     renderPage();
-    Promise.all([loadDraft(), loadStatus()]).then(renderPage);
+    Promise.all([loadDraft(), loadStatus(), loadAutoGroups(true)]).then(renderPage);
     if (name === 'fw-interfaces') {
       let n = 0;
       const tick = () => { const slow = !(n++ % 3); // status: virtual IP states
@@ -416,7 +419,8 @@
       pollTimer = setInterval(() => { if (page === 'fw-interfaces' && !document.hidden) tick(); }, 5000);
     }
     if (name === 'fw-rules') {
-      const tick = () => api('GET', '/api/sdn/counters').then(r => { if (r.ok) { counters = r.data || {}; if (page === 'fw-rules') renderPage(); } });
+      // (no redraw while a rule is being dragged: it would drop the drag)
+      const tick = () => api('GET', '/api/sdn/counters').then(r => { if (r.ok) { counters = r.data || {}; if (page === 'fw-rules' && dragFrom == null) renderPage(); } });
       tick();
       pollTimer = setInterval(() => { if (page === 'fw-rules' && !document.hidden) tick(); }, 15000);
       api('GET', '/api/sdn/interfaces/live').then(r => { if (r.ok) live = r.data || []; });
@@ -1252,6 +1256,104 @@
   const ccName = cc => { const f = (countryList || []).find(x => x[0] === cc); return f ? f[1] : cc; };
   function countryOptions() { return (countryList || []).map(([code, name]) => ({ value: code, label: flagOf(code) + ' ' + name + ' (' + code + ')' })); }
 
+  // ── Auto groups ───────────────────────────────────────────────────────
+  async function loadAutoGroups(force) {
+    if (autoGroups && !force) return autoGroups;
+    const r = await api('GET', '/api/sdn/autogroups');
+    if (r.ok) autoGroups = r.data || [];
+    return autoGroups || [];
+  }
+  const autoDef = id => (autoGroups || []).find(g => g.id === id);
+  const autoUsable = g => g && (g.available || g.cached);
+  // Rules, port forwards and outbound NAT rules using an auto group.
+  function autoUse(id) {
+    const c = cfg(), is = e => e && e.type === 'auto' && e.value === id;
+    return c.rules.filter(r => is(r.source) || is(r.destination)).length
+      + c.port_forwards.filter(f => is(f.source)).length
+      + c.snat_rules.filter(r => is(r.source) || is(r.destination)).length;
+  }
+  function ago(iso) {
+    if (!iso || iso.startsWith('0001')) return '';
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    return Math.round(s / 86400) + ' d ago';
+  }
+  const nfmt = n => Number(n || 0).toLocaleString();
+  function autoCard(g) {
+    const n = autoUse(g.id), usable = autoUsable(g);
+    const src = g.source === 'firewall' ? 'Firewall list' : 'IDS rules';
+    const when = g.available ? (ago(g.updated) ? 'updated ' + ago(g.updated) : '') : (g.cached ? 'kept copy' : 'not available');
+    const useTxt = g.use === 'to' ? 'Use as destination' : 'Use as source';
+    const useTip = g.use === 'to'
+      ? 'Servers nothing inside should reach: block traffic going TO them (any interface).'
+      : 'Addresses that attack: block traffic coming FROM them on your WAN.';
+    return `<div class="fw-auto-card${usable ? '' : ' fw-auto-off'}" data-auto="${E(g.id)}">
+      <div class="fw-auto-h">
+        <span class="fw-auto-ico ${g.source === 'firewall' ? 'is-fw' : 'is-ids'}">${icon(g.source === 'firewall' ? 'shield' : 'eye', 16)}</span>
+        <div class="fw-auto-t"><div class="fw-auto-name">${E(g.name)}</div><div class="fw-auto-src">${E(src)}${when ? ' · ' + E(when) : ''}</div></div>
+        <span class="fw-auto-use ${g.use === 'to' ? 'to' : 'from'}" title="${E(useTip)}">${icon(g.use === 'to' ? 'arrow-right' : 'arrow-left', 11)}${E(useTxt)}</span>
+      </div>
+      <div class="fw-auto-about">${E(g.about)}</div>
+      <div class="fw-auto-stats">${usable ? `<span class="fw-auto-n">${nfmt(g.entries)}</span><span>address${g.entries === 1 ? '' : 'es'} &amp; networks</span>${g.removed ? `<span class="fw-auto-rm" title="Private, reserved and duplicate entries are removed automatically">· ${nfmt(g.removed)} removed</span>` : ''}` : '<span class="fw-auto-na">No list yet</span>'}</div>
+      ${g.note ? `<div class="fw-auto-note">${icon('info', 13)}<span>${E(g.note)}</span></div>` : ''}
+      <div class="fw-auto-f">
+        <span class="fw-auto-used${n ? ' on' : ''}">${n ? `used by ${n} rule${n > 1 ? 's' : ''}` : 'not used yet'}</span>
+        <span style="flex:1"></span>
+        ${usable ? `<button type="button" class="fw-icon-btn" data-autoview="${E(g.id)}">${icon('list', 12)}Entries</button>` : ''}
+        ${isAdmin() && usable ? `<button type="button" class="fw-icon-btn fw-auto-block" data-autorule="${E(g.id)}">${icon('plus', 12)}Block rule</button>` : ''}
+      </div>
+    </div>`;
+  }
+  function autoSectionHTML() {
+    if (!autoGroups) { loadAutoGroups().then(() => { if (page === 'fw-groups') renderPage(); }); return ''; }
+    const fw = autoGroups.filter(g => g.source === 'firewall');
+    // IDS lists: the ones in the active rules, plus any a rule still uses.
+    const ids = autoGroups.filter(g => g.source === 'ids' && (g.present || g.cached || autoUse(g.id)));
+    const idsHidden = autoGroups.filter(g => g.source === 'ids' && !ids.includes(g));
+    return `<div class="fw-auto-sec">
+      <div class="fw-auto-head"><h3>${icon('zap', 15)}Auto groups</h3>
+        <span class="fw-auto-pill">maintained by ZNAS</span></div>
+      <div class="fw-auto-hint">Address lists the Firewall keeps up to date by itself — no editing. Use them in a rule's <b>From</b> or <b>To</b> drop-down, under <b>Auto groups</b>. The firewall follows each list as soon as it is updated. Private and reserved ranges (10.x, 192.168.x…) are always removed, so a list can never cut off your own networks.</div>
+      <div class="fw-auto-sub">${icon('shield', 13)}Firewall lists <span>downloaded every day with the location database</span></div>
+      <div class="fw-cards fw-auto-cards">${fw.map(autoCard).join('')}</div>
+      <div class="fw-auto-sub">${icon('eye', 13)}From the IDS rules <span>the address lists inside the active intrusion-detection rules</span></div>
+      ${ids.length ? `<div class="fw-cards fw-auto-cards">${ids.map(autoCard).join('')}</div>`
+        : `<div class="fw-empty" style="text-align:left">No address list in the active IDS rules. Turn the IDS on, or enable categories such as <b>ciarmy</b>, <b>compromised</b>, <b>dshield</b> or <b>tor</b> on the Intrusion detection page.</div>`}
+      ${idsHidden.length ? `<div class="fw-auto-more">Also available when enabled in the IDS: ${idsHidden.map(g => `<span title="${E(g.about)}">${E(g.name)}</span>`).join(', ')}.</div>` : ''}
+    </div>`;
+  }
+  async function openAutoEntries(id) {
+    const g = autoDef(id) || { name: id };
+    const box = document.createElement('div');
+    box.innerHTML = `<div class="fw-auto-about" style="margin-top:0">${E(g.about || '')}</div>
+      <input type="text" id="fwae-q" placeholder="Find an address or network…" style="width:100%;margin:10px 0 8px">
+      <div class="fw-auto-count" id="fwae-n">Loading…</div><div class="fw-auto-list" id="fwae-list"></div>`;
+    modal({ title: g.name, body: box, width: 560, buttons: [{ label: 'Close', cls: 'btn-primary' }] });
+    const r = await api('GET', '/api/sdn/autogroups/' + encodeURIComponent(id));
+    const all = (r.ok && r.data && r.data.entries) || [];
+    const list = box.querySelector('#fwae-list'), cnt = box.querySelector('#fwae-n');
+    const draw = q => {
+      const hit = q ? all.filter(x => x.includes(q)) : all;
+      cnt.textContent = (q ? nfmt(hit.length) + ' of ' : '') + nfmt(all.length) + ' entries' + (hit.length > 3000 ? ' — first 3,000 shown, type to search' : '');
+      list.innerHTML = hit.slice(0, 3000).map(x => `<span>${E(x)}</span>`).join('') || '<div class="fw-empty">Nothing</div>';
+    };
+    draw('');
+    box.querySelector('#fwae-q').oninput = e => draw(e.target.value.trim());
+  }
+  // New Block rule prefilled with an auto group, placed FIRST among its
+  // interface's rules (a block below an allow would never match).
+  function autoBlockRule(id) {
+    const g = autoDef(id);
+    if (!g) return;
+    const c = cfg();
+    const wan = c.interfaces.find(i => i.role === 'wan');
+    const preset = g.use === 'to'
+      ? { interface: '', action: 'block', protocol: 'any', source: { type: 'any' }, destination: { type: 'auto', value: id }, description: 'Block traffic to ' + g.name }
+      : { interface: wan ? wan.id : '', action: 'block', protocol: 'any', source: { type: 'auto', value: id }, destination: { type: 'any' }, description: 'Block ' + g.name };
+    editRule(null, null, preset);
+  }
+
   function groupsHTML() {
     const c = cfg();
     if (!countryList) loadCountries().then(() => { if (page === 'fw-groups') renderPage(); });
@@ -1269,11 +1371,14 @@
     };
     return sec('hosts', 'Hosts & networks', 'Named lists of addresses to use in rules — e.g. ALXInternalSubnets = 10.0.0.0/8, 192.168.0.0/16.')
       + sec('ports', 'Ports', 'Named lists of ports — e.g. game = 16261-16263.')
-      + sec('countries', 'Countries', 'Named lists of countries to allow or block — e.g. OKCOUNTRIES = Canada, United States, Singapore, Sweden. Uses the location database (Traffic page).');
+      + sec('countries', 'Countries', 'Named lists of countries to allow or block — e.g. OKCOUNTRIES = Canada, United States, Singapore, Sweden. Uses the location database (Traffic page).')
+      + autoSectionHTML();
   }
 
   function wireGroups(root) {
     const c = cfg();
+    root.querySelectorAll('[data-autoview]').forEach(b => b.onclick = () => openAutoEntries(b.dataset.autoview));
+    root.querySelectorAll('[data-autorule]').forEach(b => b.onclick = () => autoBlockRule(b.dataset.autorule));
     root.querySelectorAll('[data-gnew]').forEach(b => b.onclick = () => {
       const kind = b.dataset.gnew;
       const box = document.createElement('div');
@@ -1321,6 +1426,7 @@
       case 'cidr': return not + ep.value;
       case 'group': { const g = cfg().groups.find(x => x.id === ep.value); return not + (g ? g.name : '(deleted group)'); }
       case 'countries': return not + (ep.value || '').split(',').filter(Boolean).map(cc => flagOf(cc) + ' ' + ccName(cc)).join(', ');
+      case 'auto': { const g = autoDef(ep.value); return g ? g.name : ep.value; }
       case 'iface_net': { const i = ifaceById(ep.value); return not + (i ? i.name + ' net' : '(deleted interface)'); }
       case 'iface_addr': { const i = ifaceById(ep.value); return not + (i ? i.name + ' address' : '(deleted interface)'); }
       case 'this_znas': return not + 'This ZNAS';
@@ -1358,7 +1464,19 @@
     if (!countryList) loadCountries().then(() => { if (page === 'fw-rules') renderPage(); });
     const tabs = [['all', 'All', null], ['', 'Any interface', null], ...c.interfaces.map(i => [i.id, i.name, i.color])];
     const count = id => id === 'all' ? c.rules.length : c.rules.filter(r => r.interface === id).length;
-    const rows = c.rules.map((r, idx) => ({ r, idx })).filter(x => rulesTab === 'all' || x.r.interface === rulesTab);
+    let rows = c.rules.map((r, idx) => ({ r, idx })).filter(x => rulesTab === 'all' || x.r.interface === rulesTab);
+    // "All" shows the order the firewall really checks: the "Any interface"
+    // rules first, then each interface's own rules (interface order), each
+    // group in list order. Rules of a removed interface come last.
+    const grp = id => id === '' ? 0 : (c.interfaces.findIndex(i => i.id === id) + 1 || c.interfaces.length + 1);
+    if (rulesTab === 'all') rows = rows.slice().sort((a, b) => grp(a.r.interface) - grp(b.r.interface) || a.idx - b.idx);
+    let lastGroup = null;
+    const groupHdr = id => {
+      const n = rows.filter(x => x.r.interface === id).length;
+      if (id === '') return `<div class="fw-rgroup"><span class="fw-cdot" style="background:#8e8e93"></span><b>Any interface</b><span class="fw-n">${n}</span><span class="fw-rgroup-h">checked first, for traffic arriving on every interface</span></div>`;
+      const i = ifaceById(id);
+      return `<div class="fw-rgroup"><span class="fw-cdot" style="background:${C(i && i.color)}"></span><b>${E(i ? i.name : '(deleted interface)')}</b><span class="fw-n">${n}</span><span class="fw-rgroup-h">${i ? 'then, for traffic arriving on ' + E(i.name) : 'this interface no longer exists: these rules never match'}</span></div>`;
+    };
     const mgmt = c.interfaces.find(i => i.device === (c.settings && c.settings.mgmt_interface));
     const showPinned = c.settings && c.settings.anti_lockout && mgmt && (rulesTab === 'all' || rulesTab === mgmt.id);
     const portalPorts = (status && status.portal_ports) || [22, 8443];
@@ -1379,26 +1497,195 @@
         ${rows.length ? rows.map(({ r, idx }) => {
           const cnt = counters[r.id] || {};
           const sc = epColor(r.source), dc = epColor(r.destination);
-          return `<div class="fw-rule${r.enabled ? '' : ' fw-off'}" data-idx="${idx}" ${isAdmin() && rulesTab !== 'all' ? 'draggable="true"' : ''} title="${E(sentence(r).replace(/<[^>]+>/g, ''))}">
-            <span class="fw-drag">${isAdmin() && rulesTab !== 'all' ? icon('menu', 13) : ''}</span>
+          const hdr = rulesTab === 'all' && r.interface !== lastGroup ? groupHdr(r.interface) : '';
+          lastGroup = r.interface;
+          return `${hdr}<div class="fw-rule${r.enabled ? '' : ' fw-off'}${r.id === flashRule ? ' fw-flash' : ''}" data-idx="${idx}" title="${E(sentence(r).replace(/<[^>]+>/g, ''))}">
+            <span class="fw-drag">${isAdmin() ? `<span class="fw-order-btn" role="button" tabindex="0" data-order="${idx}" title="Drag to reorder — or click for move options" aria-label="Move this rule">${icon('menu', 13)}</span>` : ''}</span>
             <span class="fw-toggle${r.enabled ? ' on' : ''}" data-toggle="${idx}"></span>
             <span class="fw-act ${E(r.action)}">${E(r.action)}</span>
             <span class="fw-proto">${E(PROTO[r.protocol] || r.protocol)}</span>
             <span class="fw-flow">${rulesTab === 'all' ? (() => { const ri = c.interfaces.find(i => i.id === r.interface);
-                return `<span class="fw-onif" title="Rule of ${E(ri ? ri.name : 'Any interface')}"><span class="fw-cdot" style="background:${C(ri && ri.color)}"></span>${E(ri ? ri.name : 'Any')}</span>`; })() : ''}<span class="fw-pillx${r.source.not ? ' not' : ''}">${sc ? `<span class="fw-cdot" style="background:${C(sc)}"></span>` : ''}${E(epLabel(r.source))}</span>
+                return `<span class="fw-onif" title="Rule of ${E(ri ? ri.name : 'Any interface')}"><span class="fw-cdot" style="background:${C(ri && ri.color)}"></span>${E(ri ? ri.name : 'Any')}</span>`; })() : ''}${epPill(r.source, sc)}
               <span class="fw-arrow">→</span>
-              <span class="fw-pillx${r.destination.not ? ' not' : ''}">${dc ? `<span class="fw-cdot" style="background:${C(dc)}"></span>` : ''}${E(epLabel(r.destination))}</span>
+              ${epPill(r.destination, dc)}
               ${r.dst_ports ? `<span class="fw-port">: ${E(portsLabel(r.dst_ports))}</span>` : ''}</span>
             <span class="fw-desc">${E(r.description || (rulesTab === 'all' ? (r.interface ? (ifaceById(r.interface) || {}).name : 'Any interface') : ''))}</span>
             <span class="fw-logi" title="${r.log ? 'Logged' : ''}">${r.log ? icon('file', 13) : ''}</span>
-            <span class="fw-hits" title="${cnt.last_hit && !cnt.last_hit.startsWith('0001') ? 'Last hit ' + E(fmtTime(cnt.last_hit)) : 'No hit recorded'}">${spark(cnt.spark, r.action === 'allow' ? 'var(--fw-allow)' : 'var(--fw-block)')}${fmtCount(cnt.packets)}</span>
+            <button type="button" class="fw-hits fw-hitlink" data-hitlog="${idx}" title="${cnt.last_hit && !cnt.last_hit.startsWith('0001') ? 'Last hit ' + E(fmtTime(cnt.last_hit)) + ' — ' : ''}${r.log ? 'click to see the logged connections' : 'logging is off for this rule — click to turn it on'}">${spark(cnt.spark, r.action === 'allow' ? 'var(--fw-allow)' : 'var(--fw-block)')}${fmtCount(cnt.packets)}</button>
             ${rowActs('r', idx)}
           </div>`;
         }).join('') : `<div class="fw-empty">No rules here yet.${mode === 'router' && rulesTab !== 'all' ? ' Everything arriving on this interface is blocked.' : ''}</div>`}
-      </div>`;
+      </div>
+      ${endNoteHTML(mode)}`;
+  }
+
+  // Under the list: what happens to traffic no rule allowed (default deny).
+  function endNoteHTML(mode) {
+    const where = rulesTab === 'all' ? ''
+      : (rulesTab === '' ? ' arriving on any interface' : ` arriving on <b>${E((ifaceById(rulesTab) || {}).name || 'this interface')}</b>`);
+    const order = 'Rules are checked from top to bottom and the first one that matches decides: <i>Any interface</i> rules first, then the rules of the interface the traffic arrives on. Replies to connections that were allowed are always let through.';
+    if (mode !== 'router') {
+      return `<div class="fw-endnote fw-endnote-mon">${icon('info', 18)}
+        <div class="fw-endnote-t"><b>Monitor only — nothing is dropped yet</b>
+        <span>Once you switch to Router mode, traffic${where} that reaches the end of this list without being allowed by a rule above will be dropped (default deny). ${order}</span></div></div>`;
+    }
+    const d = counters[DEFAULT_DENY] || {};
+    return `<div class="fw-endnote">${icon('shield', 18)}
+      <div class="fw-endnote-t"><b>Everything else is dropped</b>
+      <span>Traffic${where} that reaches the end of this list without being allowed by a rule above is silently dropped — the <b>default deny</b>. ${order}</span></div>
+      <div class="fw-endnote-hits" title="Packets dropped by the default deny since the rules were last loaded${d.last_hit && !d.last_hit.startsWith('0001') ? ' — last ' + E(fmtTime(d.last_hit)) : ''}">${spark(d.spark, 'var(--fw-block)')}<span><b>${fmtCount(d.packets)}</b> dropped</span></div></div>`;
+  }
+  const DEFAULT_DENY = '_default';
+
+  // A rule's source/destination pill; auto groups get their own look and a
+  // warning when their list is not available (the rule then matches nothing).
+  function epPill(ep, color) {
+    if (ep && ep.type === 'auto') {
+      const g = autoDef(ep.value), ok = !autoGroups || autoUsable(g);
+      const tip = ok ? 'Auto group' + (g ? ' · ' + nfmt(g.entries) + ' entries · ' + g.about : '')
+        : 'Auto group not available: this rule matches nothing until its list is back' + (g && g.note ? ' — ' + g.note : '');
+      return `<span class="fw-pillx fw-pill-auto${ok ? '' : ' warn'}" title="${E(tip)}">${icon(ok ? 'zap' : 'alert-triangle', 11)}${E(epLabel(ep))}</span>`;
+    }
+    return `<span class="fw-pillx${ep && ep.not ? ' not' : ''}">${color ? `<span class="fw-cdot" style="background:${C(color)}"></span>` : ''}${E(epLabel(ep))}</span>`;
+  }
+
+  // ⋮-like reorder menu at the start of a rule row. Order matters only
+  // among the rules of one interface ("Any interface" rules run first, then
+  // each interface's own), so moves go past rules of the same interface.
+  // The built-in anti-lockout rule is not in the list: nothing goes above it.
+  function moveRule(idx, where) {
+    const rules = cfg().rules, r = rules[idx];
+    const sib = rules.map((x, i) => (x.interface === r.interface ? i : -1)).filter(i => i >= 0);
+    const pos = sib.indexOf(idx), last = sib.length - 1;
+    const target = { top: sib[0], up: sib[pos - 1], down: sib[pos + 1], bottom: sib[last] }[where];
+    if (target == null || target === idx) return;
+    flashRule = r.id;
+    saveDraft(n => { const [m] = n.rules.splice(idx, 1); n.rules.splice(target, 0, m); });
+    setTimeout(() => { flashRule = ''; }, 1600);
+  }
+  function openOrderMenu(btn, idx) {
+    document.querySelectorAll('.fw-order-menu').forEach(m => m.remove());
+    const c = cfg(), r = c.rules[idx];
+    const sib = c.rules.map((x, i) => (x.interface === r.interface ? i : -1)).filter(i => i >= 0);
+    const pos = sib.indexOf(idx), last = sib.length - 1;
+    const ifn = r.interface ? ((ifaceById(r.interface) || {}).name || 'this interface') : 'Any interface';
+    const m = document.createElement('div');
+    m.className = 'fw-menu fw-order-menu';
+    const it = (k, ic, label, off, tip) => `<div class="fw-menu-item${off ? ' fw-off' : ''}" data-mv="${k}" ${tip ? `title="${E(tip)}"` : ''}>${icon(ic, 14)}${E(label)}</div>`;
+    m.innerHTML = `<div class="fw-order-h">Position ${pos + 1} of ${sib.length} in <b>${E(ifn)}</b></div>`
+      + it('top', 'arrow-up', 'Move to top', pos === 0, 'First of its interface — the built-in anti-lockout rule always stays above')
+      + it('up', 'chevron-up', 'Move up', pos === 0)
+      + it('down', 'chevron-down', 'Move down', pos === last)
+      + it('bottom', 'arrow-down', 'Move to bottom', pos === last);
+    document.body.appendChild(m);
+    const b = btn.getBoundingClientRect();
+    m.style.position = 'fixed';
+    m.style.right = 'auto';
+    m.style.left = Math.min(b.left, window.innerWidth - m.offsetWidth - 8) + 'px';
+    const below = b.bottom + 4 + m.offsetHeight < window.innerHeight - 8;
+    m.style.top = (below ? b.bottom + 4 : Math.max(8, b.top - 4 - m.offsetHeight)) + 'px';
+    m.querySelectorAll('[data-mv]').forEach(x => x.onclick = e => {
+      e.stopPropagation();
+      if (x.classList.contains('fw-off')) return;
+      m.remove(); moveRule(idx, x.dataset.mv);
+    });
+    const off = e => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('click', off, true); window.removeEventListener('scroll', off2, true); } };
+    const off2 = () => { m.remove(); document.removeEventListener('click', off, true); window.removeEventListener('scroll', off2, true); };
+    setTimeout(() => { document.addEventListener('click', off, true); window.addEventListener('scroll', off2, true); }, 0);
+  }
+
+  // Drag from the ≡ handle (every tab), done with pointer events rather than
+  // the browser's HTML5 drag & drop: that one needs per-browser tricks
+  // (Safari only accepts a drop when dragenter is cancelled too, iPads do
+  // not drag at all) and snapped the rule back. A press that does not move
+  // is a click (the move menu). "All" is grouped by interface in checking
+  // order, so a rule lands only inside its own group (dropping it in another
+  // one would mean changing its interface): elsewhere the cursor says "not
+  // allowed" and releasing leaves it in place. The line shows where it lands
+  // (above when moving up, below when moving down).
+  let dragFrom = null;
+  let dragJustEnded = 0;
+  function wireRuleDrag(root) {
+    const rows = [...root.querySelectorAll('.fw-rule[data-idx]')];
+    const clearMarks = () => rows.forEach(x => x.classList.remove('fw-drop-before', 'fw-drop-after'));
+    rows.forEach(row => {
+      const idx = Number(row.dataset.idx);
+      const h = row.querySelector('[data-order]');
+      if (!h) return;
+      h.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || !isAdmin()) return;
+        const sx = e.clientX, sy = e.clientY;
+        let moving = false, target = null, scrollTimer = null, lastY = sy;
+        try { h.setPointerCapture(e.pointerId); } catch (_) {}
+        const iface = (cfg().rules[idx] || {}).interface;
+        const pick = (x, y) => {
+          const el = document.elementFromPoint(x, y);
+          const over = el && el.closest && el.closest('.fw-rule[data-idx]');
+          clearMarks();
+          target = null;
+          document.body.classList.remove('fw-sort-deny');
+          if (!over || !rows.includes(over)) return;
+          const to = Number(over.dataset.idx);
+          if (to === idx) return;
+          if ((cfg().rules[to] || {}).interface !== iface) { document.body.classList.add('fw-sort-deny'); return; }
+          target = to;
+          over.classList.add(idx > to ? 'fw-drop-before' : 'fw-drop-after');
+        };
+        // keep scrolling while the pointer rests near the top/bottom edge
+        const edgeScroll = () => {
+          const m = 60, v = window.innerHeight;
+          const dy = lastY < m ? -12 : (lastY > v - m ? 12 : 0);
+          if (dy) {
+            const sc = row.closest('.page') || document.scrollingElement;
+            (sc && sc.scrollHeight > sc.clientHeight ? sc : document.scrollingElement).scrollBy(0, dy);
+            window.scrollBy(0, dy);
+          }
+        };
+        const move = ev => {
+          lastY = ev.clientY;
+          if (!moving) {
+            if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 5) return;
+            moving = true; dragFrom = idx;
+            row.classList.add('fw-dragging');
+            document.body.classList.add('fw-sorting');
+            scrollTimer = setInterval(() => { edgeScroll(); pick(sx, lastY); }, 60);
+          }
+          ev.preventDefault();
+          pick(ev.clientX, ev.clientY);
+        };
+        const end = ev => {
+          h.removeEventListener('pointermove', move);
+          h.removeEventListener('pointerup', end);
+          h.removeEventListener('pointercancel', end);
+          clearInterval(scrollTimer);
+          try { h.releasePointerCapture(e.pointerId); } catch (_) {}
+          if (!moving) return; // a click: the menu opens from onclick
+          dragJustEnded = Date.now();
+          row.classList.remove('fw-dragging');
+          document.body.classList.remove('fw-sorting', 'fw-sort-deny');
+          clearMarks();
+          dragFrom = null;
+          if (ev.type !== 'pointerup' || target == null) return;
+          const from = idx, to = target;
+          flashRule = (cfg().rules[from] || {}).id || '';
+          // After removing "from", inserting at "to" lands above the target
+          // when moving up and below it when moving down.
+          saveDraft(n => { const [m] = n.rules.splice(from, 1); n.rules.splice(to, 0, m); });
+          setTimeout(() => { flashRule = ''; }, 1600);
+        };
+        h.addEventListener('pointermove', move);
+        h.addEventListener('pointerup', end);
+        h.addEventListener('pointercancel', end);
+      });
+    });
   }
 
   function wireRules(root) {
+    root.querySelectorAll('[data-order]').forEach(b => {
+      b.onclick = e => { e.stopPropagation(); if (Date.now() - dragJustEnded < 400) return; openOrderMenu(b, Number(b.dataset.order)); };
+      b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openOrderMenu(b, Number(b.dataset.order)); } };
+    });
+    wireRuleDrag(root);
     root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { rulesTab = b.dataset.tab; renderPage(); });
     const nb = root.querySelector('#fw-new-rule');
     if (nb) nb.onclick = () => editRule(null);
@@ -1417,18 +1704,23 @@
       saveDraft(n => { n.rules[idx].enabled = !n.rules[idx].enabled; });
     });
     root.querySelectorAll('[data-redit]').forEach(b => b.onclick = e => { e.stopPropagation(); editRule(Number(b.dataset.redit)); });
+    // Hit count → Firewall log filtered to this rule; logging off: offer to turn it on.
+    root.querySelectorAll('[data-hitlog]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      const r = cfg().rules[Number(b.dataset.hitlog)];
+      if (!r) return;
+      if (r.log) { if (typeof window.fwLogFocus === 'function') window.fwLogFocus(r.id); return; }
+      const name = r.description || sentence(r).replace(/<[^>]+>/g, '');
+      modal({ title: 'Logging is off for this rule', body: `<p style="margin-top:0"><b>${E(name)}</b></p><p>Its hit count shows how many packets it matched, but the connections themselves are only recorded when <b>Log matching connections</b> is on. Then they appear in <b>Monitor → Firewall log</b> (at most 10 lines per second for this rule).</p>`,
+        buttons: [{ label: 'Cancel' }, ...(isAdmin() ? [{ label: 'Turn logging on', cls: 'btn-primary', onClick: async close => {
+          close();
+          const ok = await saveDraft(n => { const x = n.rules.find(y => y.id === r.id); if (x) x.log = true; });
+          if (ok) toast('Logging turned on in the draft — press Apply; its connections then appear in the Firewall log', 'success');
+        } }] : [])] });
+    });
     root.querySelectorAll('[data-rclone]').forEach(b => b.onclick = e => { e.stopPropagation(); editRule(null, Number(b.dataset.rclone)); });
     root.querySelectorAll('.fw-rule[data-idx]').forEach(row => {
       row.onclick = () => isAdmin() && editRule(Number(row.dataset.idx));
-      row.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', row.dataset.idx); });
-      row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('fw-dragover'); });
-      row.addEventListener('dragleave', () => row.classList.remove('fw-dragover'));
-      row.addEventListener('drop', e => {
-        e.preventDefault(); row.classList.remove('fw-dragover');
-        const from = Number(e.dataTransfer.getData('text/plain')), to = Number(row.dataset.idx);
-        if (from === to || isNaN(from)) return;
-        saveDraft(n => { const [m] = n.rules.splice(from, 1); n.rules.splice(to > from ? to - 1 : to, 0, m); });
-      });
     });
   }
 
@@ -1449,16 +1741,25 @@
     c.groups.filter(g => g.kind === 'hosts').forEach(g => o.push({ value: 'group:' + g.id, label: g.name, section: 'Groups', hint: g.members.length + ' entries' }));
     o.push({ value: 'countries:', label: 'Countries…', section: 'Countries' });
     c.groups.filter(g => g.kind === 'countries').forEach(g => o.push({ value: 'group:' + g.id, label: g.name, section: 'Countries', hint: g.members.join(', ') }));
+    // Auto groups last: available lists, plus any a rule still uses.
+    (autoGroups || []).forEach(g => {
+      if (!autoUsable(g) && !autoUse(g.id)) return;
+      o.push({ value: 'auto:' + g.id, label: g.name, section: 'Auto groups',
+        hint: (g.source === 'firewall' ? 'Firewall list' : 'IDS') + ' · ' + (autoUsable(g) ? nfmt(g.entries) : 'not available') });
+    });
     return o;
   }
 
   // from: index of a rule to clone — the new rule is prefilled from it and lands right below it.
-  function editRule(idx, from) {
+  // preset: fields of a new rule (Auto groups → Block rule); such a rule
+  // goes first among its interface's rules.
+  function editRule(idx, from, preset) {
     const c = cfg();
+    if (!autoGroups) loadAutoGroups();
     const cloned = idx == null && from != null && c.rules[from];
     const r = cloned ? Object.assign(clone(c.rules[from]), { id: newId(), description: cloneDesc(c.rules[from].description) })
-      : idx == null ? { id: newId(), enabled: true, interface: rulesTab !== 'all' ? rulesTab : '', action: 'allow', protocol: 'tcp',
-      source: { type: 'any' }, destination: { type: 'any' }, dst_ports: '', log: false, description: '' } : clone(c.rules[idx]);
+      : idx == null ? Object.assign({ id: newId(), enabled: true, interface: rulesTab !== 'all' ? rulesTab : '', action: 'allow', protocol: 'tcp',
+      source: { type: 'any' }, destination: { type: 'any' }, dst_ports: '', log: false, description: '' }, preset || {}) : clone(c.rules[idx]);
     const bg = document.createElement('div');
     bg.className = 'fw-drawer-bg';
     const dr = document.createElement('div');
@@ -1470,9 +1771,9 @@
         <div class="fw-field"><label>Protocol</label><div id="fwr-proto"></div></div>
         <div class="fw-field" id="fwr-gw-f"><label>Leaves through</label><div id="fwr-gw"></div>
           <label style="display:flex;gap:7px;align-items:center;margin-top:6px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-2)"><input type="checkbox" id="fwr-gw-only">Only this gateway — block instead of failing over when it is down</label></div>
-        <div class="fw-field"><label>From (source)</label><div id="fwr-src"></div><input type="text" id="fwr-src-v" placeholder="203.0.113.0/24" style="margin-top:6px"><div class="fw-chips" id="fwr-src-cc" style="margin-top:6px"></div>
+        <div class="fw-field"><label>From (source)</label><div id="fwr-src"></div><input type="text" id="fwr-src-v" placeholder="203.0.113.0/24" style="margin-top:6px"><div class="fw-chips" id="fwr-src-cc" style="margin-top:6px"></div><div class="fw-auto-pick" id="fwr-src-auto"></div>
           <label style="display:flex;gap:7px;align-items:center;margin-top:6px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-2)"><input type="checkbox" id="fwr-src-not">Everything except this</label><div class="fw-err" id="fwr-src-err"></div></div>
-        <div class="fw-field"><label>To (destination)</label><div id="fwr-dst"></div><input type="text" id="fwr-dst-v" placeholder="10.128.8.4" style="margin-top:6px"><div class="fw-chips" id="fwr-dst-cc" style="margin-top:6px"></div>
+        <div class="fw-field"><label>To (destination)</label><div id="fwr-dst"></div><input type="text" id="fwr-dst-v" placeholder="10.128.8.4" style="margin-top:6px"><div class="fw-chips" id="fwr-dst-cc" style="margin-top:6px"></div><div class="fw-auto-pick" id="fwr-dst-auto"></div>
           <label style="display:flex;gap:7px;align-items:center;margin-top:6px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-2)"><input type="checkbox" id="fwr-dst-not">Everything except this</label><div class="fw-err" id="fwr-dst-err"></div></div>
         <div class="fw-field" id="fwr-ports-f"><label>Destination port(s)</label><div class="fw-row2"><input type="text" id="fwr-ports" placeholder="443, 80 or 16261-16263 — empty = all"><div id="fwr-pgroup"></div></div><div class="fw-err" id="fwr-ports-err"></div></div>
         <div class="fw-field"><label>Description</label><input type="text" id="fwr-desc" placeholder="e.g. Plex from the Internet" value="${E(r.description)}"></div>
@@ -1504,7 +1805,7 @@
       if (type === 'cidr') ep.value = q(`#fwr-${which}-v`).value.trim();
       else if (type === 'countries') ep.value = cc[which].join(',');
       else if (value) ep.value = value;
-      if (type === 'any') delete ep.not;
+      if (type === 'any' || type === 'auto') delete ep.not;
       return ep;
     };
     let srcSel = epVal(r.source), dstSel = epVal(r.destination), portGroup = (r.dst_ports || '').startsWith('group:') ? r.dst_ports.slice(6) : '';
@@ -1517,9 +1818,15 @@
       r.dst_ports = portGroup ? 'group:' + portGroup : q('#fwr-ports').value.replace(/\s+/g, '');
       r.description = q('#fwr-desc').value; r.log = q('#fwr-log').checked; r.enabled = q('#fwr-en').checked;
       [['src', srcSel], ['dst', dstSel]].forEach(([w, sel]) => { // "except Any" means nothing
-        const cb = q(`#fwr-${w}-not`), any = sel === 'any:';
-        cb.disabled = any; cb.parentElement.style.opacity = any ? '.45' : '';
-        cb.parentElement.title = any ? 'Choose something other than Any to invert it' : '';
+        const cb = q(`#fwr-${w}-not`), any = sel === 'any:', auto = sel.startsWith('auto:');
+        if (auto) cb.checked = false;
+        cb.disabled = any || auto; cb.parentElement.style.opacity = any || auto ? '.45' : '';
+        cb.parentElement.title = any ? 'Choose something other than Any to invert it'
+          : (auto ? 'An auto group cannot be inverted: its list changes every day and can be empty' : '');
+        // what the chosen auto group is
+        const box = q(`#fwr-${w}-auto`), g = auto && autoDef(sel.slice(5));
+        box.style.display = g ? '' : 'none';
+        if (g) box.innerHTML = `${icon(autoUsable(g) ? 'zap' : 'alert-triangle', 12)}<span><b>${E(g.name)}</b> · ${autoUsable(g) ? nfmt(g.entries) + ' entries, kept up to date automatically' : 'not available — matches nothing for now'}. ${E(g.about)}${(w === 'src') !== (g.use !== 'to') ? ` <i>Usually used as ${g.use === 'to' ? 'a destination' : 'a source'}.</i>` : ''}</span>`;
       });
       q('#fwr-src-v').style.display = srcSel === 'cidr:' ? '' : 'none';
       q('#fwr-dst-v').style.display = dstSel === 'cidr:' ? '' : 'none';
@@ -1553,7 +1860,11 @@
       update();
       const next = clone(cfg());
       let at = idx;
-      if (idx == null) { at = cloned ? from + 1 : next.rules.length; next.rules.splice(at, 0, r); } else next.rules[idx] = r;
+      if (idx == null) {
+        at = cloned ? from + 1 : next.rules.length;
+        if (preset) { const first = next.rules.findIndex(x => x.interface === r.interface); if (first >= 0) at = first; }
+        next.rules.splice(at, 0, r);
+      } else next.rules[idx] = r;
       const errs = (await validate(next)).filter(e => e.path.startsWith(`rules[${at}]`));
       dr.querySelectorAll('.fw-err').forEach(e => e.textContent = '');
       if (errs.length) {
@@ -1562,7 +1873,9 @@
         return;
       }
       close();
-      saveDraft(n => { n.rules = next.rules; });
+      if (preset) { flashRule = r.id; setTimeout(() => { flashRule = ''; }, 1600); }
+      const ok = await saveDraft(n => { n.rules = next.rules; });
+      if (ok && preset && page !== 'fw-rules') toast('Rule added at the top of ' + (r.interface ? ((ifaceById(r.interface) || {}).name || 'its interface') : 'Any interface') + ' — press Apply to enforce it', 'success');
     };
   }
 
@@ -1809,7 +2122,7 @@
   window.sdnFW = {
     E, C, icon, isAdmin, toast, api, cfg, clone, newId, PALETTE, modal, picker, seg, saveDraft, validate, rowActs, cloneDesc, info, lab,
     editInterface, setGwPriority, nextGwPriority, liveLinks: async () => { const r = await api('GET', '/api/sdn/interfaces/live'); if (r.ok) live = r.data || []; return live; },
-    endpointOptions, epLabel, sortTables, loadCountries, countryOptions, flagOf, ccName, fmtTime, fmtCount,
+    endpointOptions, epLabel, epPill, sortTables, loadCountries, countryOptions, flagOf, ccName, fmtTime, fmtCount, loadAutoGroups,
     status: () => status, page: () => page, rerender: () => renderPage(), l3,
   };
   window.sdnLoadStatus = loadStatus;

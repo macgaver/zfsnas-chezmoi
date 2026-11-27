@@ -276,6 +276,9 @@ func SDNIDSUpdate(c *sdn.Config) error {
 		log.Printf("[sdn] IDS rule update: %v", err)
 	}
 	sdnIDSWriteState(st)
+	if err == nil {
+		go SDNRefreshAutoSets(sdnConfigDir) // firewall rules using IDS auto groups follow the new rules
+	}
 	return err
 }
 

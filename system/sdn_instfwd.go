@@ -137,6 +137,7 @@ func sdnInstanceChange(user, summary string, edit func(*sdn.Config) bool) error 
 		if _, err := sdnRun.Run([]byte(script), "nft", "-f", "-"); err != nil {
 			return fmt.Errorf("loading the firewall: %v", err)
 		}
+		sdnAutoSetsLoaded(c, sdnRuntimeEnv)
 	}
 	if err := st.SaveConfirmed(c); err != nil {
 		return err

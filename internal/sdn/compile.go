@@ -22,6 +22,10 @@ type Env struct {
 	// an error, makes any country rule fail to compile: a country rule must
 	// never silently match nothing.
 	CountryCIDRs func(cc string) ([]string, error)
+	// AutoGroupCIDRs returns an auto group's networks, already cleaned
+	// (see autogroups.go). Nil, or an error, compiles an empty set: an
+	// unavailable list matches nothing instead of failing the apply.
+	AutoGroupCIDRs func(id string) ([]string, error)
 }
 
 // countrySet names the nft set of a country endpoint and lists its codes.
@@ -97,6 +101,15 @@ func writeCountrySets(b *strings.Builder, c *Config, env Env) error {
 	return nil
 }
 
+// Rule logging (kernel log): every logged line starts with LogPrefix and
+// the rule id; at most LogRatePerSec lines per second per rule (burst
+// LogBurst), so a logged block rule under a flood cannot fill the journal.
+const (
+	LogPrefix     = "znas r:"
+	LogRatePerSec = 10
+	LogBurst      = 20
+)
+
 // RuleComment tags every compiled line of a rule so hit counters can be read
 // back per rule (`nft -j list table`).
 func RuleComment(ruleID string) string { return "r:" + ruleID }
@@ -129,6 +142,7 @@ func Compile(c *Config, env Env) (string, error) {
 	if err := writeCountrySets(&b, c, env); err != nil {
 		return "", err
 	}
+	writeAutoSets(&b, c, env)
 
 	router := c.Settings.Mode == "router"
 	if router {
@@ -351,11 +365,7 @@ func ruleLines(c *Config, r Rule, count int) []string {
 		return parts
 	}
 	tail := func(verdict string) string {
-		t := ""
-		if r.Log {
-			t += fmt.Sprintf("log prefix \"znas %s \" ", RuleComment(r.ID))
-		}
-		return t + "counter " + verdict + fmt.Sprintf(" comment %q", RuleComment(r.ID))
+		return "counter " + verdict + fmt.Sprintf(" comment %q", RuleComment(r.ID))
 	}
 	join := func(proto, verdict string) string {
 		return strings.Join(append(match(proto), tail(verdict)), " ")
@@ -369,19 +379,26 @@ func ruleLines(c *Config, r Rule, count int) []string {
 	}[r.Protocol]
 
 	var counting []string
+	// Logging is its own line, rate-limited: a limit on the verdict line
+	// would let packets over the limit skip the verdict. No counter and no
+	// comment, so the rule's hit counter still counts every packet.
+	if r.Log {
+		counting = append(counting, strings.Join(append(match(proto),
+			fmt.Sprintf("limit rate %d/second burst %d packets log prefix \"%s%s \"", LogRatePerSec, LogBurst, LogPrefix, r.ID)), " "))
+	}
 	if count > 0 && (r.Action == "block" || r.Action == "reject") {
 		switch r.Protocol {
 		case "tcp", "udp", "tcpudp":
-			counting = []string{upd(proto, true)}
+			counting = append(counting, upd(proto, true))
 		case "icmp":
-			counting = []string{upd(proto, false)}
+			counting = append(counting, upd(proto, false))
 		default:
-			counting = []string{upd("meta l4proto { tcp, udp }", true), upd("meta l4proto != { tcp, udp }", false)}
+			counting = append(counting, upd("meta l4proto { tcp, udp }", true), upd("meta l4proto != { tcp, udp }", false))
 		}
 	}
 	switch r.Action {
 	case "allow":
-		return []string{join(proto, "accept")}
+		return append(counting, join(proto, "accept"))
 	case "block":
 		return append(counting, join(proto, "drop"))
 	}
@@ -412,6 +429,8 @@ func endpointMatch(c *Config, dir string, e Endpoint) string {
 			return fmt.Sprintf("ip %s %s@%s", dir, op, name)
 		}
 		return fmt.Sprintf("ip %s %s@g_%s", dir, op, e.Value)
+	case "auto":
+		return fmt.Sprintf("ip %s %s@%s", dir, op, AutoSetName(e.Value))
 	case "iface_net", "iface_addr":
 		in := c.InterfaceByID(e.Value)
 		pfx, _ := netip.ParsePrefix(in.IPv4)

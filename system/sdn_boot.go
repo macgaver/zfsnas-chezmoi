@@ -205,6 +205,7 @@ func SDNBoot(st sdn.Store, env sdn.Env) error {
 	if _, err := sdnRun.Run([]byte(script), "nft", "-f", "-"); err != nil {
 		return sdnSafeMode(c, env, err.Error())
 	}
+	sdnAutoSetsLoaded(c, env)
 	// Before networking starts: ifupdown's "provider" needs the peers file
 	// (the appliance's /etc/ppp is fresh at every boot).
 	if err := sdnWritePPP(c); err != nil {
@@ -444,6 +445,7 @@ func SDNRefreshRuleset(st sdn.Store, env sdn.Env) error {
 	if _, err = sdnRun.Run([]byte(script), "nft", "-f", "-"); err != nil {
 		return err
 	}
+	sdnAutoSetsLoaded(c, env)
 	// The service files too (a new version may render them differently);
 	// only what changed is restarted.
 	var res SDNApplyResult
