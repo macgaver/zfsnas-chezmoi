@@ -12,6 +12,7 @@ package system
 //   - GreyNoise Community: Internet-wide scanner or not, benign or malicious
 //   - Shodan InternetDB: its open ports, host names, tags, known CVEs
 //   - AbuseIPDB: abuse reports and confidence score (free account key)
+//   - VPNDetection: a VPN, Tor or relay exit, or not (no key)
 
 import (
 	"bufio"
@@ -505,7 +506,7 @@ func SDNIPInfoFor(a netip.Addr) SDNIPInfo {
 	}
 	wg.Wait()
 	k := SDNIPIntelKeysLoad()
-	info.Services = map[string]bool{"greynoise": true, "shodan": true, "abuseipdb": k.AbuseIPDB != ""}
+	info.Services = map[string]bool{"greynoise": true, "shodan": true, "abuseipdb": k.AbuseIPDB != "", "vpndetection": true}
 	return info
 }
 
@@ -553,9 +554,10 @@ func SDNIPIntelKeysSave(k SDNIPIntelKeys) error {
 }
 
 var sdnExtURL = map[string]string{
-	"greynoise": "https://api.greynoise.io/v3/community/",
-	"shodan":    "https://internetdb.shodan.io/",
-	"abuseipdb": "https://api.abuseipdb.com/api/v2/check?maxAgeInDays=90&ipAddress=",
+	"greynoise":    "https://api.greynoise.io/v3/community/",
+	"shodan":       "https://internetdb.shodan.io/",
+	"abuseipdb":    "https://api.abuseipdb.com/api/v2/check?maxAgeInDays=90&ipAddress=",
+	"vpndetection": "https://api.vpndetection.io/",
 }
 
 // SDNIPExternal asks one outside service about the address (cached 6 hours).

@@ -107,6 +107,8 @@ func TestSDNIPExternal(t *testing.T) {
 		case strings.HasPrefix(r.URL.Path, "/ab"):
 			gotKey = r.Header.Get("Key")
 			w.Write([]byte(`{"data":{"abuseConfidenceScore":87,"totalReports":12}}`))
+		case strings.HasPrefix(r.URL.Path, "/vd/"):
+			w.Write([]byte(`{"ip":"185.65.135.230","is_vpn":true,"is_tor":false,"is_relay":false}`))
 		case strings.HasPrefix(r.URL.Path, "/limit/"):
 			w.WriteHeader(429)
 		}
@@ -114,7 +116,7 @@ func TestSDNIPExternal(t *testing.T) {
 	defer srv.Close()
 	old := sdnExtURL
 	defer func() { sdnExtURL = old }()
-	sdnExtURL = map[string]string{"greynoise": srv.URL + "/gn/", "abuseipdb": srv.URL + "/ab?ip=", "shodan": srv.URL + "/limit/"}
+	sdnExtURL = map[string]string{"greynoise": srv.URL + "/gn/", "abuseipdb": srv.URL + "/ab?ip=", "shodan": srv.URL + "/limit/", "vpndetection": srv.URL + "/vd/"}
 	clear(sdnExtCache)
 
 	v, err := SDNIPExternal("greynoise", netip.MustParseAddr("45.138.12.51"), SDNIPIntelKeys{})
@@ -131,6 +133,10 @@ func TestSDNIPExternal(t *testing.T) {
 	v, err = SDNIPExternal("abuseipdb", netip.MustParseAddr("45.138.12.51"), SDNIPIntelKeys{AbuseIPDB: "k1"})
 	if err != nil || gotKey != "k1" || v["abuseConfidenceScore"] != float64(87) {
 		t.Fatalf("abuseipdb: %v %v key=%q", v, err, gotKey)
+	}
+	v, err = SDNIPExternal("vpndetection", netip.MustParseAddr("185.65.135.230"), SDNIPIntelKeys{})
+	if err != nil || v["found"] != true || v["is_vpn"] != true {
+		t.Fatalf("vpndetection: %v %v", v, err)
 	}
 	if _, err = SDNIPExternal("shodan", netip.MustParseAddr("45.138.12.51"), SDNIPIntelKeys{}); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("429: %v", err)

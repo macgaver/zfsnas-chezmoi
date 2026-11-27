@@ -27,7 +27,7 @@ func HandleSDNIPInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleSDNIPExternal — GET /api/sdn/ipinfo/ext?ip=&service=greynoise|shodan|abuseipdb
+// HandleSDNIPExternal — GET /api/sdn/ipinfo/ext?ip=&service=greynoise|shodan|abuseipdb|vpndetection
 // Sends the address to that service: the card asks only on a click.
 func HandleSDNIPExternal(w http.ResponseWriter, r *http.Request) {
 	a, ok := sdnPublicIPParam(w, r)
