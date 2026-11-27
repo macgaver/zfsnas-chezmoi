@@ -284,7 +284,7 @@
   function fitMapHeight() {
     const svg = document.getElementById('fwt-map');
     if (!svg) return;
-    if (mapFull()) { svg.style.maxHeight = ''; return; } // the card is the screen
+    if (mapFull()) { svg.style.maxHeight = svg.style.minHeight = ''; return; } // the card is the screen
     let pane = svg.parentElement;
     while (pane && pane !== document.body) {
       const oy = getComputedStyle(pane).overflowY;
@@ -292,7 +292,13 @@
       pane = pane.parentElement;
     }
     const h = pane && pane !== document.body ? pane.clientHeight : window.innerHeight;
-    svg.style.maxHeight = Math.max(180, Math.round(h * 0.375)) + 'px';
+    // Never shorter than the zoom bar (plus its 12px gaps): on a touch screen
+    // its buttons are 40px tall, and with the full header a landscape iPad
+    // left the map shorter than the bar, cutting off the bottom buttons.
+    const zb = svg.parentElement.querySelector('.fw-zoombar');
+    const need = zb ? zb.offsetHeight + 24 : 0;
+    svg.style.minHeight = need ? need + 'px' : '';
+    svg.style.maxHeight = Math.max(180, need, Math.round(h * 0.375)) + 'px';
     // the activity panel can be dragged taller/shorter: follow the pane's size
     if (pane && pane !== document.body && window.ResizeObserver && (!paneObs || paneObs.pane !== pane)) {
       if (paneObs) paneObs.disconnect();
